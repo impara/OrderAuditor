@@ -100,15 +100,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/webhooks/test", async (req: any, res: Response) => {
+    const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
+    const rawBody = req.rawBody || JSON.stringify(req.body);
+    
+    res.json({
+      headers: {
+        hmac: hmacHeader,
+        contentType: req.get("Content-Type"),
+      },
+      body: {
+        rawBodyAvailable: !!req.rawBody,
+        rawBodyLength: rawBody.length,
+        rawBodyPreview: rawBody.substring(0, 100),
+        parsedBody: req.body,
+      },
+      verification: {
+        secretConfigured: !!process.env.SHOPIFY_WEBHOOK_SECRET,
+        secretLength: process.env.SHOPIFY_WEBHOOK_SECRET?.length || 0,
+        wouldVerify: hmacHeader ? shopifyService.verifyWebhook(rawBody, hmacHeader) : false,
+      },
+    });
+  });
+
   app.post("/api/webhooks/shopify/orders/create", async (req: any, res: Response) => {
     try {
       const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
       const rawBody = req.rawBody || JSON.stringify(req.body);
 
+      console.log("[Webhook] Received webhook");
+      console.log("[Webhook] HMAC Header present:", !!hmacHeader);
+      console.log("[Webhook] Raw body captured:", !!req.rawBody);
+      console.log("[Webhook] Raw body length:", rawBody.length);
+
       if (!hmacHeader || !shopifyService.verifyWebhook(rawBody, hmacHeader)) {
-        console.warn("Invalid webhook signature");
+        console.warn("[Webhook] Invalid webhook signature");
+        console.warn("[Webhook] HMAC header:", hmacHeader);
+        console.warn("[Webhook] Using rawBody:", !!req.rawBody ? "yes (captured)" : "no (reconstructed from JSON)");
         return res.status(401).json({ error: "Invalid webhook signature" });
       }
+
+      console.log("[Webhook] Signature verified successfully");
 
       const shopifyOrder = req.body;
 

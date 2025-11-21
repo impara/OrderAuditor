@@ -45,19 +45,35 @@ export class ShopifyService {
    */
   verifyWebhook(body: string, hmacHeader: string): boolean {
     if (!this.webhookSecret) {
-      console.warn("SHOPIFY_WEBHOOK_SECRET not configured");
+      console.warn("[ShopifyService] SHOPIFY_WEBHOOK_SECRET not configured");
       return false;
     }
+
+    console.log("[ShopifyService] Verifying webhook HMAC");
+    console.log("[ShopifyService] Secret configured:", this.webhookSecret.substring(0, 10) + "...");
+    console.log("[ShopifyService] Body length:", body.length);
+    console.log("[ShopifyService] HMAC header received:", hmacHeader);
 
     const hash = crypto
       .createHmac("sha256", this.webhookSecret)
       .update(body, "utf8")
       .digest("base64");
 
-    return crypto.timingSafeEqual(
-      Buffer.from(hash),
-      Buffer.from(hmacHeader)
-    );
+    console.log("[ShopifyService] Calculated HMAC:", hash);
+    console.log("[ShopifyService] Expected HMAC:  ", hmacHeader);
+    console.log("[ShopifyService] Match:", hash === hmacHeader);
+
+    try {
+      const isValid = crypto.timingSafeEqual(
+        Buffer.from(hash),
+        Buffer.from(hmacHeader)
+      );
+      console.log("[ShopifyService] timingSafeEqual result:", isValid);
+      return isValid;
+    } catch (error) {
+      console.error("[ShopifyService] timingSafeEqual error:", error);
+      return false;
+    }
   }
 
   /**
