@@ -83,9 +83,16 @@ export default {
         },
       },
       fontFamily: {
-        sans: ["var(--font-sans)"],
+        sans: ["Inter", "var(--font-sans)"],
         serif: ["var(--font-serif)"],
         mono: ["var(--font-mono)"],
+      },
+      fontSize: {
+        'stats-number': ['24px', { lineHeight: '1.2', fontWeight: '700' }],
+        'stats-label': ['12px', { lineHeight: '1.4', fontWeight: '400' }],
+        'page-title': ['20px', { lineHeight: '1.3', fontWeight: '600' }],
+        'section-header': ['16px', { lineHeight: '1.4', fontWeight: '600' }],
+        'data-label': ['12px', { lineHeight: '1.4', fontWeight: '500' }],
       },
       keyframes: {
         "accordion-down": {
