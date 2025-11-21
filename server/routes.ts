@@ -100,6 +100,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Diagnostic endpoint to help troubleshoot webhook verification
+  app.get("/api/webhooks/diagnostic", async (_req: Request, res: Response) => {
+    const secret = process.env.SHOPIFY_WEBHOOK_SECRET || "";
+    res.json({
+      configured: {
+        shopDomain: !!process.env.SHOPIFY_SHOP_DOMAIN,
+        accessToken: !!process.env.SHOPIFY_ACCESS_TOKEN,
+        webhookSecret: !!secret,
+      },
+      secretInfo: {
+        length: secret.length,
+        prefix: secret.substring(0, 6) + "...",
+        startsWithShpss: secret.startsWith("shpss_"),
+        startsWithShpat: secret.startsWith("shpat_"),
+        expectedFormat: "Should be the 'API secret key' from Shopify app credentials (NOT the access token)",
+      },
+      instructions: [
+        "1. Go to Shopify Admin → Settings → Apps → Develop apps",
+        "2. Click your custom app",
+        "3. Go to 'App credentials' tab",
+        "4. Copy the 'API secret key' (NOT the 'Admin API access token')",
+        "5. Update SHOPIFY_WEBHOOK_SECRET with that value",
+      ],
+    });
+  });
+
   app.post("/api/webhooks/test", async (req: any, res: Response) => {
     const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
     const rawBody = req.rawBody || Buffer.from(JSON.stringify(req.body));
