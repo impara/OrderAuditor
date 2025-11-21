@@ -42,8 +42,10 @@ export class ShopifyService {
 
   /**
    * Verify Shopify webhook HMAC signature
+   * @param body - Raw request body as Buffer or string
+   * @param hmacHeader - HMAC signature from X-Shopify-Hmac-Sha256 header
    */
-  verifyWebhook(body: string, hmacHeader: string): boolean {
+  verifyWebhook(body: Buffer | string, hmacHeader: string): boolean {
     if (!this.webhookSecret) {
       console.warn("[ShopifyService] SHOPIFY_WEBHOOK_SECRET not configured");
       return false;
@@ -51,12 +53,14 @@ export class ShopifyService {
 
     console.log("[ShopifyService] Verifying webhook HMAC");
     console.log("[ShopifyService] Secret configured:", this.webhookSecret.substring(0, 10) + "...");
+    console.log("[ShopifyService] Body type:", typeof body, "isBuffer:", Buffer.isBuffer(body));
     console.log("[ShopifyService] Body length:", body.length);
     console.log("[ShopifyService] HMAC header received:", hmacHeader);
 
+    // Calculate HMAC on raw bytes (Buffer) - Shopify calculates HMAC on raw request body
     const hash = crypto
       .createHmac("sha256", this.webhookSecret)
-      .update(body, "utf8")
+      .update(body)
       .digest("base64");
 
     console.log("[ShopifyService] Calculated HMAC:", hash);
