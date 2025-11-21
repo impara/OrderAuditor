@@ -9,6 +9,7 @@ Order Auditor is a Shopify app that automatically detects and flags duplicate or
 
 ### Implemented Features
 - ✅ Shopify webhook listener endpoint for order creation events with HMAC verification
+- ✅ **Automatic webhook registration via Shopify Admin API** (NEW)
 - ✅ Duplicate detection logic matching orders by customer email, shipping address, and configurable time window
 - ✅ Automatic order tagging via Shopify Admin API to flag duplicates for review
 - ✅ Dashboard with flagged orders list displaying customer info, order details, and duplicate match reasoning
@@ -75,7 +76,12 @@ SHOPIFY_WEBHOOK_SECRET=<Webhook verification secret>
    - `read_orders` - To receive order webhooks
    - `write_orders` - To tag orders as duplicates
 3. Install the app and copy the Admin API access token
-4. Configure webhook:
+4. **Automatic Webhook Registration** (Recommended):
+   - Set environment variables: `SHOPIFY_SHOP_DOMAIN`, `SHOPIFY_ACCESS_TOKEN`, `SHOPIFY_WEBHOOK_SECRET`
+   - Call `POST /api/webhooks/register` to automatically register the webhook
+   - The system will automatically use the correct production URL from `REPLIT_DOMAINS`
+   - Duplicate detection prevents creating multiple webhooks
+5. **Manual Webhook Configuration** (Alternative):
    - Endpoint: `https://your-domain.com/api/webhooks/shopify/orders/create`
    - Event: Order creation
    - Format: JSON
@@ -90,6 +96,15 @@ SHOPIFY_WEBHOOK_SECRET=<Webhook verification secret>
 ### Settings
 - `GET /api/settings` - Get detection settings (initializes if not exists)
 - `PATCH /api/settings` - Update detection settings
+
+### Webhook Management
+- `GET /api/webhooks/status` - Check webhook registration status
+  - Returns current webhook registration details
+  - Shows all registered webhooks
+- `POST /api/webhooks/register` - Automatically register orders/create webhook
+  - Checks for existing webhooks to prevent duplicates
+  - Uses production URL from environment
+  - Returns registration success/failure details
 
 ### Webhooks
 - `POST /api/webhooks/shopify/orders/create` - Shopify order creation webhook
@@ -156,6 +171,5 @@ The app runs on http://localhost:5000
 
 ## Known Limitations
 - **Address-only matching**: Detection requires at least email OR phone matching to be enabled. If both are disabled but address matching is enabled, duplicate detection will not function. This is a known limitation that will be addressed in a future update.
-- Webhook signature verification requires Shopify credentials to be configured. The current implementation uses `express.json` with a custom verifier; for production use, consider migrating to `express.raw` middleware for stricter HMAC validation.
 - Single detection settings profile (no multi-store support yet)
 - Average resolution time in dashboard stats is currently a placeholder value
