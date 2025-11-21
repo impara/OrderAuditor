@@ -103,6 +103,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/webhooks/test", async (req: any, res: Response) => {
     const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
     const rawBody = req.rawBody || JSON.stringify(req.body);
+    const rawBodyStr = typeof rawBody === 'string' ? rawBody : rawBody.toString('utf8');
     
     res.json({
       headers: {
@@ -111,14 +112,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       },
       body: {
         rawBodyAvailable: !!req.rawBody,
-        rawBodyLength: rawBody.length,
-        rawBodyPreview: rawBody.substring(0, 100),
+        rawBodyLength: rawBodyStr.length,
+        rawBodyPreview: rawBodyStr.substring(0, 100),
         parsedBody: req.body,
       },
       verification: {
         secretConfigured: !!process.env.SHOPIFY_WEBHOOK_SECRET,
         secretLength: process.env.SHOPIFY_WEBHOOK_SECRET?.length || 0,
-        wouldVerify: hmacHeader ? shopifyService.verifyWebhook(rawBody, hmacHeader) : false,
+        wouldVerify: hmacHeader ? shopifyService.verifyWebhook(rawBodyStr, hmacHeader) : false,
       },
     });
   });
@@ -127,13 +128,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
       const rawBody = req.rawBody || JSON.stringify(req.body);
+      const rawBodyStr = typeof rawBody === 'string' ? rawBody : rawBody.toString('utf8');
 
       console.log("[Webhook] Received webhook");
       console.log("[Webhook] HMAC Header present:", !!hmacHeader);
       console.log("[Webhook] Raw body captured:", !!req.rawBody);
-      console.log("[Webhook] Raw body length:", rawBody.length);
+      console.log("[Webhook] Raw body length:", rawBodyStr.length);
 
-      if (!hmacHeader || !shopifyService.verifyWebhook(rawBody, hmacHeader)) {
+      if (!hmacHeader || !shopifyService.verifyWebhook(rawBodyStr, hmacHeader)) {
         console.warn("[Webhook] Invalid webhook signature");
         console.warn("[Webhook] HMAC header:", hmacHeader);
         console.warn("[Webhook] Using rawBody:", !!req.rawBody ? "yes (captured)" : "no (reconstructed from JSON)");
