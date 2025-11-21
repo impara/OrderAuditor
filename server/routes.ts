@@ -154,25 +154,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/webhooks/shopify/orders/create", async (req: any, res: Response) => {
     try {
       const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
-      // Use the raw Buffer directly - crucial for HMAC verification
-      const rawBody = req.rawBody || Buffer.from(JSON.stringify(req.body));
+      // With express.raw middleware, req.body is the raw Buffer
+      const rawBody: Buffer = req.body;
 
       console.log("[Webhook] Received webhook");
       console.log("[Webhook] HMAC Header present:", !!hmacHeader);
-      console.log("[Webhook] Raw body captured:", !!req.rawBody);
       console.log("[Webhook] Raw body is Buffer:", Buffer.isBuffer(rawBody));
       console.log("[Webhook] Raw body length:", rawBody.length);
 
+      // Verify HMAC signature using raw bytes
       if (!hmacHeader || !shopifyService.verifyWebhook(rawBody, hmacHeader)) {
         console.warn("[Webhook] Invalid webhook signature");
         console.warn("[Webhook] HMAC header:", hmacHeader);
-        console.warn("[Webhook] Using rawBody:", !!req.rawBody ? "yes (captured)" : "no (reconstructed from JSON)");
         return res.status(401).json({ error: "Invalid webhook signature" });
       }
 
-      console.log("[Webhook] Signature verified successfully");
+      console.log("[Webhook] ✅ Signature verified successfully!");
 
-      const shopifyOrder = req.body;
+      // Parse JSON after verification
+      const shopifyOrder = JSON.parse(rawBody.toString('utf8'));
 
       const orderData = {
         id: randomUUID(),

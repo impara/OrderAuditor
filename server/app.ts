@@ -24,14 +24,15 @@ export const app = express();
 
 declare module 'http' {
   interface IncomingMessage {
-    rawBody: unknown
+    rawBody: Buffer;
   }
 }
-app.use(express.json({
-  verify: (req, _res, buf) => {
-    req.rawBody = buf;
-  }
-}));
+
+// Use express.raw for Shopify webhooks to preserve byte-for-byte body for HMAC verification
+app.use('/api/webhooks/shopify', express.raw({ type: 'application/json' }));
+
+// Use express.json for all other routes
+app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 app.use((req, res, next) => {
