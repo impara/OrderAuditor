@@ -1,14 +1,43 @@
 import crypto from "crypto";
 
+interface ShopifyWebhook {
+  id: number;
+  address: string;
+  topic: string;
+  created_at: string;
+  updated_at: string;
+  format: string;
+}
+
+interface WebhookRegistrationResult {
+  success: boolean;
+  webhook?: ShopifyWebhook;
+  error?: string;
+  message: string;
+}
+
 export class ShopifyService {
   private shopDomain: string;
   private accessToken: string;
   private webhookSecret: string;
+  private apiVersion: string = "2024-01";
 
   constructor() {
     this.shopDomain = process.env.SHOPIFY_SHOP_DOMAIN || "";
     this.accessToken = process.env.SHOPIFY_ACCESS_TOKEN || "";
     this.webhookSecret = process.env.SHOPIFY_WEBHOOK_SECRET || "";
+  }
+
+  private get baseApiUrl(): string {
+    return `https://${this.shopDomain}/admin/api/${this.apiVersion}`;
+  }
+
+  private validateCredentials(): boolean {
+    if (!this.shopDomain || !this.accessToken) {
+      console.error("Shopify credentials not configured");
+      return false;
+    }
+    return true;
   }
 
   /**
@@ -29,6 +58,160 @@ export class ShopifyService {
       Buffer.from(hash),
       Buffer.from(hmacHeader)
     );
+  }
+
+  /**
+   * List all registered webhooks
+   */
+  async listWebhooks(): Promise<ShopifyWebhook[]> {
+    if (!this.validateCredentials()) {
+      return [];
+    }
+
+    try {
+      const url = `${this.baseApiUrl}/webhooks.json`;
+      console.log(`[Shopify] Fetching webhooks from: ${url}`);
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "X-Shopify-Access-Token": this.accessToken,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Shopify] Failed to list webhooks: ${response.status} ${response.statusText}`, errorText);
+        throw new Error(`Shopify API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log(`[Shopify] Found ${data.webhooks?.length || 0} registered webhooks`);
+      return data.webhooks || [];
+    } catch (error) {
+      console.error("[Shopify] Error listing webhooks:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Register a new webhook
+   */
+  async registerWebhook(topic: string, address: string): Promise<WebhookRegistrationResult> {
+    if (!this.validateCredentials()) {
+      return {
+        success: false,
+        error: "Missing Shopify credentials",
+        message: "SHOPIFY_SHOP_DOMAIN and SHOPIFY_ACCESS_TOKEN must be configured",
+      };
+    }
+
+    try {
+      console.log(`[Shopify] Registering webhook for topic: ${topic} at ${address}`);
+
+      const existingWebhooks = await this.listWebhooks();
+      const duplicate = existingWebhooks.find(
+        (wh) => wh.topic === topic && wh.address === address
+      );
+
+      if (duplicate) {
+        console.log(`[Shopify] Webhook already exists (ID: ${duplicate.id})`);
+        return {
+          success: true,
+          webhook: duplicate,
+          message: "Webhook already registered",
+        };
+      }
+
+      const url = `${this.baseApiUrl}/webhooks.json`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "X-Shopify-Access-Token": this.accessToken,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          webhook: {
+            topic,
+            address,
+            format: "json",
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Shopify] Failed to register webhook: ${response.status}`, errorText);
+        return {
+          success: false,
+          error: `HTTP ${response.status}: ${response.statusText}`,
+          message: "Failed to register webhook with Shopify API",
+        };
+      }
+
+      const data = await response.json();
+      console.log(`[Shopify] Successfully registered webhook (ID: ${data.webhook.id})`);
+      
+      return {
+        success: true,
+        webhook: data.webhook,
+        message: "Webhook successfully registered",
+      };
+    } catch (error) {
+      console.error("[Shopify] Error registering webhook:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        message: "Failed to register webhook due to an error",
+      };
+    }
+  }
+
+  /**
+   * Delete a webhook by ID
+   */
+  async deleteWebhook(webhookId: number): Promise<boolean> {
+    if (!this.validateCredentials()) {
+      return false;
+    }
+
+    try {
+      const url = `${this.baseApiUrl}/webhooks/${webhookId}.json`;
+      console.log(`[Shopify] Deleting webhook ID: ${webhookId}`);
+
+      const response = await fetch(url, {
+        method: "DELETE",
+        headers: {
+          "X-Shopify-Access-Token": this.accessToken,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Shopify] Failed to delete webhook: ${response.status}`, errorText);
+        return false;
+      }
+
+      console.log(`[Shopify] Successfully deleted webhook ID: ${webhookId}`);
+      return true;
+    } catch (error) {
+      console.error("[Shopify] Error deleting webhook:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Register the orders/create webhook for production
+   */
+  async registerOrdersWebhook(): Promise<WebhookRegistrationResult> {
+    const webhookUrl = process.env.REPLIT_DOMAINS
+      ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}/api/webhooks/shopify/orders/create`
+      : "https://order-auditor.replit.app/api/webhooks/shopify/orders/create";
+
+    console.log(`[Shopify] Registering orders/create webhook to: ${webhookUrl}`);
+    return this.registerWebhook("orders/create", webhookUrl);
   }
 
   /**

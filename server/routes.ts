@@ -58,6 +58,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/webhooks/status", async (_req: Request, res: Response) => {
+    try {
+      console.log("[API] Checking webhook registration status");
+      const webhooks = await shopifyService.listWebhooks();
+      
+      const ordersWebhook = webhooks.find(wh => wh.topic === "orders/create");
+      
+      res.json({
+        registered: !!ordersWebhook,
+        webhook: ordersWebhook || null,
+        totalWebhooks: webhooks.length,
+        allWebhooks: webhooks,
+      });
+    } catch (error) {
+      console.error("[API] Error checking webhook status:", error);
+      res.status(500).json({ 
+        error: "Failed to check webhook status",
+        details: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+  app.post("/api/webhooks/register", async (_req: Request, res: Response) => {
+    try {
+      console.log("[API] Webhook registration requested");
+      const result = await shopifyService.registerOrdersWebhook();
+      
+      if (result.success) {
+        res.json(result);
+      } else {
+        res.status(500).json(result);
+      }
+    } catch (error) {
+      console.error("[API] Error registering webhook:", error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        message: "Failed to register webhook",
+      });
+    }
+  });
+
   app.post("/api/webhooks/shopify/orders/create", async (req: any, res: Response) => {
     try {
       const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
