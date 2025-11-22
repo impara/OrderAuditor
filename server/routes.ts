@@ -178,9 +178,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         shopifyOrderId: shopifyOrder.id.toString(),
         orderNumber: shopifyOrder.order_number?.toString() || shopifyOrder.name,
         customerEmail: shopifyOrder.email || shopifyOrder.customer?.email || "unknown@example.com",
-        customerName: shopifyOrder.customer?.first_name && shopifyOrder.customer?.last_name
-          ? `${shopifyOrder.customer.first_name} ${shopifyOrder.customer.last_name}`
-          : null,
+        customerName: (() => {
+          const firstName = shopifyOrder.customer?.first_name || shopifyOrder.billing_address?.first_name || "";
+          const lastName = shopifyOrder.customer?.last_name || shopifyOrder.billing_address?.last_name || "";
+          if (firstName && lastName) {
+            return `${firstName} ${lastName}`;
+          } else if (firstName) {
+            return firstName;
+          } else if (lastName) {
+            return lastName;
+          }
+          return null;
+        })(),
         customerPhone: shopifyOrder.phone || shopifyOrder.customer?.phone || null,
         shippingAddress: shopifyOrder.shipping_address ? {
           address1: shopifyOrder.shipping_address.address1,

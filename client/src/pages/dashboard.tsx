@@ -5,9 +5,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { AlertCircle, TrendingUp, TrendingDown, DollarSign, Clock, Flag, Package } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { AlertCircle, TrendingUp, TrendingDown, DollarSign, Clock, Flag, Package, MapPin, Mail, Phone, Calendar } from "lucide-react";
 import type { Order, DashboardStats } from "@shared/schema";
 import { format } from "date-fns";
+import { useState } from "react";
 
 function StatsCard({ 
   title, 
@@ -79,78 +81,221 @@ function EmptyState() {
   );
 }
 
-function FlaggedOrdersTable({ orders }: { orders: Order[] }) {
+function OrderDetailsModal({ order, isOpen, onClose }: { order: Order; isOpen: boolean; onClose: () => void }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-section-header">Flagged Orders</CardTitle>
-      </CardHeader>
-      <CardContent className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[140px]">Order Number</TableHead>
-              <TableHead>Customer</TableHead>
-              <TableHead>Match Reason</TableHead>
-              <TableHead className="text-right">Order Total</TableHead>
-              <TableHead>Date Flagged</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {orders.map((order) => (
-              <TableRow 
-                key={order.id} 
-                className="hover-elevate" 
-                data-testid={`row-order-${order.id}`}
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl" data-testid="dialog-order-details">
+        <DialogHeader>
+          <DialogTitle className="text-xl">Order #{order.orderNumber} Details</DialogTitle>
+          <DialogDescription>
+            Review detailed information about this flagged order
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="space-y-6">
+          <div>
+            <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+              <AlertCircle className="h-4 w-4" />
+              Duplicate Detection
+            </h3>
+            <div className="bg-muted/50 rounded-md p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Confidence Score</span>
+                {order.matchConfidence != null && <ConfidenceBadge confidence={order.matchConfidence} />}
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Match Reason</span>
+                <span className="text-sm font-medium">{order.matchReason}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Flagged Date</span>
+                <span className="text-sm font-medium">
+                  {order.flaggedAt ? format(new Date(order.flaggedAt), 'MMM d, yyyy h:mm a') : '-'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+              <Package className="h-4 w-4" />
+              Order Information
+            </h3>
+            <div className="bg-muted/50 rounded-md p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Order ID</span>
+                <span className="text-sm font-medium font-mono">{order.shopifyOrderId}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Order Total</span>
+                <span className="text-sm font-medium">{order.currency} ${order.totalPrice}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground flex items-center gap-1">
+                  <Calendar className="h-3 w-3" />
+                  Created
+                </span>
+                <span className="text-sm font-medium">
+                  {format(new Date(order.createdAt), 'MMM d, yyyy h:mm a')}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-semibold mb-3">Customer Information</h3>
+            <div className="bg-muted/50 rounded-md p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <Avatar className="h-10 w-10">
+                  <AvatarFallback className="bg-primary/10 text-primary">
+                    {order.customerName?.charAt(0) || order.customerEmail.charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <div className="text-sm font-medium">{order.customerName || 'Unknown Customer'}</div>
+                  <div className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Mail className="h-3 w-3" />
+                    {order.customerEmail}
+                  </div>
+                </div>
+              </div>
+              {order.customerPhone && (
+                <div className="flex items-center gap-1 text-sm text-muted-foreground pt-2">
+                  <Phone className="h-3 w-3" />
+                  {order.customerPhone}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {order.shippingAddress && (
+            <div>
+              <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                <MapPin className="h-4 w-4" />
+                Shipping Address
+              </h3>
+              <div className="bg-muted/50 rounded-md p-4">
+                <div className="text-sm space-y-1">
+                  {order.shippingAddress.address1 && <div>{order.shippingAddress.address1}</div>}
+                  {order.shippingAddress.address2 && <div>{order.shippingAddress.address2}</div>}
+                  <div>
+                    {[
+                      order.shippingAddress.city,
+                      order.shippingAddress.province,
+                      order.shippingAddress.zip
+                    ].filter(Boolean).join(', ')}
+                  </div>
+                  {order.shippingAddress.country && <div>{order.shippingAddress.country}</div>}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-2 pt-4">
+            <Button variant="outline" className="flex-1" onClick={onClose} data-testid="button-close-details">
+              Close
+            </Button>
+            <Button variant="default" className="flex-1" asChild data-testid="button-view-in-shopify">
+              <a 
+                href={`https://${import.meta.env.VITE_SHOPIFY_SHOP_DOMAIN || 'admin.shopify.com'}/admin/orders/${order.shopifyOrderId}`} 
+                target="_blank" 
+                rel="noopener noreferrer"
               >
-                <TableCell className="font-semibold" data-testid={`text-order-number-${order.id}`}>
-                  #{order.orderNumber}
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <Avatar className="h-8 w-8">
-                      <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                        {order.customerName?.charAt(0) || order.customerEmail.charAt(0).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <div className="text-sm font-medium" data-testid={`text-customer-name-${order.id}`}>
-                        {order.customerName || 'Unknown'}
-                      </div>
-                      <div className="text-xs text-muted-foreground" data-testid={`text-customer-email-${order.id}`}>
-                        {order.customerEmail}
+                View in Shopify
+              </a>
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function FlaggedOrdersTable({ orders }: { orders: Order[] }) {
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-section-header">Flagged Orders</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[140px]">Order Number</TableHead>
+                <TableHead>Customer</TableHead>
+                <TableHead>Match Reason</TableHead>
+                <TableHead className="text-right">Order Total</TableHead>
+                <TableHead>Date Flagged</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {orders.map((order) => (
+                <TableRow 
+                  key={order.id} 
+                  className="hover-elevate" 
+                  data-testid={`row-order-${order.id}`}
+                >
+                  <TableCell className="font-semibold" data-testid={`text-order-number-${order.id}`}>
+                    #{order.orderNumber}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                          {order.customerName?.charAt(0) || order.customerEmail.charAt(0).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <div className="text-sm font-medium" data-testid={`text-customer-name-${order.id}`}>
+                          {order.customerName || 'Unknown'}
+                        </div>
+                        <div className="text-xs text-muted-foreground" data-testid={`text-customer-email-${order.id}`}>
+                          {order.customerEmail}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  {order.matchConfidence && <ConfidenceBadge confidence={order.matchConfidence} />}
-                  <div className="text-xs text-muted-foreground mt-1" data-testid={`text-match-reason-${order.id}`}>
-                    {order.matchReason}
-                  </div>
-                </TableCell>
-                <TableCell className="text-right font-medium" data-testid={`text-order-total-${order.id}`}>
-                  {order.currency} ${order.totalPrice}
-                </TableCell>
-                <TableCell className="text-sm text-muted-foreground" data-testid={`text-flagged-date-${order.id}`}>
-                  {order.flaggedAt ? format(new Date(order.flaggedAt), 'MMM d, yyyy') : '-'}
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button 
-                    size="sm" 
-                    variant="ghost"
-                    data-testid={`button-view-details-${order.id}`}
-                  >
-                    View Details
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+                  </TableCell>
+                  <TableCell>
+                    {order.matchConfidence && <ConfidenceBadge confidence={order.matchConfidence} />}
+                    <div className="text-xs text-muted-foreground mt-1" data-testid={`text-match-reason-${order.id}`}>
+                      {order.matchReason}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right font-medium" data-testid={`text-order-total-${order.id}`}>
+                    {order.currency} ${order.totalPrice}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground" data-testid={`text-flagged-date-${order.id}`}>
+                    {order.flaggedAt ? format(new Date(order.flaggedAt), 'MMM d, yyyy') : '-'}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button 
+                      size="sm" 
+                      variant="ghost"
+                      onClick={() => setSelectedOrder(order)}
+                      data-testid={`button-view-details-${order.id}`}
+                    >
+                      View Details
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {selectedOrder && (
+        <OrderDetailsModal 
+          order={selectedOrder} 
+          isOpen={!!selectedOrder} 
+          onClose={() => setSelectedOrder(null)} 
+        />
+      )}
+    </>
   );
 }
 
