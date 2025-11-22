@@ -9,6 +9,22 @@ Order Auditor is a Shopify app that automatically detects and flags duplicate or
 **Status**: MVP Complete & Production Ready  
 **Last Updated**: November 22, 2025
 
+### Implemented Features
+
+- ✅ Shopify webhook listener endpoint for order creation events with HMAC verification
+- ✅ **Automatic webhook registration via Shopify Admin API**
+- ✅ Duplicate detection logic matching orders by customer email, shipping address, and configurable time window
+- ✅ **Auto-initialization of detection settings** - Settings are automatically created on first webhook
+- ✅ Automatic order tagging via Shopify Admin API to flag duplicates for review
+- ✅ Dashboard with flagged orders list displaying customer info, order details, and duplicate match reasoning
+- ✅ **Real-time dashboard updates** - Auto-refreshes every 30 seconds to show latest flagged orders
+- ✅ **Order Details Modal** - View comprehensive order information including duplicate detection metadata, customer details, shipping address, and direct link to Shopify admin
+- ✅ **Enhanced customer name extraction** - Fallback to billing address fields when customer fields are unavailable
+- ✅ Stats cards showing total flagged orders, potential duplicate value, and recent activity metrics
+- ✅ Settings page for configuring detection rules (time window, matching criteria) and notification preferences
+- ✅ PostgreSQL database storing order data, detection rules, and audit history
+- ✅ MVC architecture with separated routes, services, and storage layers
+
 ## Local Development Setup
 
 ### Prerequisites
@@ -377,6 +393,14 @@ Orders are flagged as duplicates if confidence >= 70%
 - **Address-only matching**: Detection requires at least email OR phone matching to be enabled. If both are disabled but address matching is enabled, duplicate detection will not function.
 - Single detection settings profile (no multi-store support yet)
 - Average resolution time in dashboard stats is currently a placeholder value
+
+## Future Enhancements (Planned)
+
+- Bulk actions for reviewing and resolving flagged orders
+- Email/Slack notifications when duplicates are detected
+- Detailed order comparison view showing side-by-side duplicate analysis
+- Analytics dashboard with trends, patterns, and fraud risk scoring
+- OAuth flow for multi-store Shopify app distribution
 
 ## Production Deployment
 

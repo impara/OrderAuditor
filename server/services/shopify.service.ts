@@ -254,29 +254,20 @@ export class ShopifyService {
   /**
    * Register the orders/create webhook
    * Uses APP_URL environment variable for local development or production
-   * Falls back to REPLIT_DOMAINS for backward compatibility (if still using Replit)
    */
   async registerOrdersWebhook(): Promise<WebhookRegistrationResult> {
-    let webhookUrl: string;
-
-    if (process.env.APP_URL) {
-      // Use APP_URL for local development or custom production URLs
-      const baseUrl = process.env.APP_URL.replace(/\/$/, ""); // Remove trailing slash
-      webhookUrl = `${baseUrl}/api/webhooks/shopify/orders/create`;
-    } else if (process.env.REPLIT_DOMAINS) {
-      // Fallback to Replit domains for backward compatibility
-      webhookUrl = `https://${
-        process.env.REPLIT_DOMAINS.split(",")[0]
-      }/api/webhooks/shopify/orders/create`;
-    } else {
-      // No URL configured - return error
+    if (!process.env.APP_URL) {
       return {
         success: false,
         error: "APP_URL not configured",
         message:
-          "APP_URL environment variable must be set. For local development, use a tunneling service like ngrok and set APP_URL to your public URL.",
+          "APP_URL environment variable must be set. For local development, use a tunneling service like ngrok or cloudflared and set APP_URL to your public URL.",
       };
     }
+
+    // Use APP_URL for local development or custom production URLs
+    const baseUrl = process.env.APP_URL.replace(/\/$/, ""); // Remove trailing slash
+    const webhookUrl = `${baseUrl}/api/webhooks/shopify/orders/create`;
 
     console.log(
       `[Shopify] Registering orders/create webhook to: ${webhookUrl}`
