@@ -222,6 +222,38 @@ curl https://your-domain.com/api/dashboard/stats
 2. Verify DNS is pointing to tunnel: `dig your-domain.com`
 3. Check tunnel logs: `journalctl -u cloudflared -f` (if running as service)
 
+### Docker Compose ContainerConfig Error
+
+If you see `KeyError: 'ContainerConfig'` or orphan container warnings:
+
+This usually happens when containers are in a bad state or orphaned from previous deployments. Fix it with:
+
+```bash
+# Stop all containers (including orphans)
+sudo docker-compose -f docker-compose.prod.yml down --remove-orphans
+
+# Remove any broken containers manually if needed
+sudo docker ps -a | grep orderauditor
+sudo docker rm -f orderauditor-app-prod orderauditor-db-prod 2>/dev/null || true
+
+# Clean up any broken containers
+sudo docker container prune -f
+
+# Now start fresh
+sudo docker-compose -f docker-compose.prod.yml up -d --build
+```
+
+**Alternative**: If using Docker Compose v1 (older version), consider upgrading to Docker Compose v2:
+
+```bash
+# Check current version
+docker-compose --version
+
+# Upgrade to Docker Compose v2 (if using Docker 20.10+)
+# Docker Compose v2 is included with Docker Desktop and newer Docker Engine installations
+# Use: docker compose (without hyphen) instead of docker-compose
+```
+
 ## Security Considerations
 
 1. **Use strong passwords** for database and environment variables
@@ -253,8 +285,7 @@ curl https://your-domain.com/api/dashboard/stats
 ## Support
 
 For issues or questions, check:
+
 - Application logs: `docker-compose -f docker-compose.prod.yml logs`
 - Database logs: `docker-compose -f docker-compose.prod.yml logs postgres`
 - cloudflared logs: `journalctl -u cloudflared` or tunnel logs
-
-
