@@ -5,7 +5,7 @@ import { z } from "zod";
 
 // Orders table - stores order data from Shopify webhooks
 export const orders = pgTable("orders", {
-  id: varchar("id").primaryKey(),
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   shopifyOrderId: varchar("shopify_order_id").notNull().unique(),
   orderNumber: varchar("order_number").notNull(),
   customerEmail: text("customer_email").notNull(),

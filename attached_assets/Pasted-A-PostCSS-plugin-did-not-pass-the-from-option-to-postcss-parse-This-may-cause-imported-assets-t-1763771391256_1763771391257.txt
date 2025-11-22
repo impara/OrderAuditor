@@ -1,0 +1,173 @@
+A PostCSS plugin did not pass the `from` option to `postcss.parse`. This may cause imported assets to be incorrectly transformed. If you've recently added a PostCSS plugin that raised this warning, please contact the package author to fix the issue.
+12:22:16 AM [express] GET /api/dashboard/stats 304 in 651ms :: {"totalFlagged":0,"totalFlaggedTrend":…
+12:22:17 AM [express] GET /api/orders/flagged 304 in 2176ms :: []
+[Webhook] Received webhook
+[Webhook] HMAC Header present: true
+[Webhook] Raw body is Buffer: true
+[Webhook] Raw body length: 5655
+[ShopifyService] Verifying webhook HMAC
+[ShopifyService] Secret configured: shpss_ae65...
+[ShopifyService] Body type: object isBuffer: true
+[ShopifyService] Body length: 5655
+[ShopifyService] HMAC header received: J80Hc1URHnpVX3NTEvheY2qorOMt91MePVxtqRXojP8=
+[ShopifyService] Calculated HMAC: J80Hc1URHnpVX3NTEvheY2qorOMt91MePVxtqRXojP8=
+[ShopifyService] Expected HMAC:   J80Hc1URHnpVX3NTEvheY2qorOMt91MePVxtqRXojP8=
+[ShopifyService] Match: true
+[ShopifyService] timingSafeEqual result: true
+[Webhook] ✅ Signature verified successfully!
+Error processing webhook: error: null value in column "id" of relation "orders" violates not-null constraint
+    at file:///home/runner/workspace/node_modules/@neondatabase/serverless/index.mjs:1345:74
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async NeonPreparedQuery.execute (/home/runner/workspace/node_modules/src/neon-serverless/session.ts:102:18)
+    at async DatabaseStorage.createOrder (/home/runner/workspace/server/storage.ts:46:21)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:243:23) {
+  length: 357,
+  severity: 'ERROR',
+  code: '23502',
+  detail: 'Failing row contains (null, 6909260267815, 1005, unknown@example.com, null, {"country": "United States", "province": "Minnesota"}, 10.00, USD, 2025-11-21 23:24:50, f, null, null, null, null, null).',
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: 'public',
+  table: 'orders',
+  column: 'id',
+  dataType: undefined,
+  constraint: undefined,
+  file: 'execMain.c',
+  line: '2021',
+  routine: 'ExecConstraints'
+}
+12:24:58 AM [express] POST /api/webhooks/shopify/orders/create 500 in 594ms :: {"error":"Failed to pr…
+[Webhook] Received webhook
+[Webhook] HMAC Header present: true
+[Webhook] Raw body is Buffer: true
+[Webhook] Raw body length: 5655
+[ShopifyService] Verifying webhook HMAC
+[ShopifyService] Secret configured: shpss_ae65...
+[ShopifyService] Body type: object isBuffer: true
+[ShopifyService] Body length: 5655
+[ShopifyService] HMAC header received: Px2n7ihYzqB8kj1l5sUSokKI8YJPyPWdQON0w4XX9f4=
+[ShopifyService] Calculated HMAC: Px2n7ihYzqB8kj1l5sUSokKI8YJPyPWdQON0w4XX9f4=
+[ShopifyService] Expected HMAC:   Px2n7ihYzqB8kj1l5sUSokKI8YJPyPWdQON0w4XX9f4=
+[ShopifyService] Match: true
+[ShopifyService] timingSafeEqual result: true
+[Webhook] ✅ Signature verified successfully!
+Error processing webhook: error: null value in column "id" of relation "orders" violates not-null constraint
+    at file:///home/runner/workspace/node_modules/@neondatabase/serverless/index.mjs:1345:74
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async NeonPreparedQuery.execute (/home/runner/workspace/node_modules/src/neon-serverless/session.ts:102:18)
+    at async DatabaseStorage.createOrder (/home/runner/workspace/server/storage.ts:46:21)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:243:23) {
+  length: 357,
+  severity: 'ERROR',
+  code: '23502',
+  detail: 'Failing row contains (null, 6909330424103, 1008, unknown@example.com, null, {"country": "United States", "province": "Minnesota"}, 10.00, USD, 2025-11-22 00:17:10, f, null, null, null, null, null).',
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: 'public',
+  table: 'orders',
+  column: 'id',
+  dataType: undefined,
+  constraint: undefined,
+  file: 'execMain.c',
+  line: '2021',
+  routine: 'ExecConstraints'
+}
+12:25:18 AM [express] POST /api/webhooks/shopify/orders/create 500 in 2199ms :: {"error":"Failed to p…
+[Webhook] Received webhook
+[Webhook] HMAC Header present: true
+[Webhook] Raw body is Buffer: true
+[Webhook] Raw body length: 5655
+[ShopifyService] Verifying webhook HMAC
+[ShopifyService] Secret configured: shpss_ae65...
+[ShopifyService] Body type: object isBuffer: true
+[ShopifyService] Body length: 5655
+[ShopifyService] HMAC header received: 5RX/TtVpfkT/dj6CFDWhcv5INgwrWMnYsK7CeMsX1HI=
+[ShopifyService] Calculated HMAC: 5RX/TtVpfkT/dj6CFDWhcv5INgwrWMnYsK7CeMsX1HI=
+[ShopifyService] Expected HMAC:   5RX/TtVpfkT/dj6CFDWhcv5INgwrWMnYsK7CeMsX1HI=
+[ShopifyService] Match: true
+[ShopifyService] timingSafeEqual result: true
+[Webhook] ✅ Signature verified successfully!
+Error processing webhook: error: null value in column "id" of relation "orders" violates not-null constraint
+    at file:///home/runner/workspace/node_modules/@neondatabase/serverless/index.mjs:1345:74
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async NeonPreparedQuery.execute (/home/runner/workspace/node_modules/src/neon-serverless/session.ts:102:18)
+    at async DatabaseStorage.createOrder (/home/runner/workspace/server/storage.ts:46:21)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:243:23) {
+  length: 357,
+  severity: 'ERROR',
+  code: '23502',
+  detail: 'Failing row contains (null, 6909341892903, 1009, unknown@example.com, null, {"country": "United States", "province": "Minnesota"}, 10.00, USD, 2025-11-22 00:26:18, f, null, null, null, null, null).',
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: 'public',
+  table: 'orders',
+  column: 'id',
+  dataType: undefined,
+  constraint: undefined,
+  file: 'execMain.c',
+  line: '2021',
+  routine: 'ExecConstraints'
+}
+12:26:21 AM [express] POST /api/webhooks/shopify/orders/create 500 in 228ms :: {"error":"Failed to pr…
+[Webhook] Received webhook
+[Webhook] HMAC Header present: true
+[Webhook] Raw body is Buffer: true
+[Webhook] Raw body length: 5655
+[ShopifyService] Verifying webhook HMAC
+[ShopifyService] Secret configured: shpss_ae65...
+[ShopifyService] Body type: object isBuffer: true
+[ShopifyService] Body length: 5655
+[ShopifyService] HMAC header received: 5RX/TtVpfkT/dj6CFDWhcv5INgwrWMnYsK7CeMsX1HI=
+[ShopifyService] Calculated HMAC: 5RX/TtVpfkT/dj6CFDWhcv5INgwrWMnYsK7CeMsX1HI=
+[ShopifyService] Expected HMAC:   5RX/TtVpfkT/dj6CFDWhcv5INgwrWMnYsK7CeMsX1HI=
+[ShopifyService] Match: true
+[ShopifyService] timingSafeEqual result: true
+[Webhook] ✅ Signature verified successfully!
+Error processing webhook: error: null value in column "id" of relation "orders" violates not-null constraint
+    at file:///home/runner/workspace/node_modules/@neondatabase/serverless/index.mjs:1345:74
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async NeonPreparedQuery.execute (/home/runner/workspace/node_modules/src/neon-serverless/session.ts:102:18)
+    at async DatabaseStorage.createOrder (/home/runner/workspace/server/storage.ts:46:21)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:243:23) {
+  length: 357,
+  severity: 'ERROR',
+  code: '23502',
+  detail: 'Failing row contains (null, 6909341892903, 1009, unknown@example.com, null, {"country": "United States", "province": "Minnesota"}, 10.00, USD, 2025-11-22 00:26:18, f, null, null, null, null, null).',
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: 'public',
+  table: 'orders',
+  column: 'id',
+  dataType: undefined,
+  constraint: undefined,
+  file: 'execMain.c',
+  line: '2021',
+  routine: 'ExecConstraints'
+}
+12:26:22 AM [express] POST /api/webhooks/shopify/orders/create 500 in 198ms :: {"error":"Failed to pr…
+[Webhook] Received webhook
+[Webhook] HMAC Header present: true
+[Webhook] Raw body is Buffer: true
+[Webhook] Raw body length: 5655
+[ShopifyService] Verifying webhook HMAC
+[ShopifyService] Secret configured: shpss_ae65...
+[ShopifyService] Body type: object isBuffer: true
+[ShopifyService] Body length: 5655
+[ShopifyService] HMAC header received: 5RX/TtVpfkT/dj6CFDWhcv5INgwrWMnYsK7CeMsX1HI=
+[ShopifyService] Calculated HMAC: 5RX/TtVpfkT/dj6CFDWhcv5INgwrWMnYsK7CeMsX1HI=
+[ShopifyService] Expected HMAC:   5RX/TtVpfkT/dj6CFDWhcv5INgwrWMnYsK7CeMsX1HI=
+[ShopifyService] Match: true
+[ShopifyService] timingSafeEqual result: true
+[Webhook] ✅ Signature verified successfully!
