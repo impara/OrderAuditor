@@ -91,21 +91,45 @@ VITE_SHOPIFY_SHOP_DOMAIN=yourstore.myshopify.com
    - Enable the following scopes:
      - `read_orders` - To receive order webhooks
      - `write_orders` - To tag orders as duplicates
+     - `read_customers` - **REQUIRED** for accessing customer email/name in webhooks
    - Save the configuration
 
-3. **Install the App**:
+3. **Enable Protected Customer Data Access** (CRITICAL):
+
+   **⚠️ Without this, customer data (email, name, phone) will NOT be available in webhooks!**
+
+   **⚠️ PLAN REQUIREMENT**: API access to customer PII (email, name, phone) requires a **Shopify**, **Advanced**, or **Plus** plan. It is **NOT available on Basic/Free plans**.
+
+   - In your app settings, go to **API Access** → **Protected Customer Data Access**
+   - Click **Manage**
+   - Under **Protected customer fields (optional)**, select:
+     - ✅ `email`
+     - ✅ `first_name`
+     - ✅ `last_name`
+     - ✅ `phone`
+   - Provide a reason: "Duplicate order detection requires customer email and name to identify duplicate orders"
+   - Click **Save**
+   - **The merchant must approve this request** - they will see a notification in their Shopify admin
+
+   **Note**:
+
+   - Until Protected Customer Data Access is approved, the app will show "Unknown Customer" and "unknown@example.com" for all orders
+   - If you're on a Basic/Free plan, customer data will not be available even with Protected Customer Data Access enabled
+   - Development stores may have different restrictions - check your Shopify plan
+
+4. **Install the App**:
 
    - Click "Install app"
    - Copy the **Admin API access token** (starts with `shpat_`)
    - This is your `SHOPIFY_ACCESS_TOKEN`
 
-4. **Get Webhook Secret**:
+5. **Get Webhook Secret**:
 
    - In the app settings, go to "API credentials"
    - Copy the **API secret key** (starts with `shpss_`)
    - This is your `SHOPIFY_WEBHOOK_SECRET`
 
-5. **Set Shop Domain**:
+6. **Set Shop Domain**:
    - Your shop domain is in the format: `yourstore.myshopify.com`
    - This is your `SHOPIFY_SHOP_DOMAIN`
 

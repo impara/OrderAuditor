@@ -20,7 +20,7 @@ export class ShopifyService {
   private shopDomain: string;
   private accessToken: string;
   private webhookSecret: string;
-  private apiVersion: string = "2024-01";
+  private apiVersion: string = "2025-10";
 
   constructor() {
     this.shopDomain = process.env.SHOPIFY_SHOP_DOMAIN || "";
@@ -211,6 +211,82 @@ export class ShopifyService {
         error: error instanceof Error ? error.message : String(error),
         message: "Failed to register webhook due to an error",
       };
+    }
+  }
+
+  /**
+   * Fetch full order details by order ID
+   * Use this as a fallback when webhook payload lacks customer data
+   */
+  async getOrder(orderId: number): Promise<any | null> {
+    if (!this.validateCredentials()) {
+      return null;
+    }
+
+    try {
+      const url = `${this.baseApiUrl}/orders/${orderId}.json`;
+      console.log(`[Shopify] Fetching order ${orderId} via API`);
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "X-Shopify-Access-Token": this.accessToken,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(
+          `[Shopify] Failed to fetch order: ${response.status}`,
+          errorText
+        );
+        return null;
+      }
+
+      const data = await response.json();
+      return data.order || null;
+    } catch (error) {
+      console.error("[Shopify] Error fetching order:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Fetch customer details by customer ID
+   * Use this to get customer email/name when Protected Customer Data Access restricts webhook payloads
+   */
+  async getCustomer(customerId: number): Promise<any | null> {
+    if (!this.validateCredentials()) {
+      return null;
+    }
+
+    try {
+      const url = `${this.baseApiUrl}/customers/${customerId}.json`;
+      console.log(`[Shopify] Fetching customer ${customerId} via API`);
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "X-Shopify-Access-Token": this.accessToken,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(
+          `[Shopify] Failed to fetch customer: ${response.status}`,
+          errorText
+        );
+        return null;
+      }
+
+      const data = await response.json();
+      return data.customer || null;
+    } catch (error) {
+      console.error("[Shopify] Error fetching customer:", error);
+      return null;
     }
   }
 

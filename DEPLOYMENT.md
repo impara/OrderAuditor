@@ -40,28 +40,19 @@ cp .env.example .env
 nano .env
 ```
 
-Fill in all required variables:
+### 4. Create Production Docker Compose File
 
-```env
-# Database Configuration (for Docker Compose)
-POSTGRES_USER=orderauditor
-POSTGRES_PASSWORD=<strong-password>
-POSTGRES_DB=orderauditor
+Copy the example production docker-compose file:
 
-# Shopify Configuration
-SHOPIFY_SHOP_DOMAIN=yourstore.myshopify.com
-SHOPIFY_ACCESS_TOKEN=shpat_your_admin_api_access_token
-SHOPIFY_WEBHOOK_SECRET=shpss_your_webhook_secret_key
-
-# Application Configuration
-PORT=5000
-APP_URL=https://your-domain.com
-
-# Client-side Configuration (optional)
-VITE_SHOPIFY_SHOP_DOMAIN=yourstore.myshopify.com
+```bash
+cp docker-compose.prod.yml.example docker-compose.prod.yml
 ```
 
-**Important**: Use strong, unique passwords for production!
+**Important**: The `docker-compose.prod.yml` file is gitignored and should contain your production-specific configuration. Never commit it to version control.
+
+Fill in all required variables (see `.env.example` for reference):
+
+**Critical**: Use strong, unique passwords for production! Never use default values.
 
 ## Deployment
 
@@ -235,10 +226,14 @@ curl https://your-domain.com/api/dashboard/stats
 
 1. **Use strong passwords** for database and environment variables
 2. **Keep `.env` file secure** - never commit it to Git
-3. **Regular updates** - keep Docker images and dependencies updated
-4. **Firewall** - only expose necessary ports (cloudflared handles external access)
-5. **Backups** - regularly backup your database
-6. **Monitoring** - set up monitoring for application health
+3. **Keep `docker-compose.prod.yml` secure** - it's gitignored, never commit it
+4. **Never use default credentials** - always set strong, unique passwords
+5. **Regular updates** - keep Docker images and dependencies updated
+6. **Firewall** - only expose necessary ports (cloudflared handles external access)
+7. **Backups** - regularly backup your database
+8. **Monitoring** - set up monitoring for application health
+
+⚠️ **See `SECURITY.md` for important information about git history and credential management.**
 
 ## Production Checklist
 
@@ -261,4 +256,5 @@ For issues or questions, check:
 - Application logs: `docker-compose -f docker-compose.prod.yml logs`
 - Database logs: `docker-compose -f docker-compose.prod.yml logs postgres`
 - cloudflared logs: `journalctl -u cloudflared` or tunnel logs
+
 

@@ -185,37 +185,174 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Parse JSON after verification
       const shopifyOrder = JSON.parse(rawBody.toString('utf8'));
 
+      // DUMP FULL PAYLOAD for analysis - save to file for inspection
+      const payloadDump = {
+        timestamp: new Date().toISOString(),
+        orderId: shopifyOrder.id,
+        orderNumber: shopifyOrder.order_number,
+        // Top-level fields
+        topLevelFields: Object.keys(shopifyOrder),
+        email: shopifyOrder.email,
+        contact_email: shopifyOrder.contact_email,
+        // Customer object (full)
+        customer: shopifyOrder.customer,
+        customerKeys: shopifyOrder.customer ? Object.keys(shopifyOrder.customer) : null,
+        // Addresses
+        shipping_address: shopifyOrder.shipping_address,
+        billing_address: shopifyOrder.billing_address,
+        // Full payload (truncated for logs, but we'll save it)
+        fullPayload: shopifyOrder,
+      };
+      
+      // Log FULL payload structure - save complete JSON for analysis
+      console.log("[Webhook] ========== FULL WEBHOOK PAYLOAD ==========");
+      console.log("[Webhook] Order ID:", shopifyOrder.id);
+      console.log("[Webhook] Order Number:", shopifyOrder.order_number);
+      console.log("[Webhook] Top-level keys:", Object.keys(shopifyOrder));
+      console.log("[Webhook] Full payload JSON (first 3000 chars):", JSON.stringify(shopifyOrder, null, 2).substring(0, 3000));
+      console.log("[Webhook] ===========================================");
+      
+      // Log the actual customer, shipping_address, and billing_address objects
+      console.log("[Webhook] Customer object:", JSON.stringify(shopifyOrder.customer, null, 2));
+      console.log("[Webhook] Shipping address:", JSON.stringify(shopifyOrder.shipping_address, null, 2));
+      console.log("[Webhook] Billing address:", JSON.stringify(shopifyOrder.billing_address, null, 2));
+      
+      // Check if we need to fetch customer details via API
+      // Shopify webhooks may not include customer email/name due to Protected Customer Data Access restrictions
+      // Note: API access to PII requires Shopify/Advanced/Plus plan (not available on Basic/Free plans)
+      // The customer object exists but lacks email/name fields - fetch customer separately
+      let customerData = shopifyOrder.customer;
+      if (shopifyOrder.customer?.id && !shopifyOrder.customer?.email && !shopifyOrder.email) {
+        console.log("[Webhook] ⚠️ Customer email not in webhook payload, attempting to fetch customer via API...");
+        console.log("[Webhook] Note: This requires Protected Customer Data Access + Shopify/Advanced/Plus plan");
+        const apiCustomer = await shopifyService.getCustomer(shopifyOrder.customer.id);
+        if (apiCustomer && apiCustomer.email) {
+          console.log("[Webhook] ✅ Successfully fetched customer via API");
+          console.log("[Webhook] API Customer email:", apiCustomer.email);
+          console.log("[Webhook] API Customer name:", apiCustomer.first_name, apiCustomer.last_name);
+          customerData = apiCustomer;
+        } else {
+          console.log("[Webhook] ⚠️ Customer API fetch failed or returned no email");
+          console.log("[Webhook] Possible reasons:");
+          console.log("[Webhook]   1. Protected Customer Data Access not enabled");
+          console.log("[Webhook]   2. App lacks read_customers scope");
+          console.log("[Webhook]   3. Store is on Basic/Free plan (PII access requires Shopify/Advanced/Plus)");
+          console.log("[Webhook]   4. Merchant hasn't approved Protected Customer Data Access request");
+        }
+      }
+      
+      // Use webhook order data
+      const fullOrder = shopifyOrder;
+
+      // Extract customer email from multiple possible locations
+      // Use customerData (may be fetched via API if webhook lacks data)
+      const customerEmail = 
+        fullOrder.email || 
+        fullOrder.contact_email ||
+        customerData?.email ||
+        fullOrder.shipping_address?.email ||
+        fullOrder.billing_address?.email ||
+        customerData?.default_address?.email ||
+        null;
+
+      // Extract customer name with better fallbacks
+      // Use customerData (may be fetched via API if webhook lacks data)
+      const customerName = (() => {
+        // Try customerData first (fetched via API if needed)
+        const firstName = 
+          fullOrder.first_name ||
+          customerData?.first_name ||
+          fullOrder.shipping_address?.first_name ||
+          customerData?.default_address?.first_name ||
+          fullOrder.billing_address?.first_name ||
+          "";
+        const lastName = 
+          fullOrder.last_name ||
+          customerData?.last_name ||
+          fullOrder.shipping_address?.last_name ||
+          customerData?.default_address?.last_name ||
+          fullOrder.billing_address?.last_name ||
+          "";
+        
+        if (firstName && lastName) {
+          return `${firstName} ${lastName}`;
+        } else if (firstName) {
+          return firstName;
+        } else if (lastName) {
+          return lastName;
+        }
+        
+        // Fallback to customer name field
+        if (customerData?.name) {
+          return customerData.name;
+        }
+        
+        // Fallback to shipping_address name field
+        if (fullOrder.shipping_address?.name) {
+          return fullOrder.shipping_address.name;
+        }
+        
+        // Fallback to default_address name
+        if (customerData?.default_address?.name) {
+          return customerData.default_address.name;
+        }
+        
+        return null;
+      })();
+
+      // Extract customer phone
+      // Use customerData (may be fetched via API if webhook lacks data)
+      const customerPhone = 
+        fullOrder.phone ||
+        customerData?.phone ||
+        fullOrder.shipping_address?.phone ||
+        fullOrder.billing_address?.phone ||
+        customerData?.default_address?.phone ||
+        null;
+
+      // Log extracted data for debugging
+      console.log("[Webhook] Extracted customer data:", {
+        email: customerEmail || "NOT FOUND",
+        name: customerName || "NOT FOUND",
+        phone: customerPhone || "NOT FOUND",
+        hasCustomer: !!fullOrder.customer,
+        hasDefaultAddress: !!fullOrder.customer?.default_address,
+        defaultAddressKeys: fullOrder.customer?.default_address ? Object.keys(fullOrder.customer.default_address) : [],
+        fetchedViaAPI: fullOrder !== shopifyOrder,
+      });
+
       const orderData = {
-        shopifyOrderId: shopifyOrder.id.toString(),
-        orderNumber: shopifyOrder.order_number?.toString() || shopifyOrder.name,
-        customerEmail: shopifyOrder.email || shopifyOrder.customer?.email || "unknown@example.com",
-        customerName: (() => {
-          const firstName = shopifyOrder.customer?.first_name || shopifyOrder.billing_address?.first_name || "";
-          const lastName = shopifyOrder.customer?.last_name || shopifyOrder.billing_address?.last_name || "";
-          if (firstName && lastName) {
-            return `${firstName} ${lastName}`;
-          } else if (firstName) {
-            return firstName;
-          } else if (lastName) {
-            return lastName;
-          }
-          return null;
-        })(),
-        customerPhone: shopifyOrder.phone || shopifyOrder.customer?.phone || null,
-        shippingAddress: shopifyOrder.shipping_address ? {
-          address1: shopifyOrder.shipping_address.address1,
-          address2: shopifyOrder.shipping_address.address2,
-          city: shopifyOrder.shipping_address.city,
-          province: shopifyOrder.shipping_address.province,
-          country: shopifyOrder.shipping_address.country,
-          zip: shopifyOrder.shipping_address.zip,
+        shopifyOrderId: fullOrder.id.toString(),
+        orderNumber: fullOrder.order_number?.toString() || fullOrder.name,
+        customerEmail: customerEmail || "unknown@example.com",
+        customerName,
+        customerPhone,
+        shippingAddress: fullOrder.shipping_address ? {
+          address1: fullOrder.shipping_address.address1,
+          address2: fullOrder.shipping_address.address2,
+          city: fullOrder.shipping_address.city,
+          province: fullOrder.shipping_address.province,
+          country: fullOrder.shipping_address.country,
+          zip: fullOrder.shipping_address.zip,
         } : null,
-        totalPrice: shopifyOrder.total_price || "0.00",
-        currency: shopifyOrder.currency || "USD",
-        createdAt: new Date(shopifyOrder.created_at),
+        totalPrice: fullOrder.total_price || "0.00",
+        currency: fullOrder.currency || "USD",
+        createdAt: new Date(fullOrder.created_at),
       };
 
       const validatedOrder = insertOrderSchema.parse(orderData);
+
+      // Check if order already exists (webhook retries can cause duplicates)
+      const existingOrder = await storage.getOrderByShopifyId(validatedOrder.shopifyOrderId);
+      if (existingOrder) {
+        console.log(`[Webhook] Order ${validatedOrder.shopifyOrderId} already exists, skipping duplicate processing`);
+        return res.json({ 
+          success: true, 
+          flagged: existingOrder.isFlagged,
+          order: existingOrder,
+          message: "Order already processed",
+        });
+      }
 
       // Ensure detection settings are initialized
       let settings = await storage.getSettings();
@@ -247,7 +384,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         try {
-          await shopifyService.tagOrder(shopifyOrder.id.toString(), ["duplicate-flagged"]);
+          await shopifyService.tagOrder(fullOrder.id.toString(), ["duplicate-flagged"]);
           
           await storage.createAuditLog({
             orderId: flaggedOrder.id,
