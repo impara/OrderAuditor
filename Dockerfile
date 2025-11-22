@@ -25,8 +25,11 @@ WORKDIR /app
 # Copy package files
 COPY package.json package-lock.json ./
 
-# Install only production dependencies
+# Install production dependencies
 RUN npm ci --only=production && npm cache clean --force
+
+# Install drizzle-kit for database migrations (needed in production)
+RUN npm install drizzle-kit@^0.31.7 --no-save && npm cache clean --force
 
 # Copy built files from builder stage
 COPY --from=builder /app/dist ./dist
