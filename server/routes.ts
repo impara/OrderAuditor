@@ -175,7 +175,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const shopifyOrder = JSON.parse(rawBody.toString('utf8'));
 
       const orderData = {
-        id: randomUUID(),
         shopifyOrderId: shopifyOrder.id.toString(),
         orderNumber: shopifyOrder.order_number?.toString() || shopifyOrder.name,
         customerEmail: shopifyOrder.email || shopifyOrder.customer?.email || "unknown@example.com",
