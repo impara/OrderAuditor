@@ -4,15 +4,17 @@
 Order Auditor is a Shopify app that automatically detects and flags duplicate orders from the same customer using configurable detection rules. It processes orders via Shopify webhooks, analyzes them for duplicates based on email, shipping address, and other criteria, and automatically tags suspicious orders in Shopify for merchant review.
 
 ## Current State
-**Status**: MVP Complete
-**Last Updated**: November 21, 2025
+**Status**: MVP Complete & Production Ready
+**Last Updated**: November 22, 2025
 
 ### Implemented Features
 - ✅ Shopify webhook listener endpoint for order creation events with HMAC verification
-- ✅ **Automatic webhook registration via Shopify Admin API** (NEW)
+- ✅ **Automatic webhook registration via Shopify Admin API**
 - ✅ Duplicate detection logic matching orders by customer email, shipping address, and configurable time window
+- ✅ **Auto-initialization of detection settings** - Settings are automatically created on first webhook
 - ✅ Automatic order tagging via Shopify Admin API to flag duplicates for review
 - ✅ Dashboard with flagged orders list displaying customer info, order details, and duplicate match reasoning
+- ✅ **Real-time dashboard updates** - Auto-refreshes every 30 seconds to show latest flagged orders
 - ✅ Stats cards showing total flagged orders, potential duplicate value, and recent activity metrics
 - ✅ Settings page for configuring detection rules (time window, matching criteria) and notification preferences
 - ✅ PostgreSQL database storing order data, detection rules, and audit history
