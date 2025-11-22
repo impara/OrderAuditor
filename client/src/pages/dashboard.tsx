@@ -157,10 +157,12 @@ function FlaggedOrdersTable({ orders }: { orders: Order[] }) {
 export default function Dashboard() {
   const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
     queryKey: ['/api/dashboard/stats'],
+    refetchInterval: 30000,
   });
 
   const { data: orders, isLoading: ordersLoading } = useQuery<Order[]>({
     queryKey: ['/api/orders/flagged'],
+    refetchInterval: 30000,
   });
 
   return (
