@@ -8,7 +8,6 @@ import { createServer as createViteServer, createLogger } from "vite";
 
 import viteConfig from "../vite.config";
 import runApp from "./app";
-import { validateEnvironment } from "./middleware/env-validator";
 
 export async function setupVite(app: Express, server: Server) {
   const viteLogger = createLogger();
@@ -60,8 +59,5 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 (async () => {
-  // Validate environment variables before starting
-  validateEnvironment();
-  
   await runApp(setupVite);
 })();

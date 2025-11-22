@@ -1,6 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { useLocation } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Flag, Bell, Save, LogOut } from "lucide-react";
+import { Flag, Bell, Save } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -20,25 +19,10 @@ import { updateDetectionSettingsSchema } from "@shared/schema";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 
 export default function Settings() {
-  const [, setLocation] = useLocation();
   const { toast } = useToast();
 
   const { data: settings, isLoading } = useQuery<DetectionSettings>({
     queryKey: ['/api/settings'],
-  });
-
-  const logoutMutation = useMutation({
-    mutationFn: async () => {
-      return await apiRequest("POST", "/api/auth/logout", {});
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/auth/check'] });
-      toast({
-        title: "Logged out",
-        description: "You have been logged out successfully",
-      });
-      setLocation("/login");
-    },
   });
 
   const form = useForm<UpdateDetectionSettings>({
@@ -106,22 +90,12 @@ export default function Settings() {
                 <Flag className="h-5 w-5 text-primary" />
                 <h1 className="text-page-title">Order Auditor</h1>
               </div>
-              <nav className="flex gap-4 items-center">
+              <nav className="flex gap-4">
                 <Button variant="ghost" asChild data-testid="link-dashboard">
                   <a href="/" className="text-sm font-medium">Dashboard</a>
                 </Button>
                 <Button variant="ghost" asChild data-testid="link-settings">
                   <a href="/settings" className="text-sm font-medium">Settings</a>
-                </Button>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={() => logoutMutation.mutate()}
-                  disabled={logoutMutation.isPending}
-                  data-testid="button-logout"
-                >
-                  <LogOut className="h-4 w-4 mr-2" />
-                  {logoutMutation.isPending ? "Logging out..." : "Logout"}
                 </Button>
               </nav>
             </div>
@@ -143,22 +117,12 @@ export default function Settings() {
               <Flag className="h-5 w-5 text-primary" />
               <h1 className="text-page-title">Order Auditor</h1>
             </div>
-            <nav className="flex gap-4 items-center">
+            <nav className="flex gap-4">
               <Button variant="ghost" asChild data-testid="link-dashboard">
                 <a href="/" className="text-sm font-medium">Dashboard</a>
               </Button>
               <Button variant="ghost" asChild data-testid="link-settings">
                 <a href="/settings" className="text-sm font-medium">Settings</a>
-              </Button>
-              <Button 
-                variant="ghost" 
-                size="sm"
-                onClick={() => logoutMutation.mutate()}
-                disabled={logoutMutation.isPending}
-                data-testid="button-logout"
-              >
-                <LogOut className="h-4 w-4 mr-2" />
-                {logoutMutation.isPending ? "Logging out..." : "Logout"}
               </Button>
             </nav>
           </div>
@@ -376,7 +340,6 @@ export default function Settings() {
                               type="email"
                               placeholder="admin@example.com"
                               {...field}
-                              value={field.value || ""}
                               data-testid="input-notification-email"
                             />
                           </FormControl>
@@ -398,7 +361,6 @@ export default function Settings() {
                               type="url"
                               placeholder="https://hooks.slack.com/services/..."
                               {...field}
-                              value={field.value || ""}
                               data-testid="input-slack-webhook"
                             />
                           </FormControl>
