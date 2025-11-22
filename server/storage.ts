@@ -16,6 +16,7 @@ import { eq, desc, gte, sql, and } from "drizzle-orm";
 
 export interface IStorage {
   getOrder(id: string): Promise<Order | undefined>;
+  getOrderByShopifyId(shopifyOrderId: string): Promise<Order | undefined>;
   getFlaggedOrders(): Promise<Order[]>;
   createOrder(order: InsertOrder): Promise<Order>;
   updateOrder(id: string, updates: Partial<Order>): Promise<Order>;
@@ -31,6 +32,11 @@ export interface IStorage {
 export class DatabaseStorage implements IStorage {
   async getOrder(id: string): Promise<Order | undefined> {
     const [order] = await db.select().from(orders).where(eq(orders.id, id));
+    return order || undefined;
+  }
+
+  async getOrderByShopifyId(shopifyOrderId: string): Promise<Order | undefined> {
+    const [order] = await db.select().from(orders).where(eq(orders.shopifyOrderId, shopifyOrderId));
     return order || undefined;
   }
 
