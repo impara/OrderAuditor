@@ -6,15 +6,83 @@ import { duplicateDetectionService } from "./services/duplicate-detection.servic
 import { shopifyService } from "./services/shopify.service";
 import { insertOrderSchema, updateDetectionSettingsSchema } from "@shared/schema";
 import { randomUUID } from "crypto";
+import { requireAuth } from "./middleware/auth";
+import bcrypt from "bcryptjs";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  app.use(express.json({ 
-    verify: (req: any, res, buf) => {
-      req.rawBody = buf.toString();
-    }
-  }));
+  // Authentication routes
+  app.post("/api/auth/login", async (req: Request, res: Response) => {
+    try {
+      const { password } = req.body;
+      const adminPassword = process.env.ADMIN_PASSWORD;
 
-  app.get("/api/dashboard/stats", async (_req: Request, res: Response) => {
+      if (!adminPassword) {
+        console.error("ADMIN_PASSWORD environment variable not set");
+        return res.status(500).json({ error: "Server configuration error" });
+      }
+
+      if (!password) {
+        return res.status(400).json({ error: "Password is required" });
+      }
+
+      // Compare password with hashed admin password
+      // For initial setup, accept plain text comparison but warn
+      let isValid = false;
+      
+      if (adminPassword.startsWith('$2')) {
+        // Hashed password (bcrypt)
+        isValid = await bcrypt.compare(password, adminPassword);
+      } else {
+        // Plain text password (for dev/initial setup)
+        if (process.env.NODE_ENV === 'production') {
+          console.warn("⚠️  WARNING: Using plain text ADMIN_PASSWORD in production! Use bcrypt hash instead.");
+        }
+        isValid = password === adminPassword;
+      }
+
+      if (!isValid) {
+        return res.status(401).json({ error: "Invalid password" });
+      }
+
+      // Set session
+      req.session.isAuthenticated = true;
+      req.session.userId = "admin";
+
+      res.json({ success: true, message: "Authenticated successfully" });
+    } catch (error) {
+      console.error("Login error:", error);
+      res.status(500).json({ error: "Login failed" });
+    }
+  });
+
+  app.post("/api/auth/logout", (req: Request, res: Response) => {
+    req.session.destroy((err) => {
+      if (err) {
+        console.error("Logout error:", err);
+        return res.status(500).json({ error: "Logout failed" });
+      }
+      res.json({ success: true, message: "Logged out successfully" });
+    });
+  });
+
+  app.get("/api/auth/check", (req: Request, res: Response) => {
+    res.json({ 
+      isAuthenticated: !!(req.session && req.session.isAuthenticated)
+    });
+  });
+
+  // Health check endpoint (public, for monitoring)
+  app.get("/api/health", (_req: Request, res: Response) => {
+    res.json({ 
+      status: "healthy",
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      environment: process.env.NODE_ENV || 'development',
+    });
+  });
+
+  // Protected admin routes - require authentication
+  app.get("/api/dashboard/stats", requireAuth, async (_req: Request, res: Response) => {
     try {
       const stats = await storage.getDashboardStats();
       res.json(stats);
@@ -24,7 +92,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/orders/flagged", async (_req: Request, res: Response) => {
+  app.get("/api/orders/flagged", requireAuth, async (_req: Request, res: Response) => {
     try {
       const orders = await storage.getFlaggedOrders();
       res.json(orders);
@@ -34,7 +102,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/settings", async (_req: Request, res: Response) => {
+  app.get("/api/settings", requireAuth, async (_req: Request, res: Response) => {
     try {
       let settings = await storage.getSettings();
       if (!settings) {
@@ -47,7 +115,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/settings", async (req: Request, res: Response) => {
+  app.patch("/api/settings", requireAuth, async (req: Request, res: Response) => {
     try {
       const validatedData = updateDetectionSettingsSchema.parse(req.body);
       const settings = await storage.updateSettings(validatedData);
@@ -58,7 +126,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/webhooks/status", async (_req: Request, res: Response) => {
+  app.get("/api/webhooks/status", requireAuth, async (_req: Request, res: Response) => {
     try {
       console.log("[API] Checking webhook registration status");
       const webhooks = await shopifyService.listWebhooks();
@@ -80,7 +148,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/webhooks/register", async (_req: Request, res: Response) => {
+  app.post("/api/webhooks/register", requireAuth, async (_req: Request, res: Response) => {
     try {
       console.log("[API] Webhook registration requested");
       const result = await shopifyService.registerOrdersWebhook();
@@ -100,8 +168,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Diagnostic endpoint to help troubleshoot webhook verification
-  app.get("/api/webhooks/diagnostic", async (_req: Request, res: Response) => {
+  // Diagnostic endpoint to help troubleshoot webhook verification (protected)
+  app.get("/api/webhooks/diagnostic", requireAuth, async (_req: Request, res: Response) => {
     const secret = process.env.SHOPIFY_WEBHOOK_SECRET || "";
     res.json({
       configured: {
@@ -126,36 +194,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  app.post("/api/webhooks/test", async (req: any, res: Response) => {
-    const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
-    const rawBody = req.rawBody || Buffer.from(JSON.stringify(req.body));
-    const rawBodyStr = Buffer.isBuffer(rawBody) ? rawBody.toString('utf8') : rawBody;
-    
-    res.json({
-      headers: {
-        hmac: hmacHeader,
-        contentType: req.get("Content-Type"),
-      },
-      body: {
-        rawBodyAvailable: !!req.rawBody,
-        rawBodyIsBuffer: Buffer.isBuffer(rawBody),
-        rawBodyLength: rawBodyStr.length,
-        rawBodyPreview: rawBodyStr.substring(0, 100),
-        parsedBody: req.body,
-      },
-      verification: {
-        secretConfigured: !!process.env.SHOPIFY_WEBHOOK_SECRET,
-        secretLength: process.env.SHOPIFY_WEBHOOK_SECRET?.length || 0,
-        wouldVerify: hmacHeader ? shopifyService.verifyWebhook(rawBody, hmacHeader) : false,
-      },
-    });
-  });
+  // Test endpoint removed - sensitive configuration data should not be exposed
+  // For testing webhooks, use the Shopify Admin or external tools like Postman
 
-  app.post("/api/webhooks/shopify/orders/create", async (req: any, res: Response) => {
-    try {
-      const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
-      // With express.raw middleware, req.body is the raw Buffer
-      const rawBody: Buffer = req.body;
+  // Shopify webhook handler with route-specific raw body middleware
+  app.post(
+    "/api/webhooks/shopify/orders/create",
+    express.raw({ type: 'application/json' }),
+    async (req: any, res: Response) => {
+      try {
+        const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
+        // With route-specific express.raw middleware, req.body is the raw Buffer
+        const rawBody: Buffer = req.body;
 
       console.log("[Webhook] Received webhook");
       console.log("[Webhook] HMAC Header present:", !!hmacHeader);
@@ -265,7 +315,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error processing webhook:", error);
       res.status(500).json({ error: "Failed to process webhook" });
     }
-  });
+  }
+);
 
   const httpServer = createServer(app);
 

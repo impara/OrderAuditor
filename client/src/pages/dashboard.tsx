@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -6,10 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { AlertCircle, TrendingUp, TrendingDown, DollarSign, Clock, Flag, Package, MapPin, Mail, Phone, Calendar } from "lucide-react";
+import { AlertCircle, TrendingUp, TrendingDown, DollarSign, Clock, Flag, Package, MapPin, Mail, Phone, Calendar, LogOut } from "lucide-react";
 import type { Order, DashboardStats } from "@shared/schema";
 import { format } from "date-fns";
 import { useState } from "react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 function StatsCard({ 
   title, 
@@ -300,6 +303,9 @@ function FlaggedOrdersTable({ orders }: { orders: Order[] }) {
 }
 
 export default function Dashboard() {
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+
   const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
     queryKey: ['/api/dashboard/stats'],
     refetchInterval: 30000,
@@ -308,6 +314,20 @@ export default function Dashboard() {
   const { data: orders, isLoading: ordersLoading } = useQuery<Order[]>({
     queryKey: ['/api/orders/flagged'],
     refetchInterval: 30000,
+  });
+
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("POST", "/api/auth/logout", {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/check'] });
+      toast({
+        title: "Logged out",
+        description: "You have been logged out successfully",
+      });
+      setLocation("/login");
+    },
   });
 
   return (
@@ -319,12 +339,22 @@ export default function Dashboard() {
               <Flag className="h-5 w-5 text-primary" />
               <h1 className="text-page-title">Order Auditor</h1>
             </div>
-            <nav className="flex gap-4">
+            <nav className="flex gap-4 items-center">
               <Button variant="ghost" asChild data-testid="link-dashboard">
                 <a href="/" className="text-sm font-medium">Dashboard</a>
               </Button>
               <Button variant="ghost" asChild data-testid="link-settings">
                 <a href="/settings" className="text-sm font-medium">Settings</a>
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => logoutMutation.mutate()}
+                disabled={logoutMutation.isPending}
+                data-testid="button-logout"
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                {logoutMutation.isPending ? "Logging out..." : "Logout"}
               </Button>
             </nav>
           </div>
