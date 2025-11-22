@@ -2,12 +2,20 @@ node_modules
 dist
 .env
 .env.local
+.env.production
+.env.prod
 
 # Windows/WSL metadata files
 *:Zone.Identifier
 
 # Docker volumes (data persists in named volumes)
 # docker-compose.yml should be committed
+
+# Production build artifacts
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # Replit-specific files
 .local/

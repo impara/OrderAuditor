@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: orderauditor-db-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-orderauditor}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-orderauditor}
+      POSTGRES_DB: ${POSTGRES_DB:-orderauditor}
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-orderauditor}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - orderauditor-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: orderauditor-app-prod
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: ${PORT:-5000}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-orderauditor}:${POSTGRES_PASSWORD:-orderauditor}@postgres:5432/${POSTGRES_DB:-orderauditor}
+      SHOPIFY_SHOP_DOMAIN: ${SHOPIFY_SHOP_DOMAIN}
+      SHOPIFY_ACCESS_TOKEN: ${SHOPIFY_ACCESS_TOKEN}
+      SHOPIFY_WEBHOOK_SECRET: ${SHOPIFY_WEBHOOK_SECRET}
+      APP_URL: ${APP_URL}
+      VITE_SHOPIFY_SHOP_DOMAIN: ${VITE_SHOPIFY_SHOP_DOMAIN:-${SHOPIFY_SHOP_DOMAIN}}
+    ports:
+      - "${PORT:-5000}:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/api/dashboard/stats', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - orderauditor-network
+
+volumes:
+  postgres_data_prod:
+
+networks:
+  orderauditor-network:
+    driver: bridge
+

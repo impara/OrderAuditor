@@ -378,6 +378,33 @@ Orders are flagged as duplicates if confidence >= 70%
 - Single detection settings profile (no multi-store support yet)
 - Average resolution time in dashboard stats is currently a placeholder value
 
+## Production Deployment
+
+For production deployment using Docker and cloudflared tunnel, see the detailed [DEPLOYMENT.md](./DEPLOYMENT.md) guide.
+
+### Quick Start
+
+```bash
+# Clone repository
+git clone <your-repo-url> orderauditor
+cd orderauditor
+
+# Configure environment
+cp .env.example .env
+# Edit .env with production values
+
+# Deploy with Docker Compose
+docker-compose -f docker-compose.prod.yml up -d --build
+
+# Initialize database
+docker-compose -f docker-compose.prod.yml exec app npm run db:push
+
+# Register webhook
+curl -X POST https://your-domain.com/api/webhooks/register
+```
+
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for complete deployment instructions, including cloudflared tunnel setup, backups, and maintenance.
+
 ## License
 
 MIT
