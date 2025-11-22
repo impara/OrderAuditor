@@ -197,6 +197,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const validatedOrder = insertOrderSchema.parse(orderData);
 
+      // Ensure detection settings are initialized
+      let settings = await storage.getSettings();
+      if (!settings) {
+        settings = await storage.initializeSettings();
+      }
+
       const duplicateMatch = await duplicateDetectionService.findDuplicates(validatedOrder);
 
       if (duplicateMatch) {
