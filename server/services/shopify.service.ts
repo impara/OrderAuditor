@@ -52,8 +52,16 @@ export class ShopifyService {
     }
 
     console.log("[ShopifyService] Verifying webhook HMAC");
-    console.log("[ShopifyService] Secret configured:", this.webhookSecret.substring(0, 10) + "...");
-    console.log("[ShopifyService] Body type:", typeof body, "isBuffer:", Buffer.isBuffer(body));
+    console.log(
+      "[ShopifyService] Secret configured:",
+      this.webhookSecret.substring(0, 10) + "..."
+    );
+    console.log(
+      "[ShopifyService] Body type:",
+      typeof body,
+      "isBuffer:",
+      Buffer.isBuffer(body)
+    );
     console.log("[ShopifyService] Body length:", body.length);
     console.log("[ShopifyService] HMAC header received:", hmacHeader);
 
@@ -102,12 +110,19 @@ export class ShopifyService {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`[Shopify] Failed to list webhooks: ${response.status} ${response.statusText}`, errorText);
-        throw new Error(`Shopify API error: ${response.status} ${response.statusText}`);
+        console.error(
+          `[Shopify] Failed to list webhooks: ${response.status} ${response.statusText}`,
+          errorText
+        );
+        throw new Error(
+          `Shopify API error: ${response.status} ${response.statusText}`
+        );
       }
 
       const data = await response.json();
-      console.log(`[Shopify] Found ${data.webhooks?.length || 0} registered webhooks`);
+      console.log(
+        `[Shopify] Found ${data.webhooks?.length || 0} registered webhooks`
+      );
       return data.webhooks || [];
     } catch (error) {
       console.error("[Shopify] Error listing webhooks:", error);
@@ -118,17 +133,23 @@ export class ShopifyService {
   /**
    * Register a new webhook
    */
-  async registerWebhook(topic: string, address: string): Promise<WebhookRegistrationResult> {
+  async registerWebhook(
+    topic: string,
+    address: string
+  ): Promise<WebhookRegistrationResult> {
     if (!this.validateCredentials()) {
       return {
         success: false,
         error: "Missing Shopify credentials",
-        message: "SHOPIFY_SHOP_DOMAIN and SHOPIFY_ACCESS_TOKEN must be configured",
+        message:
+          "SHOPIFY_SHOP_DOMAIN and SHOPIFY_ACCESS_TOKEN must be configured",
       };
     }
 
     try {
-      console.log(`[Shopify] Registering webhook for topic: ${topic} at ${address}`);
+      console.log(
+        `[Shopify] Registering webhook for topic: ${topic} at ${address}`
+      );
 
       const existingWebhooks = await this.listWebhooks();
       const duplicate = existingWebhooks.find(
@@ -162,7 +183,10 @@ export class ShopifyService {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`[Shopify] Failed to register webhook: ${response.status}`, errorText);
+        console.error(
+          `[Shopify] Failed to register webhook: ${response.status}`,
+          errorText
+        );
         return {
           success: false,
           error: `HTTP ${response.status}: ${response.statusText}`,
@@ -171,8 +195,10 @@ export class ShopifyService {
       }
 
       const data = await response.json();
-      console.log(`[Shopify] Successfully registered webhook (ID: ${data.webhook.id})`);
-      
+      console.log(
+        `[Shopify] Successfully registered webhook (ID: ${data.webhook.id})`
+      );
+
       return {
         success: true,
         webhook: data.webhook,
@@ -210,7 +236,10 @@ export class ShopifyService {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`[Shopify] Failed to delete webhook: ${response.status}`, errorText);
+        console.error(
+          `[Shopify] Failed to delete webhook: ${response.status}`,
+          errorText
+        );
         return false;
       }
 
@@ -223,14 +252,35 @@ export class ShopifyService {
   }
 
   /**
-   * Register the orders/create webhook for production
+   * Register the orders/create webhook
+   * Uses APP_URL environment variable for local development or production
+   * Falls back to REPLIT_DOMAINS for backward compatibility (if still using Replit)
    */
   async registerOrdersWebhook(): Promise<WebhookRegistrationResult> {
-    const webhookUrl = process.env.REPLIT_DOMAINS
-      ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}/api/webhooks/shopify/orders/create`
-      : "https://order-auditor.replit.app/api/webhooks/shopify/orders/create";
+    let webhookUrl: string;
 
-    console.log(`[Shopify] Registering orders/create webhook to: ${webhookUrl}`);
+    if (process.env.APP_URL) {
+      // Use APP_URL for local development or custom production URLs
+      const baseUrl = process.env.APP_URL.replace(/\/$/, ""); // Remove trailing slash
+      webhookUrl = `${baseUrl}/api/webhooks/shopify/orders/create`;
+    } else if (process.env.REPLIT_DOMAINS) {
+      // Fallback to Replit domains for backward compatibility
+      webhookUrl = `https://${
+        process.env.REPLIT_DOMAINS.split(",")[0]
+      }/api/webhooks/shopify/orders/create`;
+    } else {
+      // No URL configured - return error
+      return {
+        success: false,
+        error: "APP_URL not configured",
+        message:
+          "APP_URL environment variable must be set. For local development, use a tunneling service like ngrok and set APP_URL to your public URL.",
+      };
+    }
+
+    console.log(
+      `[Shopify] Registering orders/create webhook to: ${webhookUrl}`
+    );
     return this.registerWebhook("orders/create", webhookUrl);
   }
 
@@ -239,7 +289,9 @@ export class ShopifyService {
    */
   async tagOrder(orderId: string, tags: string[]): Promise<void> {
     if (!this.shopDomain || !this.accessToken) {
-      console.warn("Shopify credentials not configured, skipping order tagging");
+      console.warn(
+        "Shopify credentials not configured, skipping order tagging"
+      );
       return;
     }
 

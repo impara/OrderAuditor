@@ -163,9 +163,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("[Webhook] Raw body length:", rawBody.length);
 
       // Verify HMAC signature using raw bytes
-      if (!hmacHeader || !shopifyService.verifyWebhook(rawBody, hmacHeader)) {
-        console.warn("[Webhook] Invalid webhook signature");
+      if (!hmacHeader) {
+        console.error("[Webhook] ❌ Missing HMAC header");
+        console.error("[Webhook] Request headers:", JSON.stringify(req.headers, null, 2));
+        return res.status(401).json({ error: "Missing webhook signature header" });
+      }
+      
+      if (!shopifyService.verifyWebhook(rawBody, hmacHeader)) {
+        console.warn("[Webhook] ❌ Invalid webhook signature");
         console.warn("[Webhook] HMAC header:", hmacHeader);
+        console.warn("[Webhook] Body preview (first 200 chars):", rawBody.toString('utf8').substring(0, 200));
+        console.warn("[Webhook] Possible causes:");
+        console.warn("  1. Webhook secret mismatch - check SHOPIFY_WEBHOOK_SECRET in .env");
+        console.warn("  2. Request body was modified (ngrok free tier can do this)");
+        console.warn("  3. Using wrong webhook secret (should be 'API secret key', not 'Admin API access token')");
         return res.status(401).json({ error: "Invalid webhook signature" });
       }
 

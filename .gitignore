@@ -1,6 +1,16 @@
 node_modules
 dist
-.DS_Store
-server/public
-vite.config.ts.*
-*.tar.gz
+.env
+.env.local
+
+# Windows/WSL metadata files
+*:Zone.Identifier
+
+# Docker volumes (data persists in named volumes)
+# docker-compose.yml should be committed
+
+# Replit-specific files
+.local/
+.replit
+replit.nix
+.config/replit/
