@@ -72,6 +72,7 @@ SHOPIFY_WEBHOOK_SECRET=shpss_your_webhook_secret_key
 # Application Configuration
 PORT=5000
 APP_URL=http://localhost:5000
+LOG_LEVEL=debug
 
 # Client-side Configuration (optional)
 VITE_SHOPIFY_SHOP_DOMAIN=yourstore.myshopify.com
@@ -239,7 +240,7 @@ For local development, you'll need to expose your local server to the internet s
 
 5. **Register the webhook** (see Step 5)
 
-#### Option B: Using Cloudflare Tunnel or Similar
+#### Option B: Using Other Tunneling Services
 
 Follow your tunneling service's instructions to expose port 5000, then update `APP_URL` in `.env`.
 
@@ -353,17 +354,18 @@ Orders are flagged as duplicates if confidence >= 70%
 
 ## Environment Variables Reference
 
-| Variable                   | Required | Description                         | Example                                              |
-| -------------------------- | -------- | ----------------------------------- | ---------------------------------------------------- |
-| `DATABASE_URL`             | Yes      | PostgreSQL connection string        | `postgresql://user:pass@localhost:5432/db`           |
-| `SHOPIFY_SHOP_DOMAIN`      | Yes      | Your Shopify store domain           | `yourstore.myshopify.com`                            |
-| `SHOPIFY_ACCESS_TOKEN`     | Yes      | Shopify Admin API access token      | `shpat_...`                                          |
-| `SHOPIFY_WEBHOOK_SECRET`   | Yes      | Webhook verification secret         | `shpss_...`                                          |
-| `PORT`                     | No       | Server port (default: 5000)         | `5000`                                               |
-| `APP_URL`                  | Yes\*    | Public URL for webhook registration | `http://localhost:5000` or `https://your-domain.com` |
-| `VITE_SHOPIFY_SHOP_DOMAIN` | No       | Client-side Shopify domain          | `yourstore.myshopify.com`                            |
+| Variable                   | Required | Description                          | Example                                              |
+| -------------------------- | -------- | ------------------------------------ | ---------------------------------------------------- |
+| `DATABASE_URL`             | Yes      | PostgreSQL connection string         | `postgresql://user:pass@localhost:5432/db`           |
+| `SHOPIFY_SHOP_DOMAIN`      | Yes      | Your Shopify store domain            | `yourstore.myshopify.com`                            |
+| `SHOPIFY_ACCESS_TOKEN`     | Yes      | Shopify Admin API access token       | `shpat_...`                                          |
+| `SHOPIFY_WEBHOOK_SECRET`   | Yes      | Webhook verification secret          | `shpss_...`                                          |
+| `PORT`                     | No       | Server port (default: 5000)          | `5000`                                               |
+| `APP_URL`                  | Yes\*    | Public URL for webhook registration  | `http://localhost:5000` or `https://your-domain.com` |
+| `LOG_LEVEL`                | No       | Log verbosity level (default: debug) | `error`, `warn`, `info`, `debug`                     |
+| `VITE_SHOPIFY_SHOP_DOMAIN` | No       | Client-side Shopify domain           | `yourstore.myshopify.com`                            |
 
-\*Required for webhook registration. Use ngrok or similar for local development.
+\*Required for webhook registration. Use ngrok or similar tunneling service for local development.
 
 ## Troubleshooting
 
@@ -428,30 +430,14 @@ Orders are flagged as duplicates if confidence >= 70%
 
 ## Production Deployment
 
-For production deployment using Docker and cloudflared tunnel, see the detailed [DEPLOYMENT.md](./DEPLOYMENT.md) guide.
+For production deployment using Docker, see the detailed [DEPLOYMENT.md](./DEPLOYMENT.md) guide for complete instructions including:
 
-### Quick Start
-
-```bash
-# Clone repository
-git clone <your-repo-url> orderauditor
-cd orderauditor
-
-# Configure environment
-cp .env.example .env
-# Edit .env with production values
-
-# Deploy with Docker Compose
-docker-compose -f docker-compose.prod.yml up -d --build
-
-# Initialize database
-docker-compose -f docker-compose.prod.yml exec app npm run db:push
-
-# Register webhook
-curl -X POST https://your-domain.com/api/webhooks/register
-```
-
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for complete deployment instructions, including cloudflared tunnel setup, backups, and maintenance.
+- Server setup and Docker installation
+- Environment configuration
+- Database initialization
+- Webhook registration
+- Maintenance and troubleshooting
+- Backup procedures
 
 ## License
 

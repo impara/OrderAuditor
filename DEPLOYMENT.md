@@ -1,13 +1,13 @@
 # Production Deployment Guide
 
-This guide covers deploying Order Auditor to a production server using Docker and cloudflared tunnel.
+This guide covers deploying Order Auditor to a production server using Docker.
 
 ## Prerequisites
 
 - Docker and Docker Compose installed on your server
-- cloudflared installed and configured with your domain
 - Git repository access
 - Shopify app credentials
+- Public domain/URL for webhook registration (or use a tunneling service)
 
 ## Server Setup
 
@@ -40,16 +40,6 @@ cp .env.example .env
 nano .env
 ```
 
-### 4. Create Production Docker Compose File
-
-Copy the example production docker-compose file:
-
-```bash
-cp docker-compose.prod.yml.example docker-compose.prod.yml
-```
-
-**Important**: The `docker-compose.prod.yml` file is gitignored and should contain your production-specific configuration. Never commit it to version control.
-
 Fill in all required variables (see `.env.example` for reference):
 
 **Critical**: Use strong, unique passwords for production! Never use default values.
@@ -70,6 +60,12 @@ Example `.env` entry:
 ```env
 LOG_LEVEL=info
 ```
+
+### 4. Create Production Docker Compose File
+
+Create `docker-compose.prod.yml` in the project root with your production configuration.
+
+**Important**: The `docker-compose.prod.yml` file is gitignored and should contain your production-specific configuration. Never commit it to version control.
 
 ## Deployment
 
@@ -93,53 +89,9 @@ docker-compose -f docker-compose.prod.yml ps
 docker-compose -f docker-compose.prod.yml exec app npm run db:push
 ```
 
-### 3. Configure cloudflared Tunnel
+### 3. Register Shopify Webhook
 
-If you haven't already set up cloudflared:
-
-```bash
-# Install cloudflared
-wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
-chmod +x cloudflared-linux-amd64
-sudo mv cloudflared-linux-amd64 /usr/local/bin/cloudflared
-
-# Create tunnel (if using named tunnel)
-cloudflared tunnel create orderauditor
-
-# Configure tunnel
-cloudflared tunnel route dns orderauditor your-domain.com
-```
-
-Create or update `~/.cloudflared/config.yml`:
-
-```yaml
-tunnel: <tunnel-id>
-credentials-file: /home/user/.cloudflared/<tunnel-id>.json
-
-ingress:
-  - hostname: your-domain.com
-    service: http://localhost:5000
-  - service: http_status:404
-```
-
-Start the tunnel:
-
-```bash
-# Run as systemd service (recommended)
-sudo cloudflared service install
-sudo systemctl start cloudflared
-sudo systemctl enable cloudflared
-```
-
-Or run manually:
-
-```bash
-cloudflared tunnel --config ~/.cloudflared/config.yml run
-```
-
-### 4. Register Shopify Webhook
-
-Once your domain is accessible:
+Once your application is accessible via a public URL:
 
 ```bash
 # Register the webhook
@@ -233,12 +185,6 @@ curl https://your-domain.com/api/dashboard/stats
 3. Verify `APP_URL` is set correctly in `.env`
 4. Check application logs for webhook errors
 
-### cloudflared Tunnel Issues
-
-1. Check tunnel status: `cloudflared tunnel info`
-2. Verify DNS is pointing to tunnel: `dig your-domain.com`
-3. Check tunnel logs: `journalctl -u cloudflared -f` (if running as service)
-
 ### Docker Compose ContainerConfig Error
 
 If you see `KeyError: 'ContainerConfig'` or orphan container warnings:
@@ -278,7 +224,7 @@ docker-compose --version
 3. **Keep `docker-compose.prod.yml` secure** - it's gitignored, never commit it
 4. **Never use default credentials** - always set strong, unique passwords
 5. **Regular updates** - keep Docker images and dependencies updated
-6. **Firewall** - only expose necessary ports (cloudflared handles external access)
+6. **Firewall** - only expose necessary ports
 7. **Backups** - regularly backup your database
 8. **Monitoring** - set up monitoring for application health
 
@@ -291,9 +237,7 @@ docker-compose --version
 - [ ] `.env` file configured with production values
 - [ ] Strong passwords set for database
 - [ ] Database schema initialized (`npm run db:push`)
-- [ ] cloudflared tunnel configured and running
-- [ ] Domain DNS configured
-- [ ] Application accessible via domain
+- [ ] Application accessible via public URL
 - [ ] Shopify webhook registered
 - [ ] Health checks passing
 - [ ] Backups configured
@@ -305,4 +249,3 @@ For issues or questions, check:
 
 - Application logs: `docker-compose -f docker-compose.prod.yml logs`
 - Database logs: `docker-compose -f docker-compose.prod.yml logs postgres`
-- cloudflared logs: `journalctl -u cloudflared` or tunnel logs
