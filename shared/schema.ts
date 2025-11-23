@@ -27,6 +27,8 @@ export const orders = pgTable("orders", {
   duplicateOfOrderId: varchar("duplicate_of_order_id"),
   matchReason: text("match_reason"),
   matchConfidence: integer("match_confidence"), // 0-100 percentage
+  resolvedAt: timestamp("resolved_at"),
+  resolvedBy: varchar("resolved_by", { length: 50 }), // 'manual_dashboard', 'shopify_tag_removed', 'auto_merged'
 });
 
 // Detection settings table - stores configuration for duplicate detection
@@ -49,9 +51,24 @@ export const detectionSettings = pgTable("detection_settings", {
 export const auditLogs = pgTable("audit_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   orderId: varchar("order_id").notNull().references(() => orders.id),
-  action: varchar("action", { length: 50 }).notNull(), // 'flagged', 'tagged', 'reviewed', 'dismissed'
+  action: varchar("action", { length: 50 }).notNull(), // 'flagged', 'tagged', 'reviewed', 'dismissed', 'resolved'
   details: jsonb("details").$type<Record<string, any>>(),
   performedAt: timestamp("performed_at").notNull().default(sql`now()`),
+});
+
+// Subscriptions table - tracks subscription tier and usage
+export const subscriptions = pgTable("subscriptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  shopifyShopDomain: varchar("shopify_shop_domain", { length: 255 }).notNull().unique(),
+  tier: varchar("tier", { length: 20 }).notNull().default("free"), // 'free', 'paid'
+  status: varchar("status", { length: 20 }).notNull().default("active"), // 'active', 'cancelled', 'expired'
+  monthlyOrderCount: integer("monthly_order_count").notNull().default(0),
+  orderLimit: integer("order_limit").notNull().default(50), // 50 for free, -1 for unlimited paid
+  currentBillingPeriodStart: timestamp("current_billing_period_start").notNull().default(sql`now()`),
+  currentBillingPeriodEnd: timestamp("current_billing_period_end"),
+  shopifyChargeId: varchar("shopify_charge_id", { length: 255 }), // Shopify Billing API charge ID
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
 });
 
 // Insert schemas for validation
@@ -74,8 +91,16 @@ export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({
   performedAt: true,
 });
 
+export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Update schema for settings
 export const updateDetectionSettingsSchema = insertDetectionSettingsSchema.partial();
+
+export const updateSubscriptionSchema = insertSubscriptionSchema.partial();
 
 // Types
 export type Order = typeof orders.$inferSelect;
@@ -85,6 +110,9 @@ export type InsertDetectionSettings = z.infer<typeof insertDetectionSettingsSche
 export type UpdateDetectionSettings = z.infer<typeof updateDetectionSettingsSchema>;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
+export type Subscription = typeof subscriptions.$inferSelect;
+export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
+export type UpdateSubscription = z.infer<typeof updateSubscriptionSchema>;
 
 // Dashboard stats type
 export type DashboardStats = {

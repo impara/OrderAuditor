@@ -10,7 +10,8 @@
     "check": "tsc",
     "db:push": "drizzle-kit push",
     "test:order": "node scripts/create-test-order.js",
-    "test:duplicate": "node scripts/create-test-order.js --duplicate"
+    "test:duplicate": "node scripts/create-test-order.js --duplicate",
+    "test:validation": "bash scripts/test-validation-plan.sh"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { AlertCircle, TrendingUp, TrendingDown, DollarSign, Clock, Flag, Package, MapPin, Mail, Phone, Calendar } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
+import { AlertCircle, TrendingUp, TrendingDown, DollarSign, Clock, Flag, Package, MapPin, Mail, Phone, Calendar, X } from "lucide-react";
 import type { Order, DashboardStats } from "@shared/schema";
 import { format } from "date-fns";
 import { useState } from "react";
@@ -82,15 +84,65 @@ function EmptyState() {
 }
 
 function OrderDetailsModal({ order, isOpen, onClose }: { order: Order; isOpen: boolean; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [showDismissDialog, setShowDismissDialog] = useState(false);
+  const [isDismissing, setIsDismissing] = useState(false);
+
+  const dismissMutation = useMutation({
+    mutationFn: async (orderId: string) => {
+      const response = await fetch(`/api/orders/${orderId}/dismiss`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to dismiss order");
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      // Invalidate queries to refresh the list
+      queryClient.invalidateQueries({ queryKey: ['/api/orders/flagged'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+      
+      toast({
+        title: "Order dismissed",
+        description: `Order #${order.orderNumber} has been dismissed and removed from the flagged list.`,
+      });
+
+      setShowDismissDialog(false);
+      onClose();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error dismissing order",
+        description: error.message,
+        variant: "destructive",
+      });
+      setIsDismissing(false);
+    },
+  });
+
+  const handleDismiss = () => {
+    setIsDismissing(true);
+    dismissMutation.mutate(order.id);
+  };
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl" data-testid="dialog-order-details">
-        <DialogHeader>
-          <DialogTitle className="text-xl">Order #{order.orderNumber} Details</DialogTitle>
-          <DialogDescription>
-            Review detailed information about this flagged order
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className="max-w-2xl" data-testid="dialog-order-details">
+          <DialogHeader>
+            <DialogTitle className="text-xl">Order #{order.orderNumber} Details</DialogTitle>
+            <DialogDescription>
+              Review detailed information about this flagged order
+            </DialogDescription>
+          </DialogHeader>
         
         <div className="space-y-6">
           <div>
@@ -195,6 +247,15 @@ function OrderDetailsModal({ order, isOpen, onClose }: { order: Order; isOpen: b
             <Button variant="outline" className="flex-1" onClick={onClose} data-testid="button-close-details">
               Close
             </Button>
+            <Button 
+              variant="destructive" 
+              className="flex-1" 
+              onClick={() => setShowDismissDialog(true)}
+              data-testid="button-dismiss-order"
+            >
+              <X className="h-4 w-4 mr-2" />
+              Dismiss Order
+            </Button>
             <Button variant="default" className="flex-1" asChild data-testid="button-view-in-shopify">
               <a 
                 href={`https://${import.meta.env.VITE_SHOPIFY_SHOP_DOMAIN || 'admin.shopify.com'}/admin/orders/${order.shopifyOrderId}`} 
@@ -208,6 +269,30 @@ function OrderDetailsModal({ order, isOpen, onClose }: { order: Order; isOpen: b
         </div>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={showDismissDialog} onOpenChange={setShowDismissDialog}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Dismiss Order?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This will remove the "Merge_Review_Candidate" tag from this order in Shopify and remove it from the flagged orders list. 
+            The order will still be kept in the database for historical tracking.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isDismissing}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleDismiss}
+            disabled={isDismissing}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            data-testid="button-confirm-dismiss"
+          >
+            {isDismissing ? "Dismissing..." : "Dismiss Order"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 
@@ -325,6 +410,9 @@ export default function Dashboard() {
               </Button>
               <Button variant="ghost" asChild data-testid="link-settings">
                 <a href="/settings" className="text-sm font-medium">Settings</a>
+              </Button>
+              <Button variant="ghost" asChild data-testid="link-subscription">
+                <a href="/subscription" className="text-sm font-medium">Subscription</a>
               </Button>
             </nav>
           </div>

@@ -20,6 +20,7 @@ Order Auditor is a Shopify app that automatically detects and flags duplicate or
 - ✅ **Real-time dashboard updates** - Auto-refreshes every 30 seconds to show latest flagged orders
 - ✅ **Order Details Modal** - View comprehensive order information including duplicate detection metadata, customer details, shipping address, and direct link to Shopify admin
 - ✅ **Enhanced customer name extraction** - Fallback to billing address fields when customer fields are unavailable
+- ✅ **Order Resolution System** - Dismiss flagged orders from dashboard or automatically sync when tags are removed in Shopify
 - ✅ Stats cards showing total flagged orders, potential duplicate value, and recent activity metrics
 - ✅ Settings page for configuring detection rules (time window, matching criteria) and notification preferences
 - ✅ PostgreSQL database storing order data, detection rules, and audit history
@@ -267,8 +268,9 @@ Once your local server is accessible via a public URL:
    ```
 
 3. **Verify webhook registration**:
-   - The response should show the webhook was successfully registered
+   - The response should show both `orders/create` and `orders/updated` webhooks were successfully registered
    - You can also check in Shopify Admin → Settings → Notifications → Webhooks
+   - Both webhooks are required: `orders/create` for duplicate detection, `orders/updated` for automatic resolution
 
 ### Step 6: Run the Application
 
@@ -320,6 +322,7 @@ The app will be available at `http://localhost:5000`
 
 - `GET /api/dashboard/stats` - Fetch dashboard statistics
 - `GET /api/orders/flagged` - Get list of flagged orders
+- `POST /api/orders/:orderId/dismiss` - Dismiss a flagged order (removes from flagged list and removes Shopify tag)
 
 ### Settings
 
@@ -328,12 +331,13 @@ The app will be available at `http://localhost:5000`
 
 ### Webhook Management
 
-- `GET /api/webhooks/status` - Check webhook registration status
-- `POST /api/webhooks/register` - Automatically register orders/create webhook
+- `GET /api/webhooks/status` - Check webhook registration status (shows both orders/create and orders/updated)
+- `POST /api/webhooks/register` - Automatically register both orders/create and orders/updated webhooks
 
 ### Webhooks
 
 - `POST /api/webhooks/shopify/orders/create` - Shopify order creation webhook
+- `POST /api/webhooks/shopify/orders/updated` - Shopify order update webhook (detects tag removal for auto-resolution)
 
 ## Duplicate Detection Logic
 
@@ -351,6 +355,31 @@ The system calculates a confidence score (0-100%) based on:
 ### Threshold
 
 Orders are flagged as duplicates if confidence >= 70%
+
+## Order Resolution & Dismissal
+
+Once orders are flagged as duplicates, merchants can resolve them in two ways:
+
+### Manual Dismissal (Dashboard)
+
+1. Click "View Details" on any flagged order in the dashboard
+2. Click "Dismiss Order" button
+3. Confirm the dismissal in the dialog
+4. The order is removed from the flagged list and the "Merge_Review_Candidate" tag is removed from Shopify
+
+### Automatic Resolution (Shopify Admin)
+
+1. Merchant removes the "Merge_Review_Candidate" tag directly in Shopify admin
+2. The system automatically detects the tag removal via the `orders/updated` webhook
+3. The order is automatically resolved and removed from the flagged list
+4. All resolution actions are logged in the audit logs for historical tracking
+
+### Resolution Tracking
+
+- All resolved orders are kept in the database with `isFlagged: false`
+- `resolvedAt` timestamp tracks when the order was resolved
+- `resolvedBy` field tracks the resolution method: `'manual_dashboard'` or `'shopify_tag_removed'`
+- Audit logs record all dismissal and resolution events for compliance and analytics
 
 ## Environment Variables Reference
 
@@ -425,7 +454,7 @@ Orders are flagged as duplicates if confidence >= 70%
 - Bulk actions for reviewing and resolving flagged orders
 - Email/Slack notifications when duplicates are detected
 - Detailed order comparison view showing side-by-side duplicate analysis
-- Analytics dashboard with trends, patterns, and fraud risk scoring
+- Analytics dashboard with trends, patterns, and fraud risk scoring showing resolution metrics and ROI
 - OAuth flow for multi-store Shopify app distribution
 
 ## Production Deployment

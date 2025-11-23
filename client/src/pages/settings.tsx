@@ -97,6 +97,9 @@ export default function Settings() {
                 <Button variant="ghost" asChild data-testid="link-settings">
                   <a href="/settings" className="text-sm font-medium">Settings</a>
                 </Button>
+                <Button variant="ghost" asChild data-testid="link-subscription">
+                  <a href="/subscription" className="text-sm font-medium">Subscription</a>
+                </Button>
               </nav>
             </div>
           </div>

@@ -246,7 +246,16 @@ export class ShopifyService {
       }
 
       const data = await response.json();
-      return data.order || null;
+      const order = data.order || null;
+      
+      if (order) {
+        logger.debug(`[Shopify] Order API response - has email: ${!!order.email}, has contact_email: ${!!order.contact_email}`);
+        if (!order.email && !order.contact_email) {
+          logger.warn(`[Shopify] Order API returned order but no email field. This may require Protected Customer Data Access + Shopify/Advanced/Plus plan.`);
+        }
+      }
+      
+      return order;
     } catch (error) {
       logger.error("[Shopify] Error fetching order:", error);
       return null;
@@ -353,6 +362,30 @@ export class ShopifyService {
   }
 
   /**
+   * Register the orders/updated webhook
+   * Uses APP_URL environment variable for local development or production
+   */
+  async registerOrdersUpdatedWebhook(): Promise<WebhookRegistrationResult> {
+    if (!process.env.APP_URL) {
+      return {
+        success: false,
+        error: "APP_URL not configured",
+        message:
+          "APP_URL environment variable must be set. For local development, use a tunneling service like ngrok or cloudflared and set APP_URL to your public URL.",
+      };
+    }
+
+    // Use APP_URL for local development or custom production URLs
+    const baseUrl = process.env.APP_URL.replace(/\/$/, ""); // Remove trailing slash
+    const webhookUrl = `${baseUrl}/api/webhooks/shopify/orders/updated`;
+
+    logger.info(
+      `[Shopify] Registering orders/updated webhook to: ${webhookUrl}`
+    );
+    return this.registerWebhook("orders/updated", webhookUrl);
+  }
+
+  /**
    * Tag an order in Shopify as a duplicate
    */
   async tagOrder(orderId: string, tags: string[]): Promise<void> {
@@ -363,7 +396,7 @@ export class ShopifyService {
       return;
     }
 
-    const url = `https://${this.shopDomain}/admin/api/2024-01/orders/${orderId}.json`;
+    const url = `${this.baseApiUrl}/orders/${orderId}.json`;
 
     try {
       const response = await fetch(url, {
@@ -385,6 +418,65 @@ export class ShopifyService {
       }
     } catch (error) {
       logger.error("Failed to tag order in Shopify:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Remove a specific tag from an order in Shopify
+   */
+  async removeOrderTag(orderId: string, tagToRemove: string): Promise<void> {
+    if (!this.validateCredentials()) {
+      logger.warn(
+        "Shopify credentials not configured, skipping tag removal"
+      );
+      return;
+    }
+
+    try {
+      // First, get the current order to see existing tags
+      const url = `${this.baseApiUrl}/orders/${orderId}.json`;
+      const getResponse = await fetch(url, {
+        method: "GET",
+        headers: {
+          "X-Shopify-Access-Token": this.accessToken,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!getResponse.ok) {
+        throw new Error(`Failed to fetch order: ${getResponse.statusText}`);
+      }
+
+      const data = await getResponse.json();
+      const order = data.order;
+      const currentTags = order.tags ? order.tags.split(", ").filter((t: string) => t.trim()) : [];
+
+      // Remove the specified tag
+      const updatedTags = currentTags.filter((tag: string) => tag.trim() !== tagToRemove.trim());
+
+      // Update the order with the new tags
+      const updateResponse = await fetch(url, {
+        method: "PUT",
+        headers: {
+          "X-Shopify-Access-Token": this.accessToken,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          order: {
+            id: orderId,
+            tags: updatedTags.join(", "),
+          },
+        }),
+      });
+
+      if (!updateResponse.ok) {
+        throw new Error(`Shopify API error: ${updateResponse.statusText}`);
+      }
+
+      logger.info(`[Shopify] Removed tag "${tagToRemove}" from order ${orderId}`);
+    } catch (error) {
+      logger.error("Failed to remove tag from order in Shopify:", error);
       throw error;
     }
   }
