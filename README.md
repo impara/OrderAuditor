@@ -381,6 +381,55 @@ Once orders are flagged as duplicates, merchants can resolve them in two ways:
 - `resolvedBy` field tracks the resolution method: `'manual_dashboard'` or `'shopify_tag_removed'`
 - Audit logs record all dismissal and resolution events for compliance and analytics
 
+## Email Notifications
+
+The application can send email notifications when duplicate orders are detected. To enable this feature:
+
+### 1. Configure SMTP Settings
+
+Add SMTP configuration to your `.env` file:
+
+```env
+# SMTP Configuration
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your-app-password
+SMTP_FROM=your-email@gmail.com
+```
+
+### 2. Enable Notifications in Settings
+
+1. Navigate to the Settings page in the dashboard
+2. Enable "Notifications" toggle
+3. Enter the email address where you want to receive alerts
+4. Optionally adjust the notification threshold (default: 80% confidence)
+5. Save settings
+
+### 3. Common SMTP Providers
+
+**Gmail:**
+- `SMTP_HOST=smtp.gmail.com`
+- `SMTP_PORT=587` (TLS) or `465` (SSL)
+- Use an [App Password](https://support.google.com/accounts/answer/185833) instead of your regular password
+- `SMTP_FROM` should match `SMTP_USER`
+
+**SendGrid:**
+- `SMTP_HOST=smtp.sendgrid.net`
+- `SMTP_PORT=587`
+- `SMTP_USER=apikey`
+- `SMTP_PASS=your-sendgrid-api-key`
+- `SMTP_FROM=your-verified-sender@example.com`
+
+**Mailgun:**
+- `SMTP_HOST=smtp.mailgun.org`
+- `SMTP_PORT=587`
+- `SMTP_USER=postmaster@your-domain.mailgun.org`
+- `SMTP_PASS=your-mailgun-password`
+- `SMTP_FROM=noreply@your-domain.com`
+
+**Note**: For production deployments, see [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed SMTP configuration instructions.
+
 ## Environment Variables Reference
 
 | Variable                   | Required | Description                          | Example                                              |
@@ -393,8 +442,15 @@ Once orders are flagged as duplicates, merchants can resolve them in two ways:
 | `APP_URL`                  | Yes\*    | Public URL for webhook registration  | `http://localhost:5000` or `https://your-domain.com` |
 | `LOG_LEVEL`                | No       | Log verbosity level (default: debug) | `error`, `warn`, `info`, `debug`                     |
 | `VITE_SHOPIFY_SHOP_DOMAIN` | No       | Client-side Shopify domain           | `yourstore.myshopify.com`                            |
+| `SMTP_HOST`                | No\*\*   | SMTP server hostname                 | `smtp.gmail.com`                                     |
+| `SMTP_PORT`                | No\*\*   | SMTP server port                     | `587`                                                |
+| `SMTP_USER`                 | No\*\*   | SMTP authentication username         | `your-email@gmail.com`                               |
+| `SMTP_PASS`                 | No\*\*   | SMTP authentication password         | `your-app-password`                                  |
+| `SMTP_FROM`                 | No\*\*   | Email sender address                 | `your-email@gmail.com`                               |
 
 \*Required for webhook registration. Use ngrok or similar tunneling service for local development.
+
+\*\*Required for email notifications. See [Email Notifications](#email-notifications) section below.
 
 ## Troubleshooting
 
@@ -452,7 +508,7 @@ Once orders are flagged as duplicates, merchants can resolve them in two ways:
 ## Future Enhancements (Planned)
 
 - Bulk actions for reviewing and resolving flagged orders
-- Email/Slack notifications when duplicates are detected
+- ~~Email/Slack notifications when duplicates are detected~~ ✅ Implemented
 - Detailed order comparison view showing side-by-side duplicate analysis
 - Analytics dashboard with trends, patterns, and fraud risk scoring showing resolution metrics and ROI
 - OAuth flow for multi-store Shopify app distribution

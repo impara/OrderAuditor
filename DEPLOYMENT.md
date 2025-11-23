@@ -61,6 +61,45 @@ Example `.env` entry:
 LOG_LEVEL=info
 ```
 
+#### SMTP Configuration for Email Notifications
+
+To enable email notifications for duplicate order alerts, configure SMTP settings in your `.env` file:
+
+```env
+# SMTP Configuration (required for email notifications)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your-app-password
+SMTP_FROM=your-email@gmail.com
+```
+
+**Common SMTP Providers:**
+
+- **Gmail**:
+
+  - `SMTP_HOST=smtp.gmail.com`
+  - `SMTP_PORT=587` (TLS) or `465` (SSL)
+  - Use an [App Password](https://support.google.com/accounts/answer/185833) instead of your regular password
+  - `SMTP_FROM` should match `SMTP_USER`
+
+- **SendGrid**:
+
+  - `SMTP_HOST=smtp.sendgrid.net`
+  - `SMTP_PORT=587`
+  - `SMTP_USER=apikey`
+  - `SMTP_PASS=your-sendgrid-api-key`
+  - `SMTP_FROM=your-verified-sender@example.com`
+
+- **Mailgun**:
+  - `SMTP_HOST=smtp.mailgun.org`
+  - `SMTP_PORT=587`
+  - `SMTP_USER=postmaster@your-domain.mailgun.org`
+  - `SMTP_PASS=your-mailgun-password`
+  - `SMTP_FROM=noreply@your-domain.com`
+
+**Security Note**: Never commit SMTP credentials to version control. Store them securely in your `.env` file, which should be gitignored.
+
 ### 4. Create Production Docker Compose File
 
 Create `docker-compose.prod.yml` in the project root with your production configuration.

@@ -1,5 +1,6 @@
 import { logger } from "../utils/logger";
 import type { DetectionSettings, Order } from "@shared/schema";
+import nodemailer from "nodemailer";
 
 interface NotificationData {
   order: Order;
@@ -34,7 +35,9 @@ export class NotificationService {
 
     // Send email notification if configured
     if (settings.notificationEmail) {
-      promises.push(this.sendEmailNotification(settings.notificationEmail, data));
+      promises.push(
+        this.sendEmailNotification(settings.notificationEmail, data)
+      );
     }
 
     // Send Slack notification if configured
@@ -68,24 +71,32 @@ export class NotificationService {
         return;
       }
 
-      // For now, use a simple fetch-based approach or nodemailer
-      // Since we don't have nodemailer yet, we'll use a simple implementation
-      // that can be enhanced later with a proper email service
-      
       const emailBody = this.formatEmailBody(data);
       const subject = `Duplicate Order Detected: ${data.order.orderNumber}`;
 
-      // If nodemailer is available, use it; otherwise log that email service needs configuration
-      logger.info(`[Notification] Would send email to ${email}`, {
-        subject,
-        body: emailBody.substring(0, 100) + "...",
+      // Create nodemailer transporter
+      const transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpPort === 465, // true for 465, false for other ports
+        auth: {
+          user: smtpUser,
+          pass: smtpPassword,
+        },
       });
 
-      // TODO: Implement actual email sending with nodemailer or email service
-      // For MVP, we'll log the notification
-      logger.warn(
-        "[Notification] Email sending not fully implemented. Install nodemailer or configure email service."
-      );
+      // Send email
+      const info = await transporter.sendMail({
+        from: smtpFrom,
+        to: email,
+        subject: subject,
+        text: emailBody,
+      });
+
+      logger.info(`[Notification] Successfully sent email to ${email}`, {
+        messageId: info.messageId,
+        subject,
+      });
     } catch (error) {
       logger.error("[Notification] Failed to send email notification:", error);
       // Don't throw - allow other notifications to proceed
@@ -133,7 +144,9 @@ Duplicate Order Detected
 
 Order Details:
 - Order Number: ${data.order.orderNumber}
-- Customer: ${data.order.customerName || "Unknown"} (${data.order.customerEmail})
+- Customer: ${data.order.customerName || "Unknown"} (${
+      data.order.customerEmail
+    })
 - Total: ${data.order.currency} ${data.order.totalPrice}
 - Created: ${new Date(data.order.createdAt).toLocaleString()}
 
@@ -222,5 +235,3 @@ Please review these orders in your Shopify admin.
 }
 
 export const notificationService = new NotificationService();
-
-

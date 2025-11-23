@@ -35,6 +35,11 @@ services:
       SHOPIFY_WEBHOOK_SECRET: ${SHOPIFY_WEBHOOK_SECRET}
       APP_URL: ${APP_URL}
       VITE_SHOPIFY_SHOP_DOMAIN: ${VITE_SHOPIFY_SHOP_DOMAIN:-${SHOPIFY_SHOP_DOMAIN}}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      SMTP_FROM: ${SMTP_FROM:-${SMTP_USER}}
     ports:
       - "${PORT:-5000}:5000"
     depends_on:
