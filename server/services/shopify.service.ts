@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { logger } from "../utils/logger";
 
 interface ShopifyWebhook {
   id: number;
@@ -34,7 +35,7 @@ export class ShopifyService {
 
   private validateCredentials(): boolean {
     if (!this.shopDomain || !this.accessToken) {
-      console.error("Shopify credentials not configured");
+      logger.error("Shopify credentials not configured");
       return false;
     }
     return true;
@@ -47,23 +48,23 @@ export class ShopifyService {
    */
   verifyWebhook(body: Buffer | string, hmacHeader: string): boolean {
     if (!this.webhookSecret) {
-      console.warn("[ShopifyService] SHOPIFY_WEBHOOK_SECRET not configured");
+      logger.warn("[ShopifyService] SHOPIFY_WEBHOOK_SECRET not configured");
       return false;
     }
 
-    console.log("[ShopifyService] Verifying webhook HMAC");
-    console.log(
+    logger.debug("[ShopifyService] Verifying webhook HMAC");
+    logger.debug(
       "[ShopifyService] Secret configured:",
       this.webhookSecret.substring(0, 10) + "..."
     );
-    console.log(
+    logger.debug(
       "[ShopifyService] Body type:",
       typeof body,
       "isBuffer:",
       Buffer.isBuffer(body)
     );
-    console.log("[ShopifyService] Body length:", body.length);
-    console.log("[ShopifyService] HMAC header received:", hmacHeader);
+    logger.debug("[ShopifyService] Body length:", body.length);
+    logger.debug("[ShopifyService] HMAC header received:", hmacHeader);
 
     // Calculate HMAC on raw bytes (Buffer) - Shopify calculates HMAC on raw request body
     const hash = crypto
@@ -71,19 +72,19 @@ export class ShopifyService {
       .update(body)
       .digest("base64");
 
-    console.log("[ShopifyService] Calculated HMAC:", hash);
-    console.log("[ShopifyService] Expected HMAC:  ", hmacHeader);
-    console.log("[ShopifyService] Match:", hash === hmacHeader);
+    logger.debug("[ShopifyService] Calculated HMAC:", hash);
+    logger.debug("[ShopifyService] Expected HMAC:  ", hmacHeader);
+    logger.debug("[ShopifyService] Match:", hash === hmacHeader);
 
     try {
       const isValid = crypto.timingSafeEqual(
         Buffer.from(hash),
         Buffer.from(hmacHeader)
       );
-      console.log("[ShopifyService] timingSafeEqual result:", isValid);
+      logger.debug("[ShopifyService] timingSafeEqual result:", isValid);
       return isValid;
     } catch (error) {
-      console.error("[ShopifyService] timingSafeEqual error:", error);
+      logger.error("[ShopifyService] timingSafeEqual error:", error);
       return false;
     }
   }
@@ -98,7 +99,7 @@ export class ShopifyService {
 
     try {
       const url = `${this.baseApiUrl}/webhooks.json`;
-      console.log(`[Shopify] Fetching webhooks from: ${url}`);
+      logger.debug(`[Shopify] Fetching webhooks from: ${url}`);
 
       const response = await fetch(url, {
         method: "GET",
@@ -110,7 +111,7 @@ export class ShopifyService {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(
+        logger.error(
           `[Shopify] Failed to list webhooks: ${response.status} ${response.statusText}`,
           errorText
         );
@@ -120,12 +121,12 @@ export class ShopifyService {
       }
 
       const data = await response.json();
-      console.log(
+      logger.debug(
         `[Shopify] Found ${data.webhooks?.length || 0} registered webhooks`
       );
       return data.webhooks || [];
     } catch (error) {
-      console.error("[Shopify] Error listing webhooks:", error);
+      logger.error("[Shopify] Error listing webhooks:", error);
       throw error;
     }
   }
@@ -147,7 +148,7 @@ export class ShopifyService {
     }
 
     try {
-      console.log(
+      logger.info(
         `[Shopify] Registering webhook for topic: ${topic} at ${address}`
       );
 
@@ -157,7 +158,7 @@ export class ShopifyService {
       );
 
       if (duplicate) {
-        console.log(`[Shopify] Webhook already exists (ID: ${duplicate.id})`);
+        logger.info(`[Shopify] Webhook already exists (ID: ${duplicate.id})`);
         return {
           success: true,
           webhook: duplicate,
@@ -183,7 +184,7 @@ export class ShopifyService {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(
+        logger.error(
           `[Shopify] Failed to register webhook: ${response.status}`,
           errorText
         );
@@ -195,7 +196,7 @@ export class ShopifyService {
       }
 
       const data = await response.json();
-      console.log(
+      logger.info(
         `[Shopify] Successfully registered webhook (ID: ${data.webhook.id})`
       );
 
@@ -205,7 +206,7 @@ export class ShopifyService {
         message: "Webhook successfully registered",
       };
     } catch (error) {
-      console.error("[Shopify] Error registering webhook:", error);
+      logger.error("[Shopify] Error registering webhook:", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error),
@@ -225,7 +226,7 @@ export class ShopifyService {
 
     try {
       const url = `${this.baseApiUrl}/orders/${orderId}.json`;
-      console.log(`[Shopify] Fetching order ${orderId} via API`);
+      logger.debug(`[Shopify] Fetching order ${orderId} via API`);
 
       const response = await fetch(url, {
         method: "GET",
@@ -237,7 +238,7 @@ export class ShopifyService {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(
+        logger.error(
           `[Shopify] Failed to fetch order: ${response.status}`,
           errorText
         );
@@ -247,7 +248,7 @@ export class ShopifyService {
       const data = await response.json();
       return data.order || null;
     } catch (error) {
-      console.error("[Shopify] Error fetching order:", error);
+      logger.error("[Shopify] Error fetching order:", error);
       return null;
     }
   }
@@ -263,7 +264,7 @@ export class ShopifyService {
 
     try {
       const url = `${this.baseApiUrl}/customers/${customerId}.json`;
-      console.log(`[Shopify] Fetching customer ${customerId} via API`);
+      logger.debug(`[Shopify] Fetching customer ${customerId} via API`);
 
       const response = await fetch(url, {
         method: "GET",
@@ -275,7 +276,7 @@ export class ShopifyService {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(
+        logger.error(
           `[Shopify] Failed to fetch customer: ${response.status}`,
           errorText
         );
@@ -285,7 +286,7 @@ export class ShopifyService {
       const data = await response.json();
       return data.customer || null;
     } catch (error) {
-      console.error("[Shopify] Error fetching customer:", error);
+      logger.error("[Shopify] Error fetching customer:", error);
       return null;
     }
   }
@@ -300,7 +301,7 @@ export class ShopifyService {
 
     try {
       const url = `${this.baseApiUrl}/webhooks/${webhookId}.json`;
-      console.log(`[Shopify] Deleting webhook ID: ${webhookId}`);
+      logger.info(`[Shopify] Deleting webhook ID: ${webhookId}`);
 
       const response = await fetch(url, {
         method: "DELETE",
@@ -312,17 +313,17 @@ export class ShopifyService {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(
+        logger.error(
           `[Shopify] Failed to delete webhook: ${response.status}`,
           errorText
         );
         return false;
       }
 
-      console.log(`[Shopify] Successfully deleted webhook ID: ${webhookId}`);
+      logger.info(`[Shopify] Successfully deleted webhook ID: ${webhookId}`);
       return true;
     } catch (error) {
-      console.error("[Shopify] Error deleting webhook:", error);
+      logger.error("[Shopify] Error deleting webhook:", error);
       return false;
     }
   }
@@ -345,7 +346,7 @@ export class ShopifyService {
     const baseUrl = process.env.APP_URL.replace(/\/$/, ""); // Remove trailing slash
     const webhookUrl = `${baseUrl}/api/webhooks/shopify/orders/create`;
 
-    console.log(
+    logger.info(
       `[Shopify] Registering orders/create webhook to: ${webhookUrl}`
     );
     return this.registerWebhook("orders/create", webhookUrl);
@@ -356,7 +357,7 @@ export class ShopifyService {
    */
   async tagOrder(orderId: string, tags: string[]): Promise<void> {
     if (!this.shopDomain || !this.accessToken) {
-      console.warn(
+      logger.warn(
         "Shopify credentials not configured, skipping order tagging"
       );
       return;
@@ -383,7 +384,7 @@ export class ShopifyService {
         throw new Error(`Shopify API error: ${response.statusText}`);
       }
     } catch (error) {
-      console.error("Failed to tag order in Shopify:", error);
+      logger.error("Failed to tag order in Shopify:", error);
       throw error;
     }
   }

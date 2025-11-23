@@ -28,6 +28,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: ${PORT:-5000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       SHOPIFY_SHOP_DOMAIN: ${SHOPIFY_SHOP_DOMAIN}
       SHOPIFY_ACCESS_TOKEN: ${SHOPIFY_ACCESS_TOKEN}

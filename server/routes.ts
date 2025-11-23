@@ -6,6 +6,7 @@ import { duplicateDetectionService } from "./services/duplicate-detection.servic
 import { shopifyService } from "./services/shopify.service";
 import { insertOrderSchema, updateDetectionSettingsSchema } from "@shared/schema";
 import { randomUUID } from "crypto";
+import { logger } from "./utils/logger";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.use(express.json({ 
@@ -19,7 +20,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const stats = await storage.getDashboardStats();
       res.json(stats);
     } catch (error) {
-      console.error("Error fetching dashboard stats:", error);
+      logger.error("Error fetching dashboard stats:", error);
       res.status(500).json({ error: "Failed to fetch dashboard stats" });
     }
   });
@@ -29,7 +30,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const orders = await storage.getFlaggedOrders();
       res.json(orders);
     } catch (error) {
-      console.error("Error fetching flagged orders:", error);
+      logger.error("Error fetching flagged orders:", error);
       res.status(500).json({ error: "Failed to fetch flagged orders" });
     }
   });
@@ -42,7 +43,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       res.json(settings);
     } catch (error) {
-      console.error("Error fetching settings:", error);
+      logger.error("Error fetching settings:", error);
       res.status(500).json({ error: "Failed to fetch settings" });
     }
   });
@@ -60,7 +61,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/webhooks/status", async (_req: Request, res: Response) => {
     try {
-      console.log("[API] Checking webhook registration status");
+      logger.debug("[API] Checking webhook registration status");
       const webhooks = await shopifyService.listWebhooks();
       
       const ordersWebhook = webhooks.find(wh => wh.topic === "orders/create");
@@ -72,7 +73,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         allWebhooks: webhooks,
       });
     } catch (error) {
-      console.error("[API] Error checking webhook status:", error);
+      logger.error("[API] Error checking webhook status:", error);
       res.status(500).json({ 
         error: "Failed to check webhook status",
         details: error instanceof Error ? error.message : String(error),
@@ -82,7 +83,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/webhooks/register", async (_req: Request, res: Response) => {
     try {
-      console.log("[API] Webhook registration requested");
+      logger.info("[API] Webhook registration requested");
       const result = await shopifyService.registerOrdersWebhook();
       
       if (result.success) {
@@ -91,7 +92,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.status(500).json(result);
       }
     } catch (error) {
-      console.error("[API] Error registering webhook:", error);
+      logger.error("[API] Error registering webhook:", error);
       res.status(500).json({
         success: false,
         error: error instanceof Error ? error.message : String(error),
@@ -157,30 +158,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // With express.raw middleware, req.body is the raw Buffer
       const rawBody: Buffer = req.body;
 
-      console.log("[Webhook] Received webhook");
-      console.log("[Webhook] HMAC Header present:", !!hmacHeader);
-      console.log("[Webhook] Raw body is Buffer:", Buffer.isBuffer(rawBody));
-      console.log("[Webhook] Raw body length:", rawBody.length);
+      logger.debug("[Webhook] Received webhook");
+      logger.debug("[Webhook] HMAC Header present:", !!hmacHeader);
+      logger.debug("[Webhook] Raw body is Buffer:", Buffer.isBuffer(rawBody));
+      logger.debug("[Webhook] Raw body length:", rawBody.length);
 
       // Verify HMAC signature using raw bytes
       if (!hmacHeader) {
-        console.error("[Webhook] ❌ Missing HMAC header");
-        console.error("[Webhook] Request headers:", JSON.stringify(req.headers, null, 2));
+        logger.error("[Webhook] ❌ Missing HMAC header");
+        logger.debug("[Webhook] Request headers:", JSON.stringify(req.headers, null, 2));
         return res.status(401).json({ error: "Missing webhook signature header" });
       }
       
       if (!shopifyService.verifyWebhook(rawBody, hmacHeader)) {
-        console.warn("[Webhook] ❌ Invalid webhook signature");
-        console.warn("[Webhook] HMAC header:", hmacHeader);
-        console.warn("[Webhook] Body preview (first 200 chars):", rawBody.toString('utf8').substring(0, 200));
-        console.warn("[Webhook] Possible causes:");
-        console.warn("  1. Webhook secret mismatch - check SHOPIFY_WEBHOOK_SECRET in .env");
-        console.warn("  2. Request body was modified (ngrok free tier can do this)");
-        console.warn("  3. Using wrong webhook secret (should be 'API secret key', not 'Admin API access token')");
+        logger.warn("[Webhook] ❌ Invalid webhook signature");
+        logger.debug("[Webhook] HMAC header:", hmacHeader);
+        logger.debug("[Webhook] Body preview (first 200 chars):", rawBody.toString('utf8').substring(0, 200));
+        logger.warn("[Webhook] Possible causes:");
+        logger.warn("  1. Webhook secret mismatch - check SHOPIFY_WEBHOOK_SECRET in .env");
+        logger.warn("  2. Request body was modified (ngrok free tier can do this)");
+        logger.warn("  3. Using wrong webhook secret (should be 'API secret key', not 'Admin API access token')");
         return res.status(401).json({ error: "Invalid webhook signature" });
       }
 
-      console.log("[Webhook] ✅ Signature verified successfully!");
+      logger.debug("[Webhook] ✅ Signature verified successfully!");
 
       // Parse JSON after verification
       const shopifyOrder = JSON.parse(rawBody.toString('utf8'));
@@ -204,18 +205,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fullPayload: shopifyOrder,
       };
       
-      // Log FULL payload structure - save complete JSON for analysis
-      console.log("[Webhook] ========== FULL WEBHOOK PAYLOAD ==========");
-      console.log("[Webhook] Order ID:", shopifyOrder.id);
-      console.log("[Webhook] Order Number:", shopifyOrder.order_number);
-      console.log("[Webhook] Top-level keys:", Object.keys(shopifyOrder));
-      console.log("[Webhook] Full payload JSON (first 3000 chars):", JSON.stringify(shopifyOrder, null, 2).substring(0, 3000));
-      console.log("[Webhook] ===========================================");
+      // Log FULL payload structure - save complete JSON for analysis (debug level only)
+      logger.debug("[Webhook] ========== FULL WEBHOOK PAYLOAD ==========");
+      logger.debug("[Webhook] Order ID:", shopifyOrder.id);
+      logger.debug("[Webhook] Order Number:", shopifyOrder.order_number);
+      logger.debug("[Webhook] Top-level keys:", Object.keys(shopifyOrder));
+      logger.debug("[Webhook] Full payload JSON (first 3000 chars):", JSON.stringify(shopifyOrder, null, 2).substring(0, 3000));
+      logger.debug("[Webhook] ===========================================");
       
-      // Log the actual customer, shipping_address, and billing_address objects
-      console.log("[Webhook] Customer object:", JSON.stringify(shopifyOrder.customer, null, 2));
-      console.log("[Webhook] Shipping address:", JSON.stringify(shopifyOrder.shipping_address, null, 2));
-      console.log("[Webhook] Billing address:", JSON.stringify(shopifyOrder.billing_address, null, 2));
+      // Log the actual customer, shipping_address, and billing_address objects (debug level only)
+      logger.debug("[Webhook] Customer object:", JSON.stringify(shopifyOrder.customer, null, 2));
+      logger.debug("[Webhook] Shipping address:", JSON.stringify(shopifyOrder.shipping_address, null, 2));
+      logger.debug("[Webhook] Billing address:", JSON.stringify(shopifyOrder.billing_address, null, 2));
       
       // Check if we need to fetch customer details via API
       // Shopify webhooks may not include customer email/name due to Protected Customer Data Access restrictions
@@ -223,21 +224,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // The customer object exists but lacks email/name fields - fetch customer separately
       let customerData = shopifyOrder.customer;
       if (shopifyOrder.customer?.id && !shopifyOrder.customer?.email && !shopifyOrder.email) {
-        console.log("[Webhook] ⚠️ Customer email not in webhook payload, attempting to fetch customer via API...");
-        console.log("[Webhook] Note: This requires Protected Customer Data Access + Shopify/Advanced/Plus plan");
+        logger.warn("[Webhook] ⚠️ Customer email not in webhook payload, attempting to fetch customer via API...");
+        logger.debug("[Webhook] Note: This requires Protected Customer Data Access + Shopify/Advanced/Plus plan");
         const apiCustomer = await shopifyService.getCustomer(shopifyOrder.customer.id);
         if (apiCustomer && apiCustomer.email) {
-          console.log("[Webhook] ✅ Successfully fetched customer via API");
-          console.log("[Webhook] API Customer email:", apiCustomer.email);
-          console.log("[Webhook] API Customer name:", apiCustomer.first_name, apiCustomer.last_name);
+          logger.info("[Webhook] ✅ Successfully fetched customer via API");
+          logger.debug("[Webhook] API Customer email:", apiCustomer.email);
+          logger.debug("[Webhook] API Customer name:", apiCustomer.first_name, apiCustomer.last_name);
           customerData = apiCustomer;
         } else {
-          console.log("[Webhook] ⚠️ Customer API fetch failed or returned no email");
-          console.log("[Webhook] Possible reasons:");
-          console.log("[Webhook]   1. Protected Customer Data Access not enabled");
-          console.log("[Webhook]   2. App lacks read_customers scope");
-          console.log("[Webhook]   3. Store is on Basic/Free plan (PII access requires Shopify/Advanced/Plus)");
-          console.log("[Webhook]   4. Merchant hasn't approved Protected Customer Data Access request");
+          logger.warn("[Webhook] ⚠️ Customer API fetch failed or returned no email");
+          logger.debug("[Webhook] Possible reasons:");
+          logger.debug("[Webhook]   1. Protected Customer Data Access not enabled");
+          logger.debug("[Webhook]   2. App lacks read_customers scope");
+          logger.debug("[Webhook]   3. Store is on Basic/Free plan (PII access requires Shopify/Advanced/Plus)");
+          logger.debug("[Webhook]   4. Merchant hasn't approved Protected Customer Data Access request");
         }
       }
       
@@ -311,7 +312,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         null;
 
       // Log extracted data for debugging
-      console.log("[Webhook] Extracted customer data:", {
+      logger.debug("[Webhook] Extracted customer data:", {
         email: customerEmail || "NOT FOUND",
         name: customerName || "NOT FOUND",
         phone: customerPhone || "NOT FOUND",
@@ -345,7 +346,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if order already exists (webhook retries can cause duplicates)
       const existingOrder = await storage.getOrderByShopifyId(validatedOrder.shopifyOrderId);
       if (existingOrder) {
-        console.log(`[Webhook] Order ${validatedOrder.shopifyOrderId} already exists, skipping duplicate processing`);
+        logger.info(`[Webhook] Order ${validatedOrder.shopifyOrderId} already exists, skipping duplicate processing`);
         return res.json({ 
           success: true, 
           flagged: existingOrder.isFlagged,
@@ -392,7 +393,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             details: { tags: ["duplicate-flagged"] },
           });
         } catch (error) {
-          console.error("Failed to tag order in Shopify:", error);
+          logger.error("Failed to tag order in Shopify:", error);
         }
 
         const updatedOrder = await storage.getOrder(flaggedOrder.id);
@@ -410,7 +411,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
     } catch (error) {
-      console.error("Error processing webhook:", error);
+      logger.error("Error processing webhook:", error);
       res.status(500).json({ error: "Failed to process webhook" });
     }
   });

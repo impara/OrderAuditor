@@ -54,6 +54,23 @@ Fill in all required variables (see `.env.example` for reference):
 
 **Critical**: Use strong, unique passwords for production! Never use default values.
 
+#### Log Level Configuration
+
+The application supports configurable log levels via the `LOG_LEVEL` environment variable:
+
+- `error` - Only errors (most restrictive)
+- `warn` - Errors and warnings
+- `info` - Errors, warnings, and info (default for production)
+- `debug` - All logs including debug (default for development)
+
+**Production Recommendation**: Set `LOG_LEVEL=info` in your `.env` file to reduce log verbosity while keeping important information. This will hide verbose debug logs (like full webhook payloads) but still show errors, warnings, and important info messages.
+
+Example `.env` entry:
+
+```env
+LOG_LEVEL=info
+```
+
 ## Deployment
 
 ### 1. Build and Start Services
