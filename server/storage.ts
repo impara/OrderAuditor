@@ -19,16 +19,16 @@ import { db } from "./db";
 import { eq, desc, gte, sql, and } from "drizzle-orm";
 
 export interface IStorage {
-  getOrder(id: string): Promise<Order | undefined>;
-  getOrderByShopifyId(shopifyOrderId: string): Promise<Order | undefined>;
-  getFlaggedOrders(): Promise<Order[]>;
+  getOrder(shopDomain: string, id: string): Promise<Order | undefined>;
+  getOrderByShopifyId(shopDomain: string, shopifyOrderId: string): Promise<Order | undefined>;
+  getFlaggedOrders(shopDomain: string): Promise<Order[]>;
   createOrder(order: InsertOrder): Promise<Order>;
-  updateOrder(id: string, updates: Partial<Order>): Promise<Order>;
-  getDashboardStats(): Promise<DashboardStats>;
+  updateOrder(shopDomain: string, id: string, updates: Partial<Order>): Promise<Order>;
+  getDashboardStats(shopDomain: string): Promise<DashboardStats>;
 
-  getSettings(): Promise<DetectionSettings | undefined>;
-  updateSettings(updates: UpdateDetectionSettings): Promise<DetectionSettings>;
-  initializeSettings(): Promise<DetectionSettings>;
+  getSettings(shopDomain: string): Promise<DetectionSettings | undefined>;
+  updateSettings(shopDomain: string, updates: UpdateDetectionSettings): Promise<DetectionSettings>;
+  initializeSettings(shopDomain: string): Promise<DetectionSettings>;
 
   createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
 
@@ -42,31 +42,40 @@ export interface IStorage {
   incrementOrderCount(shopDomain: string): Promise<Subscription>;
   resetMonthlyOrderCount(shopDomain: string): Promise<Subscription>;
 
-  dismissOrder(orderId: string): Promise<Order>;
-  resolveOrder(orderId: string, resolvedBy: string): Promise<Order>;
+  dismissOrder(shopDomain: string, orderId: string): Promise<Order>;
+  resolveOrder(shopDomain: string, orderId: string, resolvedBy: string): Promise<Order>;
 }
 
 export class DatabaseStorage implements IStorage {
-  async getOrder(id: string): Promise<Order | undefined> {
-    const [order] = await db.select().from(orders).where(eq(orders.id, id));
+  async getOrder(shopDomain: string, id: string): Promise<Order | undefined> {
+    const [order] = await db
+      .select()
+      .from(orders)
+      .where(and(eq(orders.id, id), eq(orders.shopDomain, shopDomain)));
     return order || undefined;
   }
 
   async getOrderByShopifyId(
+    shopDomain: string,
     shopifyOrderId: string
   ): Promise<Order | undefined> {
     const [order] = await db
       .select()
       .from(orders)
-      .where(eq(orders.shopifyOrderId, shopifyOrderId));
+      .where(
+        and(
+          eq(orders.shopifyOrderId, shopifyOrderId),
+          eq(orders.shopDomain, shopDomain)
+        )
+      );
     return order || undefined;
   }
 
-  async getFlaggedOrders(): Promise<Order[]> {
+  async getFlaggedOrders(shopDomain: string): Promise<Order[]> {
     return await db
       .select()
       .from(orders)
-      .where(eq(orders.isFlagged, true))
+      .where(and(eq(orders.isFlagged, true), eq(orders.shopDomain, shopDomain)))
       .orderBy(desc(orders.flaggedAt));
   }
 
@@ -75,20 +84,24 @@ export class DatabaseStorage implements IStorage {
     return order;
   }
 
-  async updateOrder(id: string, updates: Partial<Order>): Promise<Order> {
+  async updateOrder(
+    shopDomain: string,
+    id: string,
+    updates: Partial<Order>
+  ): Promise<Order> {
     const [order] = await db
       .update(orders)
       .set(updates)
-      .where(eq(orders.id, id))
+      .where(and(eq(orders.id, id), eq(orders.shopDomain, shopDomain)))
       .returning();
     return order;
   }
 
-  async getDashboardStats(): Promise<DashboardStats> {
+  async getDashboardStats(shopDomain: string): Promise<DashboardStats> {
     const [totalFlaggedResult] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(orders)
-      .where(eq(orders.isFlagged, true));
+      .where(and(eq(orders.isFlagged, true), eq(orders.shopDomain, shopDomain)));
 
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
@@ -97,7 +110,11 @@ export class DatabaseStorage implements IStorage {
       .select({ count: sql<number>`count(*)::int` })
       .from(orders)
       .where(
-        and(eq(orders.isFlagged, true), gte(orders.flaggedAt, sevenDaysAgo))
+        and(
+          eq(orders.isFlagged, true),
+          gte(orders.flaggedAt, sevenDaysAgo),
+          eq(orders.shopDomain, shopDomain)
+        )
       );
 
     const [totalValueResult] = await db
@@ -105,7 +122,7 @@ export class DatabaseStorage implements IStorage {
         sum: sql<number>`COALESCE(SUM(CAST(total_price AS NUMERIC)), 0)`,
       })
       .from(orders)
-      .where(eq(orders.isFlagged, true));
+      .where(and(eq(orders.isFlagged, true), eq(orders.shopDomain, shopDomain)));
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -113,7 +130,13 @@ export class DatabaseStorage implements IStorage {
     const [todayFlaggedResult] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(orders)
-      .where(and(eq(orders.isFlagged, true), gte(orders.flaggedAt, today)));
+      .where(
+        and(
+          eq(orders.isFlagged, true),
+          gte(orders.flaggedAt, today),
+          eq(orders.shopDomain, shopDomain)
+        )
+      );
 
     const totalFlagged = totalFlaggedResult?.count || 0;
     const lastWeekFlagged = lastWeekFlaggedResult?.count || 0;
@@ -137,18 +160,23 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getSettings(): Promise<DetectionSettings | undefined> {
-    const [settings] = await db.select().from(detectionSettings).limit(1);
+  async getSettings(shopDomain: string): Promise<DetectionSettings | undefined> {
+    const [settings] = await db
+      .select()
+      .from(detectionSettings)
+      .where(eq(detectionSettings.shopDomain, shopDomain))
+      .limit(1);
     return settings || undefined;
   }
 
   async updateSettings(
+    shopDomain: string,
     updates: UpdateDetectionSettings
   ): Promise<DetectionSettings> {
-    let existing = await this.getSettings();
+    let existing = await this.getSettings(shopDomain);
 
     if (!existing) {
-      existing = await this.initializeSettings();
+      existing = await this.initializeSettings(shopDomain);
     }
 
     const [updated] = await db
@@ -160,8 +188,8 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async initializeSettings(): Promise<DetectionSettings> {
-    const existing = await this.getSettings();
+  async initializeSettings(shopDomain: string): Promise<DetectionSettings> {
+    const existing = await this.getSettings(shopDomain);
     if (existing) {
       return existing;
     }
@@ -169,6 +197,7 @@ export class DatabaseStorage implements IStorage {
     const [settings] = await db
       .insert(detectionSettings)
       .values({
+        shopDomain,
         timeWindowHours: 24,
         matchEmail: true,
         matchPhone: false,
@@ -272,12 +301,16 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async dismissOrder(orderId: string): Promise<Order> {
-    return this.resolveOrder(orderId, "manual_dashboard");
+  async dismissOrder(shopDomain: string, orderId: string): Promise<Order> {
+    return this.resolveOrder(shopDomain, orderId, "manual_dashboard");
   }
 
-  async resolveOrder(orderId: string, resolvedBy: string): Promise<Order> {
-    const order = await this.getOrder(orderId);
+  async resolveOrder(
+    shopDomain: string,
+    orderId: string,
+    resolvedBy: string
+  ): Promise<Order> {
+    const order = await this.getOrder(shopDomain, orderId);
     if (!order) {
       throw new Error(`Order not found: ${orderId}`);
     }
@@ -286,7 +319,7 @@ export class DatabaseStorage implements IStorage {
       throw new Error(`Order ${orderId} is not currently flagged`);
     }
 
-    return this.updateOrder(orderId, {
+    return this.updateOrder(shopDomain, orderId, {
       isFlagged: false,
       resolvedAt: new Date(),
       resolvedBy: resolvedBy as

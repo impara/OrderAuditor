@@ -14,6 +14,7 @@ export class NotificationService {
    * Send notifications when a duplicate order is detected
    */
   async sendNotifications(
+    shopDomain: string,
     settings: DetectionSettings,
     data: NotificationData
   ): Promise<void> {
@@ -36,13 +37,13 @@ export class NotificationService {
     // Send email notification if configured
     if (settings.notificationEmail) {
       promises.push(
-        this.sendEmailNotification(settings.notificationEmail, data)
+        this.sendEmailNotification(shopDomain, settings.notificationEmail, data)
       );
     }
 
     // Send Slack notification if configured
     if (settings.slackWebhookUrl) {
-      promises.push(this.sendSlackNotification(settings.slackWebhookUrl, data));
+      promises.push(this.sendSlackNotification(shopDomain, settings.slackWebhookUrl, data));
     }
 
     // Wait for all notifications to complete (don't fail if one fails)
@@ -53,6 +54,7 @@ export class NotificationService {
    * Send email notification via SMTP
    */
   private async sendEmailNotification(
+    shopDomain: string,
     email: string,
     data: NotificationData
   ): Promise<void> {
@@ -71,7 +73,7 @@ export class NotificationService {
         return;
       }
 
-      const emailBody = this.formatEmailBody(data);
+      const emailBody = this.formatEmailBody(shopDomain, data);
       const subject = `Duplicate Order Detected: ${data.order.orderNumber}`;
 
       // Create nodemailer transporter
@@ -107,11 +109,12 @@ export class NotificationService {
    * Send Slack notification via webhook
    */
   private async sendSlackNotification(
+    shopDomain: string,
     webhookUrl: string,
     data: NotificationData
   ): Promise<void> {
     try {
-      const slackMessage = this.formatSlackMessage(data);
+      const slackMessage = this.formatSlackMessage(shopDomain, data);
 
       const response = await fetch(webhookUrl, {
         method: "POST",
@@ -138,7 +141,9 @@ export class NotificationService {
   /**
    * Format email body
    */
-  private formatEmailBody(data: NotificationData): string {
+  private formatEmailBody(shopDomain: string, data: NotificationData): string {
+    const orderUrl = `https://${shopDomain}/admin/orders/${data.order.shopifyOrderId}`;
+    
     return `
 Duplicate Order Detected
 
@@ -149,6 +154,7 @@ Order Details:
     })
 - Total: ${data.order.currency} ${data.order.totalPrice}
 - Created: ${new Date(data.order.createdAt).toLocaleString()}
+- View in Shopify: ${orderUrl}
 
 Duplicate Match:
 - Matched Order: ${data.duplicateOf.orderNumber}
@@ -162,10 +168,8 @@ Please review these orders in your Shopify admin.
   /**
    * Format Slack message
    */
-  private formatSlackMessage(data: NotificationData): any {
-    const orderUrl = process.env.SHOPIFY_SHOP_DOMAIN
-      ? `https://${process.env.SHOPIFY_SHOP_DOMAIN}/admin/orders/${data.order.shopifyOrderId}`
-      : "#";
+  private formatSlackMessage(shopDomain: string, data: NotificationData): any {
+    const orderUrl = `https://${shopDomain}/admin/orders/${data.order.shopifyOrderId}`;
 
     return {
       text: "🚨 Duplicate Order Detected",

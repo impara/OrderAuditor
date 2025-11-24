@@ -13,22 +13,22 @@ import type { Order, DashboardStats } from "@shared/schema";
 import { format } from "date-fns";
 import { useState } from "react";
 
-function StatsCard({ 
-  title, 
-  value, 
-  icon: Icon, 
-  trend, 
-  trendLabel 
-}: { 
-  title: string; 
-  value: string | number; 
-  icon: any; 
-  trend?: number; 
+function StatsCard({
+  title,
+  value,
+  icon: Icon,
+  trend,
+  trendLabel
+}: {
+  title: string;
+  value: string | number;
+  icon: any;
+  trend?: number;
   trendLabel?: string;
 }) {
   const isPositiveTrend = trend !== undefined && trend >= 0;
   const TrendIcon = isPositiveTrend ? TrendingUp : TrendingDown;
-  
+
   return (
     <Card data-testid={`card-stat-${title.toLowerCase().replace(/\s+/g, '-')}`}>
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
@@ -109,7 +109,7 @@ function OrderDetailsModal({ order, isOpen, onClose }: { order: Order; isOpen: b
       // Invalidate queries to refresh the list
       queryClient.invalidateQueries({ queryKey: ['/api/orders/flagged'] });
       queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
-      
+
       toast({
         title: "Order dismissed",
         description: `Order #${order.orderNumber} has been dismissed and removed from the flagged list.`,
@@ -143,155 +143,155 @@ function OrderDetailsModal({ order, isOpen, onClose }: { order: Order; isOpen: b
               Review detailed information about this flagged order
             </DialogDescription>
           </DialogHeader>
-        
-        <div className="space-y-6">
-          <div>
-            <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-              <AlertCircle className="h-4 w-4" />
-              Duplicate Detection
-            </h3>
-            <div className="bg-muted/50 rounded-md p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Confidence Score</span>
-                {order.matchConfidence != null && <ConfidenceBadge confidence={order.matchConfidence} />}
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Match Reason</span>
-                <span className="text-sm font-medium">{order.matchReason}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Flagged Date</span>
-                <span className="text-sm font-medium">
-                  {order.flaggedAt ? format(new Date(order.flaggedAt), 'MMM d, yyyy h:mm a') : '-'}
-                </span>
-              </div>
-            </div>
-          </div>
 
-          <div>
-            <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-              <Package className="h-4 w-4" />
-              Order Information
-            </h3>
-            <div className="bg-muted/50 rounded-md p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Order ID</span>
-                <span className="text-sm font-medium font-mono">{order.shopifyOrderId}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Order Total</span>
-                <span className="text-sm font-medium">{order.currency} ${order.totalPrice}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground flex items-center gap-1">
-                  <Calendar className="h-3 w-3" />
-                  Created
-                </span>
-                <span className="text-sm font-medium">
-                  {format(new Date(order.createdAt), 'MMM d, yyyy h:mm a')}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <h3 className="text-sm font-semibold mb-3">Customer Information</h3>
-            <div className="bg-muted/50 rounded-md p-4 space-y-2">
-              <div className="flex items-center gap-2">
-                <Avatar className="h-10 w-10">
-                  <AvatarFallback className="bg-primary/10 text-primary">
-                    {order.customerName?.charAt(0) || order.customerEmail.charAt(0).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <div className="text-sm font-medium">{order.customerName || 'Unknown Customer'}</div>
-                  <div className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Mail className="h-3 w-3" />
-                    {order.customerEmail}
-                  </div>
-                </div>
-              </div>
-              {order.customerPhone && (
-                <div className="flex items-center gap-1 text-sm text-muted-foreground pt-2">
-                  <Phone className="h-3 w-3" />
-                  {order.customerPhone}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {order.shippingAddress && (
+          <div className="space-y-6">
             <div>
               <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                <MapPin className="h-4 w-4" />
-                Shipping Address
+                <AlertCircle className="h-4 w-4" />
+                Duplicate Detection
               </h3>
-              <div className="bg-muted/50 rounded-md p-4">
-                <div className="text-sm space-y-1">
-                  {order.shippingAddress.address1 && <div>{order.shippingAddress.address1}</div>}
-                  {order.shippingAddress.address2 && <div>{order.shippingAddress.address2}</div>}
-                  <div>
-                    {[
-                      order.shippingAddress.city,
-                      order.shippingAddress.province,
-                      order.shippingAddress.zip
-                    ].filter(Boolean).join(', ')}
-                  </div>
-                  {order.shippingAddress.country && <div>{order.shippingAddress.country}</div>}
+              <div className="bg-muted/50 rounded-md p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Confidence Score</span>
+                  {order.matchConfidence != null && <ConfidenceBadge confidence={order.matchConfidence} />}
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Match Reason</span>
+                  <span className="text-sm font-medium">{order.matchReason}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Flagged Date</span>
+                  <span className="text-sm font-medium">
+                    {order.flaggedAt ? format(new Date(order.flaggedAt), 'MMM d, yyyy h:mm a') : '-'}
+                  </span>
                 </div>
               </div>
             </div>
-          )}
 
-          <div className="flex gap-2 pt-4">
-            <Button variant="outline" className="flex-1" onClick={onClose} data-testid="button-close-details">
-              Close
-            </Button>
-            <Button 
-              variant="destructive" 
-              className="flex-1" 
-              onClick={() => setShowDismissDialog(true)}
-              data-testid="button-dismiss-order"
-            >
-              <X className="h-4 w-4 mr-2" />
-              Dismiss Order
-            </Button>
-            <Button variant="default" className="flex-1" asChild data-testid="button-view-in-shopify">
-              <a 
-                href={`https://${import.meta.env.VITE_SHOPIFY_SHOP_DOMAIN || 'admin.shopify.com'}/admin/orders/${order.shopifyOrderId}`} 
-                target="_blank" 
-                rel="noopener noreferrer"
+            <div>
+              <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                <Package className="h-4 w-4" />
+                Order Information
+              </h3>
+              <div className="bg-muted/50 rounded-md p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Order ID</span>
+                  <span className="text-sm font-medium font-mono">{order.shopifyOrderId}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Order Total</span>
+                  <span className="text-sm font-medium">{order.currency} ${order.totalPrice}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground flex items-center gap-1">
+                    <Calendar className="h-3 w-3" />
+                    Created
+                  </span>
+                  <span className="text-sm font-medium">
+                    {format(new Date(order.createdAt), 'MMM d, yyyy h:mm a')}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold mb-3">Customer Information</h3>
+              <div className="bg-muted/50 rounded-md p-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Avatar className="h-10 w-10">
+                    <AvatarFallback className="bg-primary/10 text-primary">
+                      {order.customerName?.charAt(0) || order.customerEmail.charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <div className="text-sm font-medium">{order.customerName || 'Unknown Customer'}</div>
+                    <div className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Mail className="h-3 w-3" />
+                      {order.customerEmail}
+                    </div>
+                  </div>
+                </div>
+                {order.customerPhone && (
+                  <div className="flex items-center gap-1 text-sm text-muted-foreground pt-2">
+                    <Phone className="h-3 w-3" />
+                    {order.customerPhone}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {order.shippingAddress && (
+              <div>
+                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                  <MapPin className="h-4 w-4" />
+                  Shipping Address
+                </h3>
+                <div className="bg-muted/50 rounded-md p-4">
+                  <div className="text-sm space-y-1">
+                    {order.shippingAddress.address1 && <div>{order.shippingAddress.address1}</div>}
+                    {order.shippingAddress.address2 && <div>{order.shippingAddress.address2}</div>}
+                    <div>
+                      {[
+                        order.shippingAddress.city,
+                        order.shippingAddress.province,
+                        order.shippingAddress.zip
+                      ].filter(Boolean).join(', ')}
+                    </div>
+                    {order.shippingAddress.country && <div>{order.shippingAddress.country}</div>}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-4">
+              <Button variant="outline" className="flex-1" onClick={onClose} data-testid="button-close-details">
+                Close
+              </Button>
+              <Button
+                variant="destructive"
+                className="flex-1"
+                onClick={() => setShowDismissDialog(true)}
+                data-testid="button-dismiss-order"
               >
-                View in Shopify
-              </a>
-            </Button>
+                <X className="h-4 w-4 mr-2" />
+                Dismiss Order
+              </Button>
+              <Button variant="default" className="flex-1" asChild data-testid="button-view-in-shopify">
+                <a
+                  href={`https://${order.shopDomain || 'admin.shopify.com'}/admin/orders/${order.shopifyOrderId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  View in Shopify
+                </a>
+              </Button>
+            </div>
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
 
-    <AlertDialog open={showDismissDialog} onOpenChange={setShowDismissDialog}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Dismiss Order?</AlertDialogTitle>
-          <AlertDialogDescription>
-            This will remove the "Merge_Review_Candidate" tag from this order in Shopify and remove it from the flagged orders list. 
-            The order will still be kept in the database for historical tracking.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={isDismissing}>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={handleDismiss}
-            disabled={isDismissing}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            data-testid="button-confirm-dismiss"
-          >
-            {isDismissing ? "Dismissing..." : "Dismiss Order"}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      <AlertDialog open={showDismissDialog} onOpenChange={setShowDismissDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Dismiss Order?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove the "Merge_Review_Candidate" tag from this order in Shopify and remove it from the flagged orders list.
+              The order will still be kept in the database for historical tracking.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDismissing}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDismiss}
+              disabled={isDismissing}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-dismiss"
+            >
+              {isDismissing ? "Dismissing..." : "Dismiss Order"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
@@ -319,9 +319,9 @@ function FlaggedOrdersTable({ orders }: { orders: Order[] }) {
             </TableHeader>
             <TableBody>
               {orders.map((order) => (
-                <TableRow 
-                  key={order.id} 
-                  className="hover-elevate" 
+                <TableRow
+                  key={order.id}
+                  className="hover-elevate"
                   data-testid={`row-order-${order.id}`}
                 >
                   <TableCell className="font-semibold" data-testid={`text-order-number-${order.id}`}>
@@ -357,8 +357,8 @@ function FlaggedOrdersTable({ orders }: { orders: Order[] }) {
                     {order.flaggedAt ? format(new Date(order.flaggedAt), 'MMM d, yyyy') : '-'}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button 
-                      size="sm" 
+                    <Button
+                      size="sm"
                       variant="ghost"
                       onClick={() => setSelectedOrder(order)}
                       data-testid={`button-view-details-${order.id}`}
@@ -374,10 +374,10 @@ function FlaggedOrdersTable({ orders }: { orders: Order[] }) {
       </Card>
 
       {selectedOrder && (
-        <OrderDetailsModal 
-          order={selectedOrder} 
-          isOpen={!!selectedOrder} 
-          onClose={() => setSelectedOrder(null)} 
+        <OrderDetailsModal
+          order={selectedOrder}
+          isOpen={!!selectedOrder}
+          onClose={() => setSelectedOrder(null)}
         />
       )}
     </>

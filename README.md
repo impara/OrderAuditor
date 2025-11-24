@@ -435,13 +435,11 @@ SMTP_FROM=your-email@gmail.com
 | Variable                   | Required | Description                          | Example                                              |
 | -------------------------- | -------- | ------------------------------------ | ---------------------------------------------------- |
 | `DATABASE_URL`             | Yes      | PostgreSQL connection string         | `postgresql://user:pass@localhost:5432/db`           |
-| `SHOPIFY_SHOP_DOMAIN`      | Yes      | Your Shopify store domain            | `yourstore.myshopify.com`                            |
-| `SHOPIFY_ACCESS_TOKEN`     | Yes      | Shopify Admin API access token       | `shpat_...`                                          |
+| `SHOPIFY_API_KEY`          | Yes      | Shopify Client ID                    | `your_client_id`                                     |
 | `SHOPIFY_WEBHOOK_SECRET`   | Yes      | Webhook verification secret          | `shpss_...`                                          |
 | `PORT`                     | No       | Server port (default: 5000)          | `5000`                                               |
 | `APP_URL`                  | Yes\*    | Public URL for webhook registration  | `http://localhost:5000` or `https://your-domain.com` |
 | `LOG_LEVEL`                | No       | Log verbosity level (default: debug) | `error`, `warn`, `info`, `debug`                     |
-| `VITE_SHOPIFY_SHOP_DOMAIN` | No       | Client-side Shopify domain           | `yourstore.myshopify.com`                            |
 | `SMTP_HOST`                | No\*\*   | SMTP server hostname                 | `smtp.gmail.com`                                     |
 | `SMTP_PORT`                | No\*\*   | SMTP server port                     | `587`                                                |
 | `SMTP_USER`                 | No\*\*   | SMTP authentication username         | `your-email@gmail.com`                               |

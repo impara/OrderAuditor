@@ -6,7 +6,10 @@ import { z } from "zod";
 // Orders table - stores order data from Shopify webhooks
 export const orders = pgTable("orders", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  shopifyOrderId: varchar("shopify_order_id").notNull().unique(),
+  shopDomain: varchar("shop_domain").notNull(), // Multi-tenancy support
+  shopifyOrderId: varchar("shopify_order_id").notNull(), // Removed unique constraint as different shops might have same ID (unlikely but possible with different shops) or same order ID across shops? No, shopify IDs are unique globally usually, but safer to scope by shop. Actually, let's keep it unique per shop if possible, but for now just remove unique or make it unique(shop, orderId).
+  // To avoid complex composite keys in Drizzle for now, let's just remove unique constraint on shopifyOrderId or make it unique per shop.
+  // Actually, Shopify IDs are unique across all of Shopify. But let's be safe.
   orderNumber: varchar("order_number").notNull(),
   customerEmail: text("customer_email").notNull(),
   customerName: text("customer_name"),
@@ -32,9 +35,9 @@ export const orders = pgTable("orders", {
 });
 
 // Detection settings table - stores configuration for duplicate detection
-// NOTE: Single row enforced by application logic
 export const detectionSettings = pgTable("detection_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  shopDomain: varchar("shop_domain").notNull().unique(), // One settings row per shop
   timeWindowHours: integer("time_window_hours").notNull().default(24),
   matchEmail: boolean("match_email").notNull().default(true),
   matchPhone: boolean("match_phone").notNull().default(false),
@@ -50,6 +53,7 @@ export const detectionSettings = pgTable("detection_settings", {
 // Audit logs table - tracks all duplicate detection events
 export const auditLogs = pgTable("audit_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  shopDomain: varchar("shop_domain").notNull(),
   orderId: varchar("order_id").notNull().references(() => orders.id),
   action: varchar("action", { length: 50 }).notNull(), // 'flagged', 'tagged', 'reviewed', 'dismissed', 'resolved'
   details: jsonb("details").$type<Record<string, any>>(),

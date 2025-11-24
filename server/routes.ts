@@ -49,7 +49,7 @@ function validateReturnUrl(returnUrl: string): string {
   }
 }
 
-import { auth, authCallback, verifyRequest } from "./shopify-auth";
+import { auth, authCallback, verifyRequest, shopify } from "./shopify-auth";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.use(
@@ -88,7 +88,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/dashboard/stats", async (_req: Request, res: Response) => {
     try {
-      const stats = await storage.getDashboardStats();
+      const { shop } = res.locals.shopify;
+      const stats = await storage.getDashboardStats(shop);
       res.json(stats);
     } catch (error) {
       logger.error("Error fetching dashboard stats:", error);
@@ -98,7 +99,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/orders/flagged", async (_req: Request, res: Response) => {
     try {
-      const orders = await storage.getFlaggedOrders();
+      const { shop } = res.locals.shopify;
+      const orders = await storage.getFlaggedOrders(shop);
       res.json(orders);
     } catch (error) {
       logger.error("Error fetching flagged orders:", error);
@@ -110,10 +112,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     "/api/orders/:orderId/dismiss",
     async (req: Request, res: Response) => {
       try {
+        const { shop, accessToken } = res.locals.shopify;
         const { orderId } = req.params;
 
         // Get the order first to check if it exists and get Shopify order ID
-        const order = await storage.getOrder(orderId);
+        const order = await storage.getOrder(shop, orderId);
         if (!order) {
           return res.status(404).json({ error: "Order not found" });
         }
@@ -125,11 +128,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Dismiss the order (sets isFlagged: false, resolvedAt, resolvedBy)
-        const dismissedOrder = await storage.dismissOrder(orderId);
+        const dismissedOrder = await storage.dismissOrder(shop, orderId);
 
         // Remove the tag from Shopify
         try {
           await shopifyService.removeOrderTag(
+            shop,
+            accessToken,
             order.shopifyOrderId,
             "Merge_Review_Candidate"
           );
@@ -143,6 +148,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Log the dismissal action
         await storage.createAuditLog({
+          shopDomain: shop,
           orderId: dismissedOrder.id,
           action: "dismissed",
           details: {
@@ -168,9 +174,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/settings", async (_req: Request, res: Response) => {
     try {
-      let settings = await storage.getSettings();
+      const { shop } = res.locals.shopify;
+      let settings = await storage.getSettings(shop);
       if (!settings) {
-        settings = await storage.initializeSettings();
+        settings = await storage.initializeSettings(shop);
       }
       res.json(settings);
     } catch (error) {
@@ -181,8 +188,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/settings", async (req: Request, res: Response) => {
     try {
+      const { shop } = res.locals.shopify;
       const validatedData = updateDetectionSettingsSchema.parse(req.body);
-      const settings = await storage.updateSettings(validatedData);
+      const settings = await storage.updateSettings(shop, validatedData);
       res.json(settings);
     } catch (error) {
       console.error("Error updating settings:", error);
@@ -192,8 +200,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/webhooks/status", async (_req: Request, res: Response) => {
     try {
+      const { shop, accessToken } = res.locals.shopify;
       logger.debug("[API] Checking webhook registration status");
-      const webhooks = await shopifyService.listWebhooks();
+      const webhooks = await shopifyService.listWebhooks(shop, accessToken);
 
       const ordersCreateWebhook = webhooks.find(
         (wh) => wh.topic === "orders/create"
@@ -222,10 +231,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/webhooks/register", async (_req: Request, res: Response) => {
     try {
+      const { shop, accessToken } = res.locals.shopify;
       logger.info("[API] Webhook registration requested");
-      const ordersCreateResult = await shopifyService.registerOrdersWebhook();
-      const ordersUpdatedResult =
-        await shopifyService.registerOrdersUpdatedWebhook();
+      
+      if (!process.env.APP_URL) {
+        return res.status(500).json({ error: "APP_URL not configured" });
+      }
+      
+      const baseUrl = process.env.APP_URL.replace(/\/$/, "");
+      
+      const ordersCreateResult = await shopifyService.registerWebhook(
+        shop,
+        accessToken,
+        "orders/create",
+        `${baseUrl}/api/webhooks/shopify/orders/create`
+      );
+      
+      const ordersUpdatedResult = await shopifyService.registerWebhook(
+        shop,
+        accessToken,
+        "orders/updated",
+        `${baseUrl}/api/webhooks/shopify/orders/updated`
+      );
 
       const allSuccess =
         ordersCreateResult.success && ordersUpdatedResult.success;
@@ -255,8 +282,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const secret = process.env.SHOPIFY_WEBHOOK_SECRET || "";
     res.json({
       configured: {
-        shopDomain: !!process.env.SHOPIFY_SHOP_DOMAIN,
-        accessToken: !!process.env.SHOPIFY_ACCESS_TOKEN,
+        shopDomain: !!process.env.SHOPIFY_SHOP_DOMAIN, // Legacy check
+        accessToken: !!process.env.SHOPIFY_ACCESS_TOKEN, // Legacy check
         webhookSecret: !!secret,
       },
       secretInfo: {
@@ -311,21 +338,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req: any, res: Response) => {
       try {
         const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
+        const shopDomain = req.get("X-Shopify-Shop-Domain");
         // With express.raw middleware, req.body is the raw Buffer
         const rawBody: Buffer = req.body;
 
-        logger.debug("[Webhook] Received webhook");
-        logger.debug("[Webhook] HMAC Header present:", !!hmacHeader);
-        logger.debug("[Webhook] Raw body is Buffer:", Buffer.isBuffer(rawBody));
-        logger.debug("[Webhook] Raw body length:", rawBody.length);
+        logger.debug(`[Webhook] Received webhook for shop: ${shopDomain}`);
 
         // Verify HMAC signature using raw bytes
         if (!hmacHeader) {
           logger.error("[Webhook] ❌ Missing HMAC header");
-          logger.debug(
-            "[Webhook] Request headers:",
-            JSON.stringify(req.headers, null, 2)
-          );
           return res
             .status(401)
             .json({ error: "Missing webhook signature header" });
@@ -333,21 +354,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         if (!shopifyService.verifyWebhook(rawBody, hmacHeader)) {
           logger.warn("[Webhook] ❌ Invalid webhook signature");
-          logger.debug("[Webhook] HMAC header:", hmacHeader);
-          logger.debug(
-            "[Webhook] Body preview (first 200 chars):",
-            rawBody.toString("utf8").substring(0, 200)
-          );
-          logger.warn("[Webhook] Possible causes:");
-          logger.warn(
-            "  1. Webhook secret mismatch - check SHOPIFY_WEBHOOK_SECRET in .env"
-          );
-          logger.warn(
-            "  2. Request body was modified (ngrok free tier can do this)"
-          );
-          logger.warn(
-            "  3. Using wrong webhook secret (should be 'API secret key', not 'Admin API access token')"
-          );
           return res.status(401).json({ error: "Invalid webhook signature" });
         }
 
@@ -356,145 +362,86 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Parse JSON after verification
         const shopifyOrder = JSON.parse(rawBody.toString("utf8"));
 
-        // DUMP FULL PAYLOAD for analysis - save to file for inspection
-        const payloadDump = {
-          timestamp: new Date().toISOString(),
-          orderId: shopifyOrder.id,
-          orderNumber: shopifyOrder.order_number,
-          // Top-level fields
-          topLevelFields: Object.keys(shopifyOrder),
-          email: shopifyOrder.email,
-          contact_email: shopifyOrder.contact_email,
-          // Customer object (full)
-          customer: shopifyOrder.customer,
-          customerKeys: shopifyOrder.customer
-            ? Object.keys(shopifyOrder.customer)
-            : null,
-          // Addresses
-          shipping_address: shopifyOrder.shipping_address,
-          billing_address: shopifyOrder.billing_address,
-          // Full payload (truncated for logs, but we'll save it)
-          fullPayload: shopifyOrder,
-        };
-
-        // Log FULL payload structure - save complete JSON for analysis (debug level only)
-        logger.debug("[Webhook] ========== FULL WEBHOOK PAYLOAD ==========");
-        logger.debug("[Webhook] Order ID:", shopifyOrder.id);
-        logger.debug("[Webhook] Order Number:", shopifyOrder.order_number);
-        logger.debug("[Webhook] Top-level keys:", Object.keys(shopifyOrder));
-        logger.debug(
-          "[Webhook] Full payload JSON (first 3000 chars):",
-          JSON.stringify(shopifyOrder, null, 2).substring(0, 3000)
-        );
-        logger.debug("[Webhook] ===========================================");
-
-        // Log the actual customer, shipping_address, and billing_address objects (debug level only)
-        logger.debug(
-          "[Webhook] Customer object:",
-          JSON.stringify(shopifyOrder.customer, null, 2)
-        );
-        logger.debug(
-          "[Webhook] Shipping address:",
-          JSON.stringify(shopifyOrder.shipping_address, null, 2)
-        );
-        logger.debug(
-          "[Webhook] Billing address:",
-          JSON.stringify(shopifyOrder.billing_address, null, 2)
-        );
-
-        // Check if we need to fetch order or customer details via API
-        // Shopify webhooks may not include customer email/name due to Protected Customer Data Access restrictions
-        // Note: For orders, we can fetch the order via API to get email (works even without Protected Customer Data Access)
-        // For customers, Protected Customer Data Access requires Shopify/Advanced/Plus plan
-        let customerData = shopifyOrder.customer;
-        let fetchedOrder = null;
-
-        // First, try fetching the order via API to get email (this works for orders even without Protected Customer Data Access)
-        if (!shopifyOrder.email && !shopifyOrder.contact_email) {
-          logger.warn(
-            "[Webhook] ⚠️ Email not in webhook payload, attempting to fetch order via API..."
+        // Load session to get access token
+        let accessToken = "";
+        if (shopDomain) {
+          const offlineSessionId = shopify.session.getOfflineId(shopDomain);
+          const session = await shopify.config.sessionStorage.loadSession(
+            offlineSessionId
           );
-          fetchedOrder = await shopifyService.getOrder(shopifyOrder.id);
-          if (
-            fetchedOrder &&
-            (fetchedOrder.email || fetchedOrder.contact_email)
-          ) {
-            logger.info("[Webhook] ✅ Successfully fetched order via API");
-            logger.debug(
-              "[Webhook] API Order email:",
-              fetchedOrder.email || fetchedOrder.contact_email
-            );
-            // Merge fetched order data with webhook data
-            Object.assign(shopifyOrder, {
-              email: fetchedOrder.email || shopifyOrder.email,
-              contact_email:
-                fetchedOrder.contact_email || shopifyOrder.contact_email,
-            });
-          } else if (fetchedOrder) {
-            logger.warn(
-              "[Webhook] ⚠️ Order API returned order but no email field"
-            );
-            logger.warn(
-              "[Webhook] This requires Protected Customer Data Access + Shopify/Advanced/Plus plan"
-            );
-            logger.warn(
-              "[Webhook] Without this, customer email will not be available in webhooks or API responses"
-            );
+          if (session?.accessToken) {
+            accessToken = session.accessToken;
           } else {
-            logger.error("[Webhook] ❌ Order API fetch failed completely");
+            logger.warn(
+              `[Webhook] ⚠️ Could not load offline session for ${shopDomain}. API calls will fail.`
+            );
           }
         }
 
-        // If we still don't have email and have a customer ID, try fetching customer
-        // This requires Protected Customer Data Access + Shopify/Advanced/Plus plan
-        if (
-          shopifyOrder.customer?.id &&
-          !shopifyOrder.customer?.email &&
-          !shopifyOrder.email &&
-          !shopifyOrder.contact_email
-        ) {
-          logger.warn(
-            "[Webhook] ⚠️ Still no email found, attempting to fetch customer via API..."
-          );
-          logger.debug(
-            "[Webhook] Note: This requires Protected Customer Data Access + Shopify/Advanced/Plus plan"
-          );
-          const apiCustomer = await shopifyService.getCustomer(
-            shopifyOrder.customer.id
-          );
-          if (apiCustomer && apiCustomer.email) {
-            logger.info("[Webhook] ✅ Successfully fetched customer via API");
-            logger.debug("[Webhook] API Customer email:", apiCustomer.email);
-            logger.debug(
-              "[Webhook] API Customer name:",
-              apiCustomer.first_name,
-              apiCustomer.last_name
-            );
-            customerData = apiCustomer;
-          } else {
+        // Check if we need to fetch order or customer details via API
+        let customerData = shopifyOrder.customer;
+        let fetchedOrder = null;
+
+        if (accessToken && shopDomain) {
+          // First, try fetching the order via API to get email
+          if (!shopifyOrder.email && !shopifyOrder.contact_email) {
             logger.warn(
-              "[Webhook] ⚠️ Customer API fetch failed or returned no email"
+              "[Webhook] ⚠️ Email not in webhook payload, attempting to fetch order via API..."
             );
-            logger.debug("[Webhook] Possible reasons:");
-            logger.debug(
-              "[Webhook]   1. Protected Customer Data Access not enabled"
+            try {
+              fetchedOrder = await shopifyService.getOrder(
+                shopDomain,
+                accessToken,
+                shopifyOrder.id
+              );
+              if (
+                fetchedOrder &&
+                (fetchedOrder.email || fetchedOrder.contact_email)
+              ) {
+                logger.info("[Webhook] ✅ Successfully fetched order via API");
+                Object.assign(shopifyOrder, {
+                  email: fetchedOrder.email || shopifyOrder.email,
+                  contact_email:
+                    fetchedOrder.contact_email || shopifyOrder.contact_email,
+                });
+              }
+            } catch (err) {
+              logger.error("[Webhook] ❌ Order API fetch failed", err);
+            }
+          }
+
+          // If we still don't have email and have a customer ID, try fetching customer
+          if (
+            shopifyOrder.customer?.id &&
+            !shopifyOrder.customer?.email &&
+            !shopifyOrder.email &&
+            !shopifyOrder.contact_email
+          ) {
+            logger.warn(
+              "[Webhook] ⚠️ Still no email found, attempting to fetch customer via API..."
             );
-            logger.debug("[Webhook]   2. App lacks read_customers scope");
-            logger.debug(
-              "[Webhook]   3. Store is on Basic/Free plan (PII access requires Shopify/Advanced/Plus)"
-            );
-            logger.debug(
-              "[Webhook]   4. Merchant hasn't approved Protected Customer Data Access request"
-            );
+            try {
+              const apiCustomer = await shopifyService.getCustomer(
+                shopDomain,
+                accessToken,
+                shopifyOrder.customer.id
+              );
+              if (apiCustomer && apiCustomer.email) {
+                logger.info(
+                  "[Webhook] ✅ Successfully fetched customer via API"
+                );
+                customerData = apiCustomer;
+              }
+            } catch (err) {
+              logger.warn("[Webhook] ⚠️ Customer API fetch failed", err);
+            }
           }
         }
 
         // Use webhook order data
         const fullOrder = shopifyOrder;
 
-        // Extract customer email from multiple possible locations
-        // Use customerData (may be fetched via API if webhook lacks data)
-        // For orders created via API, email might be in different locations
+        // Extract customer email
         const customerEmail =
           fullOrder.email ||
           fullOrder.contact_email ||
@@ -505,27 +452,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           customerData?.default_address?.email ||
           null;
 
-        // Log what we found for debugging
-        if (!customerEmail) {
-          logger.warn(
-            "[Webhook] ⚠️ No email found in any location. Order payload keys:",
-            Object.keys(fullOrder)
-          );
-          logger.debug("[Webhook] Order email field:", fullOrder.email);
-          logger.debug(
-            "[Webhook] Order contact_email field:",
-            fullOrder.contact_email
-          );
-          logger.debug(
-            "[Webhook] Order customer?.email field:",
-            fullOrder.customer?.email
-          );
-        }
-
-        // Extract customer name with better fallbacks
-        // Use customerData (may be fetched via API if webhook lacks data)
+        // Extract customer name
         const customerName = (() => {
-          // Try customerData first (fetched via API if needed)
           const firstName =
             fullOrder.first_name ||
             customerData?.first_name ||
@@ -549,26 +477,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return lastName;
           }
 
-          // Fallback to customer name field
-          if (customerData?.name) {
-            return customerData.name;
-          }
-
-          // Fallback to shipping_address name field
-          if (fullOrder.shipping_address?.name) {
+          if (customerData?.name) return customerData.name;
+          if (fullOrder.shipping_address?.name)
             return fullOrder.shipping_address.name;
-          }
-
-          // Fallback to default_address name
-          if (customerData?.default_address?.name) {
+          if (customerData?.default_address?.name)
             return customerData.default_address.name;
-          }
 
           return null;
         })();
 
         // Extract customer phone
-        // Use customerData (may be fetched via API if webhook lacks data)
         const customerPhone =
           fullOrder.phone ||
           customerData?.phone ||
@@ -577,27 +495,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           customerData?.default_address?.phone ||
           null;
 
-        // Log extracted data for debugging
-        logger.info(
-          "[Webhook] 📧 Extracted customer email:",
-          customerEmail || "❌ NOT FOUND - will use fallback"
-        );
-        logger.debug("[Webhook] Extracted customer data:", {
-          email: customerEmail || "NOT FOUND",
-          name: customerName || "NOT FOUND",
-          phone: customerPhone || "NOT FOUND",
-          hasCustomer: !!fullOrder.customer,
-          hasDefaultAddress: !!fullOrder.customer?.default_address,
-          defaultAddressKeys: fullOrder.customer?.default_address
-            ? Object.keys(fullOrder.customer.default_address)
-            : [],
-          fetchedViaAPI: fullOrder !== shopifyOrder,
-          orderEmail: fullOrder.email,
-          orderContactEmail: fullOrder.contact_email,
-          customerEmail: fullOrder.customer?.email,
-        });
-
         const orderData = {
+          shopDomain: shopDomain || "unknown-shop", // Fallback if header missing (shouldn't happen)
           shopifyOrderId: fullOrder.id.toString(),
           orderNumber: fullOrder.order_number?.toString() || fullOrder.name,
           customerEmail: customerEmail || "unknown@example.com",
@@ -620,8 +519,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const validatedOrder = insertOrderSchema.parse(orderData);
 
-        // Check if order already exists (webhook retries can cause duplicates)
+        // Check if order already exists
         const existingOrder = await storage.getOrderByShopifyId(
+          shopDomain,
           validatedOrder.shopifyOrderId
         );
         if (existingOrder) {
@@ -636,25 +536,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
-        // Check subscription quota before processing
-        const shopDomain = process.env.SHOPIFY_SHOP_DOMAIN || "";
-        const quotaCheck = await subscriptionService.checkQuota(shopDomain);
-        if (!quotaCheck.allowed) {
-          logger.warn(
-            `[Webhook] Quota exceeded for ${shopDomain}: ${quotaCheck.reason}`
-          );
-          return res.status(403).json({
-            success: false,
-            error: "QUOTA_EXCEEDED",
-            message: quotaCheck.reason || "Monthly order limit reached",
-            subscription: quotaCheck.subscription,
-          });
+        // Check subscription quota
+        if (shopDomain) {
+          const quotaCheck = await subscriptionService.checkQuota(shopDomain);
+          if (!quotaCheck.allowed) {
+            logger.warn(
+              `[Webhook] Quota exceeded for ${shopDomain}: ${quotaCheck.reason}`
+            );
+            return res.status(403).json({
+              success: false,
+              error: "QUOTA_EXCEEDED",
+              message: quotaCheck.reason || "Monthly order limit reached",
+              subscription: quotaCheck.subscription,
+            });
+          }
         }
 
         // Ensure detection settings are initialized
-        let settings = await storage.getSettings();
+        let settings = await storage.getSettings(shopDomain);
         if (!settings) {
-          settings = await storage.initializeSettings();
+          settings = await storage.initializeSettings(shopDomain);
         }
 
         const duplicateMatch = await duplicateDetectionService.findDuplicates(
@@ -664,7 +565,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (duplicateMatch) {
           const flaggedOrder = await storage.createOrder(validatedOrder);
 
-          await storage.updateOrder(flaggedOrder.id, {
+          await storage.updateOrder(shopDomain, flaggedOrder.id, {
             isFlagged: true,
             flaggedAt: new Date(),
             duplicateOfOrderId: duplicateMatch.order.id,
@@ -673,6 +574,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
 
           await storage.createAuditLog({
+            shopDomain,
             orderId: flaggedOrder.id,
             action: "flagged",
             details: {
@@ -682,49 +584,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
             },
           });
 
-          try {
-            await shopifyService.tagOrder(fullOrder.id.toString(), [
-              "Merge_Review_Candidate",
-            ]);
+          if (accessToken && shopDomain) {
+            try {
+              await shopifyService.tagOrder(
+                shopDomain,
+                accessToken,
+                fullOrder.id.toString(),
+                ["Merge_Review_Candidate"]
+              );
 
-            await storage.createAuditLog({
-              orderId: flaggedOrder.id,
-              action: "tagged",
-              details: { tags: ["Merge_Review_Candidate"] },
-            });
-          } catch (error) {
-            logger.error("Failed to tag order in Shopify:", error);
+              await storage.createAuditLog({
+                shopDomain,
+                orderId: flaggedOrder.id,
+                action: "tagged",
+                details: { tags: ["Merge_Review_Candidate"] },
+              });
+            } catch (error) {
+              logger.error("Failed to tag order in Shopify:", error);
+            }
           }
 
           // Send notifications if enabled
           try {
-            const updatedOrder = await storage.getOrder(flaggedOrder.id);
+            const updatedOrder = await storage.getOrder(shopDomain, flaggedOrder.id);
             const duplicateOfOrder = await storage.getOrder(
+              shopDomain,
               duplicateMatch.order.id
             );
 
-            if (updatedOrder && duplicateOfOrder) {
-              await notificationService.sendNotifications(settings, {
-                order: updatedOrder,
-                duplicateOf: duplicateOfOrder,
-                confidence: duplicateMatch.confidence,
-                matchReason: duplicateMatch.matchReason,
-              });
+            if (updatedOrder && duplicateOfOrder && shopDomain) {
+              await notificationService.sendNotifications(
+                shopDomain,
+                settings,
+                {
+                  order: updatedOrder,
+                  duplicateOf: duplicateOfOrder,
+                  confidence: duplicateMatch.confidence,
+                  matchReason: duplicateMatch.matchReason,
+                }
+              );
             }
           } catch (error) {
             logger.error("Failed to send notifications:", error);
-            // Don't fail the webhook if notifications fail
           }
 
           // Record order for quota tracking
-          try {
-            await subscriptionService.recordOrder(shopDomain);
-          } catch (error) {
-            logger.error("Failed to record order for quota:", error);
-            // Don't fail the webhook if quota recording fails
+          if (shopDomain) {
+            try {
+              await subscriptionService.recordOrder(shopDomain);
+            } catch (error) {
+              logger.error("Failed to record order for quota:", error);
+            }
           }
 
-          const updatedOrder = await storage.getOrder(flaggedOrder.id);
+          const updatedOrder = await storage.getOrder(shopDomain, flaggedOrder.id);
           res.json({
             success: true,
             flagged: true,
@@ -734,11 +647,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const order = await storage.createOrder(validatedOrder);
 
           // Record order for quota tracking
-          try {
-            await subscriptionService.recordOrder(shopDomain);
-          } catch (error) {
-            logger.error("Failed to record order for quota:", error);
-            // Don't fail the webhook if quota recording fails
+          if (shopDomain) {
+            try {
+              await subscriptionService.recordOrder(shopDomain);
+            } catch (error) {
+              logger.error("Failed to record order for quota:", error);
+            }
           }
 
           res.json({
@@ -759,13 +673,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req: any, res: Response) => {
       try {
         const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
+        const shopDomain = req.get("X-Shopify-Shop-Domain");
         // With express.raw middleware, req.body is the raw Buffer
         const rawBody: Buffer = req.body;
 
         logger.debug("[Webhook] Received orders/updated webhook");
-        logger.debug("[Webhook] HMAC Header present:", !!hmacHeader);
-        logger.debug("[Webhook] Raw body is Buffer:", Buffer.isBuffer(rawBody));
-        logger.debug("[Webhook] Raw body length:", rawBody.length);
 
         // Verify HMAC signature using raw bytes
         if (!hmacHeader) {
@@ -785,14 +697,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Parse JSON after verification
         const shopifyOrder = JSON.parse(rawBody.toString("utf8"));
 
-        logger.debug("[Webhook] Order updated:", {
-          id: shopifyOrder.id,
-          orderNumber: shopifyOrder.order_number,
-          tags: shopifyOrder.tags,
-        });
-
         // Check if order exists in our database
         const order = await storage.getOrderByShopifyId(
+          shopDomain,
           shopifyOrder.id.toString()
         );
 
@@ -824,12 +731,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
 
         const resolvedOrder = await storage.resolveOrder(
+          shopDomain,
           order.id,
           "shopify_tag_removed"
         );
 
         // Log the resolution action
         await storage.createAuditLog({
+          shopDomain,
           orderId: resolvedOrder.id,
           action: "resolved",
           details: {
@@ -850,14 +759,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     }
   );
-
+  
   // Subscription endpoints
   app.get("/api/subscription", async (_req: Request, res: Response) => {
     try {
-      const shopDomain = process.env.SHOPIFY_SHOP_DOMAIN || "";
-      const subscription = await subscriptionService.getSubscription(
-        shopDomain
-      );
+      const { shop } = res.locals.shopify;
+      const subscription = await subscriptionService.getSubscription(shop);
       res.json(subscription);
     } catch (error) {
       logger.error("Error fetching subscription:", error);
@@ -867,6 +774,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/subscription/upgrade", async (req: Request, res: Response) => {
     try {
+      const { shop, accessToken } = res.locals.shopify;
       const defaultReturnUrl = `${
         process.env.APP_URL || "http://localhost:5000"
       }/subscription?upgrade=success`;
@@ -876,6 +784,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const returnUrl = validateReturnUrl(requestedReturnUrl);
 
       const charge = await shopifyBillingService.createRecurringCharge(
+        shop,
+        accessToken,
         returnUrl
       );
 
@@ -900,12 +810,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     "/api/subscription/activate",
     async (req: Request, res: Response) => {
       try {
+        const { shop, accessToken } = res.locals.shopify;
         const { chargeId } = req.body;
         if (!chargeId) {
           return res.status(400).json({ error: "chargeId is required" });
         }
 
-        const success = await shopifyBillingService.activateCharge(chargeId);
+        const success = await shopifyBillingService.activateCharge(shop, accessToken, chargeId);
         if (!success) {
           return res.status(500).json({ error: "Failed to activate charge" });
         }
@@ -920,17 +831,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/subscription/cancel", async (_req: Request, res: Response) => {
     try {
-      const shopDomain = process.env.SHOPIFY_SHOP_DOMAIN || "";
-      const subscription = await subscriptionService.getSubscription(
-        shopDomain
-      );
+      const { shop, accessToken } = res.locals.shopify;
+      const subscription = await subscriptionService.getSubscription(shop);
 
       if (subscription.shopifyChargeId) {
         const chargeId = parseInt(subscription.shopifyChargeId);
-        await shopifyBillingService.cancelCharge(chargeId);
+        await shopifyBillingService.cancelCharge(shop, accessToken, chargeId);
       } else {
         // Just downgrade if no charge ID
-        await subscriptionService.cancelSubscription(shopDomain);
+        await subscriptionService.cancelSubscription(shop);
       }
 
       res.json({ success: true });

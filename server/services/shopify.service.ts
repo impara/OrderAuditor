@@ -18,24 +18,20 @@ interface WebhookRegistrationResult {
 }
 
 export class ShopifyService {
-  private shopDomain: string;
-  private accessToken: string;
   private webhookSecret: string;
   private apiVersion: string = "2025-10";
 
   constructor() {
-    this.shopDomain = process.env.SHOPIFY_SHOP_DOMAIN || "";
-    this.accessToken = process.env.SHOPIFY_ACCESS_TOKEN || "";
     this.webhookSecret = process.env.SHOPIFY_WEBHOOK_SECRET || "";
   }
 
-  private get baseApiUrl(): string {
-    return `https://${this.shopDomain}/admin/api/${this.apiVersion}`;
+  private getBaseApiUrl(shopDomain: string): string {
+    return `https://${shopDomain}/admin/api/${this.apiVersion}`;
   }
 
-  private validateCredentials(): boolean {
-    if (!this.shopDomain || !this.accessToken) {
-      logger.error("Shopify credentials not configured");
+  private validateCredentials(shopDomain: string, accessToken: string): boolean {
+    if (!shopDomain || !accessToken) {
+      logger.error("Shopify credentials not provided");
       return false;
     }
     return true;
@@ -52,37 +48,17 @@ export class ShopifyService {
       return false;
     }
 
-    logger.debug("[ShopifyService] Verifying webhook HMAC");
-    logger.debug(
-      "[ShopifyService] Secret configured:",
-      this.webhookSecret.substring(0, 10) + "..."
-    );
-    logger.debug(
-      "[ShopifyService] Body type:",
-      typeof body,
-      "isBuffer:",
-      Buffer.isBuffer(body)
-    );
-    logger.debug("[ShopifyService] Body length:", body.length);
-    logger.debug("[ShopifyService] HMAC header received:", hmacHeader);
-
     // Calculate HMAC on raw bytes (Buffer) - Shopify calculates HMAC on raw request body
     const hash = crypto
       .createHmac("sha256", this.webhookSecret)
       .update(body)
       .digest("base64");
 
-    logger.debug("[ShopifyService] Calculated HMAC:", hash);
-    logger.debug("[ShopifyService] Expected HMAC:  ", hmacHeader);
-    logger.debug("[ShopifyService] Match:", hash === hmacHeader);
-
     try {
-      const isValid = crypto.timingSafeEqual(
+      return crypto.timingSafeEqual(
         Buffer.from(hash),
         Buffer.from(hmacHeader)
       );
-      logger.debug("[ShopifyService] timingSafeEqual result:", isValid);
-      return isValid;
     } catch (error) {
       logger.error("[ShopifyService] timingSafeEqual error:", error);
       return false;
@@ -92,19 +68,19 @@ export class ShopifyService {
   /**
    * List all registered webhooks
    */
-  async listWebhooks(): Promise<ShopifyWebhook[]> {
-    if (!this.validateCredentials()) {
+  async listWebhooks(shopDomain: string, accessToken: string): Promise<ShopifyWebhook[]> {
+    if (!this.validateCredentials(shopDomain, accessToken)) {
       return [];
     }
 
     try {
-      const url = `${this.baseApiUrl}/webhooks.json`;
+      const url = `${this.getBaseApiUrl(shopDomain)}/webhooks.json`;
       logger.debug(`[Shopify] Fetching webhooks from: ${url}`);
 
       const response = await fetch(url, {
         method: "GET",
         headers: {
-          "X-Shopify-Access-Token": this.accessToken,
+          "X-Shopify-Access-Token": accessToken,
           "Content-Type": "application/json",
         },
       });
@@ -121,9 +97,6 @@ export class ShopifyService {
       }
 
       const data = await response.json();
-      logger.debug(
-        `[Shopify] Found ${data.webhooks?.length || 0} registered webhooks`
-      );
       return data.webhooks || [];
     } catch (error) {
       logger.error("[Shopify] Error listing webhooks:", error);
@@ -135,15 +108,16 @@ export class ShopifyService {
    * Register a new webhook
    */
   async registerWebhook(
+    shopDomain: string,
+    accessToken: string,
     topic: string,
     address: string
   ): Promise<WebhookRegistrationResult> {
-    if (!this.validateCredentials()) {
+    if (!this.validateCredentials(shopDomain, accessToken)) {
       return {
         success: false,
         error: "Missing Shopify credentials",
-        message:
-          "SHOPIFY_SHOP_DOMAIN and SHOPIFY_ACCESS_TOKEN must be configured",
+        message: "shopDomain and accessToken must be provided",
       };
     }
 
@@ -152,7 +126,7 @@ export class ShopifyService {
         `[Shopify] Registering webhook for topic: ${topic} at ${address}`
       );
 
-      const existingWebhooks = await this.listWebhooks();
+      const existingWebhooks = await this.listWebhooks(shopDomain, accessToken);
       const duplicate = existingWebhooks.find(
         (wh) => wh.topic === topic && wh.address === address
       );
@@ -166,11 +140,11 @@ export class ShopifyService {
         };
       }
 
-      const url = `${this.baseApiUrl}/webhooks.json`;
+      const url = `${this.getBaseApiUrl(shopDomain)}/webhooks.json`;
       const response = await fetch(url, {
         method: "POST",
         headers: {
-          "X-Shopify-Access-Token": this.accessToken,
+          "X-Shopify-Access-Token": accessToken,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -217,21 +191,20 @@ export class ShopifyService {
 
   /**
    * Fetch full order details by order ID
-   * Use this as a fallback when webhook payload lacks customer data
    */
-  async getOrder(orderId: number): Promise<any | null> {
-    if (!this.validateCredentials()) {
+  async getOrder(shopDomain: string, accessToken: string, orderId: number): Promise<any | null> {
+    if (!this.validateCredentials(shopDomain, accessToken)) {
       return null;
     }
 
     try {
-      const url = `${this.baseApiUrl}/orders/${orderId}.json`;
+      const url = `${this.getBaseApiUrl(shopDomain)}/orders/${orderId}.json`;
       logger.debug(`[Shopify] Fetching order ${orderId} via API`);
 
       const response = await fetch(url, {
         method: "GET",
         headers: {
-          "X-Shopify-Access-Token": this.accessToken,
+          "X-Shopify-Access-Token": accessToken,
           "Content-Type": "application/json",
         },
       });
@@ -246,16 +219,7 @@ export class ShopifyService {
       }
 
       const data = await response.json();
-      const order = data.order || null;
-      
-      if (order) {
-        logger.debug(`[Shopify] Order API response - has email: ${!!order.email}, has contact_email: ${!!order.contact_email}`);
-        if (!order.email && !order.contact_email) {
-          logger.warn(`[Shopify] Order API returned order but no email field. This may require Protected Customer Data Access + Shopify/Advanced/Plus plan.`);
-        }
-      }
-      
-      return order;
+      return data.order || null;
     } catch (error) {
       logger.error("[Shopify] Error fetching order:", error);
       return null;
@@ -264,21 +228,20 @@ export class ShopifyService {
 
   /**
    * Fetch customer details by customer ID
-   * Use this to get customer email/name when Protected Customer Data Access restricts webhook payloads
    */
-  async getCustomer(customerId: number): Promise<any | null> {
-    if (!this.validateCredentials()) {
+  async getCustomer(shopDomain: string, accessToken: string, customerId: number): Promise<any | null> {
+    if (!this.validateCredentials(shopDomain, accessToken)) {
       return null;
     }
 
     try {
-      const url = `${this.baseApiUrl}/customers/${customerId}.json`;
+      const url = `${this.getBaseApiUrl(shopDomain)}/customers/${customerId}.json`;
       logger.debug(`[Shopify] Fetching customer ${customerId} via API`);
 
       const response = await fetch(url, {
         method: "GET",
         headers: {
-          "X-Shopify-Access-Token": this.accessToken,
+          "X-Shopify-Access-Token": accessToken,
           "Content-Type": "application/json",
         },
       });
@@ -303,19 +266,19 @@ export class ShopifyService {
   /**
    * Delete a webhook by ID
    */
-  async deleteWebhook(webhookId: number): Promise<boolean> {
-    if (!this.validateCredentials()) {
+  async deleteWebhook(shopDomain: string, accessToken: string, webhookId: number): Promise<boolean> {
+    if (!this.validateCredentials(shopDomain, accessToken)) {
       return false;
     }
 
     try {
-      const url = `${this.baseApiUrl}/webhooks/${webhookId}.json`;
+      const url = `${this.getBaseApiUrl(shopDomain)}/webhooks/${webhookId}.json`;
       logger.info(`[Shopify] Deleting webhook ID: ${webhookId}`);
 
       const response = await fetch(url, {
         method: "DELETE",
         headers: {
-          "X-Shopify-Access-Token": this.accessToken,
+          "X-Shopify-Access-Token": accessToken,
           "Content-Type": "application/json",
         },
       });
@@ -338,71 +301,23 @@ export class ShopifyService {
   }
 
   /**
-   * Register the orders/create webhook
-   * Uses APP_URL environment variable for local development or production
-   */
-  async registerOrdersWebhook(): Promise<WebhookRegistrationResult> {
-    if (!process.env.APP_URL) {
-      return {
-        success: false,
-        error: "APP_URL not configured",
-        message:
-          "APP_URL environment variable must be set. For local development, use a tunneling service like ngrok or cloudflared and set APP_URL to your public URL.",
-      };
-    }
-
-    // Use APP_URL for local development or custom production URLs
-    const baseUrl = process.env.APP_URL.replace(/\/$/, ""); // Remove trailing slash
-    const webhookUrl = `${baseUrl}/api/webhooks/shopify/orders/create`;
-
-    logger.info(
-      `[Shopify] Registering orders/create webhook to: ${webhookUrl}`
-    );
-    return this.registerWebhook("orders/create", webhookUrl);
-  }
-
-  /**
-   * Register the orders/updated webhook
-   * Uses APP_URL environment variable for local development or production
-   */
-  async registerOrdersUpdatedWebhook(): Promise<WebhookRegistrationResult> {
-    if (!process.env.APP_URL) {
-      return {
-        success: false,
-        error: "APP_URL not configured",
-        message:
-          "APP_URL environment variable must be set. For local development, use a tunneling service like ngrok or cloudflared and set APP_URL to your public URL.",
-      };
-    }
-
-    // Use APP_URL for local development or custom production URLs
-    const baseUrl = process.env.APP_URL.replace(/\/$/, ""); // Remove trailing slash
-    const webhookUrl = `${baseUrl}/api/webhooks/shopify/orders/updated`;
-
-    logger.info(
-      `[Shopify] Registering orders/updated webhook to: ${webhookUrl}`
-    );
-    return this.registerWebhook("orders/updated", webhookUrl);
-  }
-
-  /**
    * Tag an order in Shopify as a duplicate
    */
-  async tagOrder(orderId: string, tags: string[]): Promise<void> {
-    if (!this.shopDomain || !this.accessToken) {
+  async tagOrder(shopDomain: string, accessToken: string, orderId: string, tags: string[]): Promise<void> {
+    if (!this.validateCredentials(shopDomain, accessToken)) {
       logger.warn(
         "Shopify credentials not configured, skipping order tagging"
       );
       return;
     }
 
-    const url = `${this.baseApiUrl}/orders/${orderId}.json`;
+    const url = `${this.getBaseApiUrl(shopDomain)}/orders/${orderId}.json`;
 
     try {
       const response = await fetch(url, {
         method: "PUT",
         headers: {
-          "X-Shopify-Access-Token": this.accessToken,
+          "X-Shopify-Access-Token": accessToken,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -425,8 +340,8 @@ export class ShopifyService {
   /**
    * Remove a specific tag from an order in Shopify
    */
-  async removeOrderTag(orderId: string, tagToRemove: string): Promise<void> {
-    if (!this.validateCredentials()) {
+  async removeOrderTag(shopDomain: string, accessToken: string, orderId: string, tagToRemove: string): Promise<void> {
+    if (!this.validateCredentials(shopDomain, accessToken)) {
       logger.warn(
         "Shopify credentials not configured, skipping tag removal"
       );
@@ -435,11 +350,11 @@ export class ShopifyService {
 
     try {
       // First, get the current order to see existing tags
-      const url = `${this.baseApiUrl}/orders/${orderId}.json`;
+      const url = `${this.getBaseApiUrl(shopDomain)}/orders/${orderId}.json`;
       const getResponse = await fetch(url, {
         method: "GET",
         headers: {
-          "X-Shopify-Access-Token": this.accessToken,
+          "X-Shopify-Access-Token": accessToken,
           "Content-Type": "application/json",
         },
       });
@@ -459,7 +374,7 @@ export class ShopifyService {
       const updateResponse = await fetch(url, {
         method: "PUT",
         headers: {
-          "X-Shopify-Access-Token": this.accessToken,
+          "X-Shopify-Access-Token": accessToken,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({

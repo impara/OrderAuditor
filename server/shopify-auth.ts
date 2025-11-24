@@ -101,28 +101,34 @@ export async function verifyRequest(
   next: NextFunction
 ) {
   try {
-    const sessionId = await shopify.session.getCurrentId({
-      isOnline: true, // We are verifying an online session token (JWT) from App Bridge
-      rawRequest: req,
-      rawResponse: res,
-    });
-
-    if (!sessionId) {
-      // Check for Bearer token manually if library fails or for different auth schemes
-      const authHeader = req.headers.authorization;
-      if (authHeader?.startsWith("Bearer ")) {
-        const token = authHeader.substring(7);
-        // Verify session token (JWT)
-        const payload = await shopify.session.decodeSessionToken(token);
-        // Store payload in req for downstream use
-        (req as any).shopifySession = payload;
-        next();
-        return;
-      }
-      
-      res.status(401).send("Unauthorized");
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+      res.status(401).send("Unauthorized: Missing Bearer token");
       return;
     }
+
+    const token = authHeader.substring(7);
+    
+    // Verify session token (JWT)
+    const payload = await shopify.session.decodeSessionToken(token);
+    const shop = payload.dest.replace("https://", "");
+    
+    // Load the offline session for this shop to get the access token
+    // The offline session ID is usually "offline_{shop}"
+    const offlineSessionId = shopify.session.getOfflineId(shop);
+    const session = await shopify.config.sessionStorage.loadSession(offlineSessionId);
+
+    if (!session || !session.accessToken) {
+      logger.error(`No offline session found for shop ${shop}`);
+      res.status(401).send("Unauthorized: No valid session found");
+      return;
+    }
+
+    // Store shop and accessToken in res.locals for downstream use
+    res.locals.shopify = {
+      shop,
+      accessToken: session.accessToken,
+    };
 
     next();
   } catch (e: any) {
