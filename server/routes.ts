@@ -49,6 +49,8 @@ function validateReturnUrl(returnUrl: string): string {
   }
 }
 
+import { auth, authCallback, verifyRequest } from "./shopify-auth";
+
 export async function registerRoutes(app: Express): Promise<Server> {
   app.use(
     express.json({
@@ -57,6 +59,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       },
     })
   );
+
+  // Auth Routes
+  app.get("/api/auth", auth);
+  app.get("/api/auth/callback", authCallback);
+
+  // Webhook routes (bypass auth middleware)
+  // ... (webhooks are registered below)
+
+  // Protected API Routes
+  // Apply middleware to all /api routes EXCEPT auth and webhooks
+  app.use("/api", (req, res, next) => {
+    const path = req.path;
+    if (
+      path.startsWith("/auth") ||
+      path.startsWith("/webhooks")
+    ) {
+      next();
+    } else {
+      verifyRequest(req, res, next);
+    }
+  });
 
   app.get("/api/dashboard/stats", async (_req: Request, res: Response) => {
     try {

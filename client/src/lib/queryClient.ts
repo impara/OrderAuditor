@@ -1,5 +1,15 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+declare global {
+  interface Window {
+    shopify?: {
+      id: {
+        getIdToken: () => Promise<string>;
+      };
+    };
+  }
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
@@ -12,9 +22,21 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
+  const headers: Record<string, string> = data ? { "Content-Type": "application/json" } : {};
+  
+  // Add Session Token if available (Shopify App Bridge)
+  if (window.shopify && window.shopify.id) {
+    try {
+      const token = await window.shopify.id.getIdToken();
+      headers["Authorization"] = `Bearer ${token}`;
+    } catch (e) {
+      console.error("Failed to get session token:", e);
+    }
+  }
+
   const res = await fetch(url, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers,
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
@@ -29,7 +51,20 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
+    const headers: Record<string, string> = {};
+    
+    // Add Session Token if available (Shopify App Bridge)
+    if (window.shopify && window.shopify.id) {
+      try {
+        const token = await window.shopify.id.getIdToken();
+        headers["Authorization"] = `Bearer ${token}`;
+      } catch (e) {
+        console.error("Failed to get session token:", e);
+      }
+    }
+
     const res = await fetch(queryKey.join("/") as string, {
+      headers,
       credentials: "include",
     });
 

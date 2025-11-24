@@ -7,6 +7,7 @@ import Dashboard from "@/pages/dashboard";
 import Settings from "@/pages/settings";
 import Subscription from "@/pages/subscription";
 import NotFound from "@/pages/not-found";
+import { AppBridgeProvider } from "@/components/AppBridgeProvider";
 
 function Router() {
   return (
@@ -22,10 +23,12 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Router />
-      </TooltipProvider>
+      <AppBridgeProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Router />
+        </TooltipProvider>
+      </AppBridgeProvider>
     </QueryClientProvider>
   );
 }

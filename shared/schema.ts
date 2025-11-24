@@ -56,6 +56,25 @@ export const auditLogs = pgTable("audit_logs", {
   performedAt: timestamp("performed_at").notNull().default(sql`now()`),
 });
 
+// Shopify Sessions table - stores OAuth sessions
+export const shopifySessions = pgTable("shopify_sessions", {
+  id: varchar("id").primaryKey(), // Session ID from Shopify
+  shop: varchar("shop").notNull(),
+  state: varchar("state").notNull(),
+  isOnline: boolean("is_online").notNull().default(false),
+  scope: text("scope"),
+  expires: timestamp("expires"),
+  accessToken: varchar("access_token"),
+  userId: varchar("user_id"), // Shopify user ID (can be big int, storing as string for safety)
+  firstName: varchar("first_name"),
+  lastName: varchar("last_name"),
+  email: varchar("email"),
+  accountOwner: boolean("account_owner").default(false),
+  locale: varchar("locale"),
+  collaborator: boolean("collaborator").default(false),
+  emailVerified: boolean("email_verified").default(false),
+});
+
 // Subscriptions table - tracks subscription tier and usage
 export const subscriptions = pgTable("subscriptions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -113,6 +132,7 @@ export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type Subscription = typeof subscriptions.$inferSelect;
 export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
 export type UpdateSubscription = z.infer<typeof updateSubscriptionSchema>;
+export type ShopifySession = typeof shopifySessions.$inferSelect;
 
 // Dashboard stats type
 export type DashboardStats = {

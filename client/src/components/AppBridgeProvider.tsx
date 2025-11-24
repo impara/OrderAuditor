@@ -1,0 +1,64 @@
+import { useMemo, useState, useEffect } from "react";
+import { useLocation } from "wouter";
+import { Provider } from "@shopify/app-bridge-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
+
+export function AppBridgeProvider({ children }: { children: React.ReactNode }) {
+    const [location] = useLocation();
+    const [appBridgeConfig, setAppBridgeConfig] = useState<{
+        apiKey: string;
+        host: string;
+        forceRedirect: boolean;
+    } | null>(null);
+
+    useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const host = urlParams.get("host");
+        const apiKey = import.meta.env.VITE_SHOPIFY_API_KEY;
+
+        if (host && apiKey) {
+            setAppBridgeConfig({
+                apiKey,
+                host,
+                forceRedirect: true,
+            });
+        }
+    }, []);
+
+    if (!appBridgeConfig) {
+        // If running locally without host param (e.g. direct browser access), 
+        // we might want to show a message or just render children for dev mode if configured
+        if (import.meta.env.DEV && !window.location.search.includes("host")) {
+            return <>{children}</>;
+        }
+
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+                <Card className="w-full max-w-md">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-amber-600">
+                            <AlertCircle className="h-5 w-5" />
+                            Missing Shopify Context
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <Alert variant="destructive">
+                            <AlertTitle>Error</AlertTitle>
+                            <AlertDescription>
+                                Please launch this app from the Shopify Admin.
+                            </AlertDescription>
+                        </Alert>
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    }
+
+    return (
+        <Provider config={appBridgeConfig}>
+            {children}
+        </Provider>
+    );
+}
