@@ -3,9 +3,7 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 declare global {
   interface Window {
     shopify?: {
-      id: {
-        getIdToken: () => Promise<string>;
-      };
+      idToken: () => Promise<string>;
     };
   }
 }
@@ -25,9 +23,9 @@ export async function apiRequest(
   const headers: Record<string, string> = data ? { "Content-Type": "application/json" } : {};
   
   // Add Session Token if available (Shopify App Bridge)
-  if (window.shopify && window.shopify.id) {
+  if (window.shopify?.idToken) {
     try {
-      const token = await window.shopify.id.getIdToken();
+      const token = await window.shopify.idToken();
       headers["Authorization"] = `Bearer ${token}`;
     } catch (e) {
       console.error("Failed to get session token:", e);
@@ -54,9 +52,9 @@ export const getQueryFn: <T>(options: {
     const headers: Record<string, string> = {};
     
     // Add Session Token if available (Shopify App Bridge)
-    if (window.shopify && window.shopify.id) {
+    if (window.shopify?.idToken) {
       try {
-        const token = await window.shopify.id.getIdToken();
+        const token = await window.shopify.idToken();
         headers["Authorization"] = `Bearer ${token}`;
       } catch (e) {
         console.error("Failed to get session token:", e);
