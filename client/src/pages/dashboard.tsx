@@ -76,7 +76,7 @@ function EmptyState() {
           Your detection rules are running. We'll notify you when duplicates are found.
         </p>
         <Button variant="outline" asChild data-testid="button-adjust-settings">
-          <a href="/settings">Adjust Detection Settings</a>
+          <a href={`/settings${window.location.search}`}>Adjust Detection Settings</a>
         </Button>
       </CardContent>
     </Card>
@@ -406,13 +406,13 @@ export default function Dashboard() {
             </div>
             <nav className="flex gap-4">
               <Button variant="ghost" asChild data-testid="link-dashboard">
-                <a href="/" className="text-sm font-medium">Dashboard</a>
+                <a href={`/${window.location.search}`} className="text-sm font-medium">Dashboard</a>
               </Button>
               <Button variant="ghost" asChild data-testid="link-settings">
-                <a href="/settings" className="text-sm font-medium">Settings</a>
+                <a href={`/settings${window.location.search}`} className="text-sm font-medium">Settings</a>
               </Button>
               <Button variant="ghost" asChild data-testid="link-subscription">
-                <a href="/subscription" className="text-sm font-medium">Subscription</a>
+                <a href={`/subscription${window.location.search}`} className="text-sm font-medium">Subscription</a>
               </Button>
             </nav>
           </div>
