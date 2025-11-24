@@ -764,10 +764,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/subscription", async (_req: Request, res: Response) => {
     try {
       const { shop } = res.locals.shopify;
+      logger.info(`[Subscription] Fetching subscription for shop: ${shop}`);
       const subscription = await subscriptionService.getSubscription(shop);
+      logger.info(`[Subscription] Retrieved subscription:`, subscription);
       res.json(subscription);
     } catch (error) {
       logger.error("Error fetching subscription:", error);
+      logger.error("Stack trace:", error instanceof Error ? error.stack : 'No stack trace');
       res.status(500).json({ error: "Failed to fetch subscription" });
     }
   });
