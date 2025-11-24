@@ -64,6 +64,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/auth", auth);
   app.get("/api/auth/callback", authCallback);
 
+  // Health Check
+  app.get("/api/health", (_req, res) => {
+    res.status(200).json({ status: "ok" });
+  });
+
   // Webhook routes (bypass auth middleware)
   // ... (webhooks are registered below)
 

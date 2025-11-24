@@ -12,9 +12,12 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 # Copy source code
+# Copy source code
 COPY . .
 
 # Build the application
+ARG VITE_SHOPIFY_API_KEY
+ENV VITE_SHOPIFY_API_KEY=$VITE_SHOPIFY_API_KEY
 RUN npm run build
 
 # Stage 2: Production runtime
@@ -51,7 +54,7 @@ EXPOSE 5000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:5000/api/dashboard/stats', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+  CMD node -e "require('http').get('http://localhost:5000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
 # Start the application
 CMD ["node", "dist/index.js"]

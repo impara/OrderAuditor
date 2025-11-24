@@ -23,6 +23,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        VITE_SHOPIFY_API_KEY: ${SHOPIFY_API_KEY}
     container_name: orderauditor-app-prod
     restart: unless-stopped
     environment:
@@ -31,10 +33,10 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       SHOPIFY_SHOP_DOMAIN: ${SHOPIFY_SHOP_DOMAIN}
-      SHOPIFY_ACCESS_TOKEN: ${SHOPIFY_ACCESS_TOKEN}
+      SHOPIFY_API_KEY: ${SHOPIFY_API_KEY}
       SHOPIFY_WEBHOOK_SECRET: ${SHOPIFY_WEBHOOK_SECRET}
       APP_URL: ${APP_URL}
-      VITE_SHOPIFY_SHOP_DOMAIN: ${VITE_SHOPIFY_SHOP_DOMAIN:-${SHOPIFY_SHOP_DOMAIN}}
+      VITE_SHOPIFY_API_KEY: ${SHOPIFY_API_KEY}
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER}
@@ -46,7 +48,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/api/dashboard/stats', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
       interval: 30s
       timeout: 10s
       retries: 3
