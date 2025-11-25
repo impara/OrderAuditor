@@ -7,7 +7,7 @@ import { logger } from "./utils/logger";
 // Initialize Shopify API client
 const shopify = shopifyApi({
   apiKey: process.env.SHOPIFY_API_KEY || "",
-  apiSecretKey: process.env.SHOPIFY_WEBHOOK_SECRET || "", // Using webhook secret as API secret
+  apiSecretKey: process.env.SHOPIFY_API_SECRET || "", // API Secret Key (Client Secret) for OAuth and token validation
   scopes: [
     "read_orders",
     "write_orders",
