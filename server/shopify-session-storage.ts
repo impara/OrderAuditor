@@ -2,16 +2,19 @@ import { Session } from "@shopify/shopify-api";
 import { db } from "./db";
 import { shopifySessions } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { logger } from "./utils/logger";
 
 export class PostgresSessionStorage {
   async storeSession(session: Session): Promise<boolean> {
     try {
+      logger.info(`[SessionStorage] Storing session for shop: ${session.shop}, isOnline: ${session.isOnline}, id: ${session.id}`);
+      
       await db
         .insert(shopifySessions)
         .values({
           id: session.id,
           shop: session.shop,
-          state: session.state,
+          state: session.state || "", // Provide empty string if state is undefined
           isOnline: session.isOnline,
           scope: session.scope,
           expires: session.expires ? new Date(session.expires) : undefined,
@@ -29,7 +32,7 @@ export class PostgresSessionStorage {
           target: shopifySessions.id,
           set: {
             shop: session.shop,
-            state: session.state,
+            state: session.state || "", // Provide empty string if state is undefined
             isOnline: session.isOnline,
             scope: session.scope,
             expires: session.expires ? new Date(session.expires) : undefined,
@@ -44,22 +47,31 @@ export class PostgresSessionStorage {
             emailVerified: session.onlineAccessInfo?.associated_user.email_verified,
           },
         });
+      
+      logger.info(`[SessionStorage] Successfully stored session for shop: ${session.shop}`);
       return true;
-    } catch (error) {
-      console.error("Error storing session:", error);
+    } catch (error: any) {
+      logger.error(`[SessionStorage] FAILED to store session for shop: ${session.shop}`, error);
+      logger.error(`[SessionStorage] Error details: ${error.message}`);
+      logger.error(`[SessionStorage] Error stack: ${error.stack}`);
       return false;
     }
   }
 
   async loadSession(id: string): Promise<Session | undefined> {
     try {
+      logger.debug(`[SessionStorage] Loading session: ${id}`);
+      
       const [row] = await db
         .select()
         .from(shopifySessions)
         .where(eq(shopifySessions.id, id))
         .limit(1);
 
-      if (!row) return undefined;
+      if (!row) {
+        logger.debug(`[SessionStorage] Session not found: ${id}`);
+        return undefined;
+      }
 
       const session = new Session({
         id: row.id,
@@ -88,41 +100,48 @@ export class PostgresSessionStorage {
         };
       }
 
+      logger.debug(`[SessionStorage] Successfully loaded session for shop: ${row.shop}`);
       return session;
-    } catch (error) {
-      console.error("Error loading session:", error);
+    } catch (error: any) {
+      logger.error(`[SessionStorage] Error loading session ${id}:`, error);
       return undefined;
     }
   }
 
   async deleteSession(id: string): Promise<boolean> {
     try {
+      logger.debug(`[SessionStorage] Deleting session: ${id}`);
       await db.delete(shopifySessions).where(eq(shopifySessions.id, id));
       return true;
-    } catch (error) {
-      console.error("Error deleting session:", error);
+    } catch (error: any) {
+      logger.error(`[SessionStorage] Error deleting session ${id}:`, error);
       return false;
     }
   }
 
   async deleteSessions(ids: string[]): Promise<boolean> {
     try {
+      logger.debug(`[SessionStorage] Deleting ${ids.length} sessions`);
       for (const id of ids) {
         await this.deleteSession(id);
       }
       return true;
-    } catch (error) {
-      console.error("Error deleting sessions:", error);
+    } catch (error: any) {
+      logger.error(`[SessionStorage] Error deleting sessions:`, error);
       return false;
     }
   }
 
   async findSessionsByShop(shop: string): Promise<Session[]> {
     try {
+      logger.debug(`[SessionStorage] Finding sessions for shop: ${shop}`);
+      
       const rows = await db
         .select()
         .from(shopifySessions)
         .where(eq(shopifySessions.shop, shop));
+
+      logger.debug(`[SessionStorage] Found ${rows.length} sessions for shop: ${shop}`);
 
       return rows.map((row) => {
         const session = new Session({
@@ -155,8 +174,8 @@ export class PostgresSessionStorage {
         
         return session;
       });
-    } catch (error) {
-      console.error("Error finding sessions by shop:", error);
+    } catch (error: any) {
+      logger.error(`[SessionStorage] Error finding sessions by shop ${shop}:`, error);
       return [];
     }
   }

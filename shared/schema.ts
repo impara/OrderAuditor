@@ -64,7 +64,7 @@ export const auditLogs = pgTable("audit_logs", {
 export const shopifySessions = pgTable("shopify_sessions", {
   id: varchar("id").primaryKey(), // Session ID from Shopify
   shop: varchar("shop").notNull(),
-  state: varchar("state").notNull(),
+  state: varchar("state"), // Nullable - state is only used during OAuth flow, not after
   isOnline: boolean("is_online").notNull().default(false),
   scope: text("scope"),
   expires: timestamp("expires"),
