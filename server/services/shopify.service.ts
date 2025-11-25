@@ -22,12 +22,26 @@ export class ShopifyService {
   private apiVersion: string = "2025-10";
 
   constructor() {
-    // For embedded apps using session tokens, webhook verification uses the API Secret Key
-    // NOT a separate webhook secret. The SHOPIFY_API_SECRET is the Client Secret from Shopify Partners.
-    this.webhookSecret = process.env.SHOPIFY_API_SECRET || process.env.SHOPIFY_WEBHOOK_SECRET || "";
-    
+    // Shopify webhooks use a separate webhook secret for HMAC verification
+    // This is different from the Client Secret (SHOPIFY_API_SECRET) used for OAuth
+    // Priority: SHOPIFY_WEBHOOK_SECRET > SHOPIFY_API_SECRET (fallback for older apps)
+    this.webhookSecret =
+      process.env.SHOPIFY_WEBHOOK_SECRET ||
+      process.env.SHOPIFY_API_SECRET ||
+      "";
+
     if (!this.webhookSecret) {
-      logger.error("[ShopifyService] CRITICAL: SHOPIFY_API_SECRET not set! Webhook verification will fail.");
+      logger.error(
+        "[ShopifyService] CRITICAL: Neither SHOPIFY_WEBHOOK_SECRET nor SHOPIFY_API_SECRET is set! Webhook verification will fail."
+      );
+    } else if (process.env.SHOPIFY_WEBHOOK_SECRET) {
+      logger.info(
+        "[ShopifyService] Using SHOPIFY_WEBHOOK_SECRET for webhook verification"
+      );
+    } else {
+      logger.warn(
+        "[ShopifyService] Using SHOPIFY_API_SECRET as fallback for webhook verification (consider setting SHOPIFY_WEBHOOK_SECRET)"
+      );
     }
   }
 
@@ -35,7 +49,10 @@ export class ShopifyService {
     return `https://${shopDomain}/admin/api/${this.apiVersion}`;
   }
 
-  private validateCredentials(shopDomain: string, accessToken: string): boolean {
+  private validateCredentials(
+    shopDomain: string,
+    accessToken: string
+  ): boolean {
     if (!shopDomain || !accessToken) {
       logger.error("Shopify credentials not provided");
       return false;
@@ -55,9 +72,17 @@ export class ShopifyService {
     }
 
     logger.debug(`[ShopifyService] Verifying webhook signature...`);
-    logger.debug(`[ShopifyService] Webhook secret length: ${this.webhookSecret.length}`);
-    logger.debug(`[ShopifyService] HMAC header: ${hmacHeader.substring(0, 10)}...`);
-    logger.debug(`[ShopifyService] Body length: ${Buffer.isBuffer(body) ? body.length : body.length} bytes`);
+    logger.debug(
+      `[ShopifyService] Webhook secret length: ${this.webhookSecret.length}`
+    );
+    logger.debug(
+      `[ShopifyService] HMAC header: ${hmacHeader.substring(0, 10)}...`
+    );
+    logger.debug(
+      `[ShopifyService] Body length: ${
+        Buffer.isBuffer(body) ? body.length : body.length
+      } bytes`
+    );
 
     // Calculate HMAC on raw bytes (Buffer) - Shopify calculates HMAC on raw request body
     const hash = crypto
@@ -65,8 +90,12 @@ export class ShopifyService {
       .update(body)
       .digest("base64");
 
-    logger.debug(`[ShopifyService] Calculated hash: ${hash.substring(0, 10)}...`);
-    logger.debug(`[ShopifyService] Expected hash:   ${hmacHeader.substring(0, 10)}...`);
+    logger.debug(
+      `[ShopifyService] Calculated hash: ${hash.substring(0, 10)}...`
+    );
+    logger.debug(
+      `[ShopifyService] Expected hash:   ${hmacHeader.substring(0, 10)}...`
+    );
 
     try {
       const isValid = crypto.timingSafeEqual(
@@ -77,7 +106,9 @@ export class ShopifyService {
       return isValid;
     } catch (error: any) {
       logger.error("[ShopifyService] timingSafeEqual error:", error);
-      logger.error(`[ShopifyService] Hash lengths - calculated: ${hash.length}, header: ${hmacHeader.length}`);
+      logger.error(
+        `[ShopifyService] Hash lengths - calculated: ${hash.length}, header: ${hmacHeader.length}`
+      );
       return false;
     }
   }
@@ -85,7 +116,10 @@ export class ShopifyService {
   /**
    * List all registered webhooks
    */
-  async listWebhooks(shopDomain: string, accessToken: string): Promise<ShopifyWebhook[]> {
+  async listWebhooks(
+    shopDomain: string,
+    accessToken: string
+  ): Promise<ShopifyWebhook[]> {
     if (!this.validateCredentials(shopDomain, accessToken)) {
       return [];
     }
@@ -209,7 +243,11 @@ export class ShopifyService {
   /**
    * Fetch full order details by order ID
    */
-  async getOrder(shopDomain: string, accessToken: string, orderId: number): Promise<any | null> {
+  async getOrder(
+    shopDomain: string,
+    accessToken: string,
+    orderId: number
+  ): Promise<any | null> {
     if (!this.validateCredentials(shopDomain, accessToken)) {
       return null;
     }
@@ -246,13 +284,19 @@ export class ShopifyService {
   /**
    * Fetch customer details by customer ID
    */
-  async getCustomer(shopDomain: string, accessToken: string, customerId: number): Promise<any | null> {
+  async getCustomer(
+    shopDomain: string,
+    accessToken: string,
+    customerId: number
+  ): Promise<any | null> {
     if (!this.validateCredentials(shopDomain, accessToken)) {
       return null;
     }
 
     try {
-      const url = `${this.getBaseApiUrl(shopDomain)}/customers/${customerId}.json`;
+      const url = `${this.getBaseApiUrl(
+        shopDomain
+      )}/customers/${customerId}.json`;
       logger.debug(`[Shopify] Fetching customer ${customerId} via API`);
 
       const response = await fetch(url, {
@@ -283,13 +327,19 @@ export class ShopifyService {
   /**
    * Delete a webhook by ID
    */
-  async deleteWebhook(shopDomain: string, accessToken: string, webhookId: number): Promise<boolean> {
+  async deleteWebhook(
+    shopDomain: string,
+    accessToken: string,
+    webhookId: number
+  ): Promise<boolean> {
     if (!this.validateCredentials(shopDomain, accessToken)) {
       return false;
     }
 
     try {
-      const url = `${this.getBaseApiUrl(shopDomain)}/webhooks/${webhookId}.json`;
+      const url = `${this.getBaseApiUrl(
+        shopDomain
+      )}/webhooks/${webhookId}.json`;
       logger.info(`[Shopify] Deleting webhook ID: ${webhookId}`);
 
       const response = await fetch(url, {
@@ -320,11 +370,14 @@ export class ShopifyService {
   /**
    * Tag an order in Shopify as a duplicate
    */
-  async tagOrder(shopDomain: string, accessToken: string, orderId: string, tags: string[]): Promise<void> {
+  async tagOrder(
+    shopDomain: string,
+    accessToken: string,
+    orderId: string,
+    tags: string[]
+  ): Promise<void> {
     if (!this.validateCredentials(shopDomain, accessToken)) {
-      logger.warn(
-        "Shopify credentials not configured, skipping order tagging"
-      );
+      logger.warn("Shopify credentials not configured, skipping order tagging");
       return;
     }
 
@@ -357,11 +410,14 @@ export class ShopifyService {
   /**
    * Remove a specific tag from an order in Shopify
    */
-  async removeOrderTag(shopDomain: string, accessToken: string, orderId: string, tagToRemove: string): Promise<void> {
+  async removeOrderTag(
+    shopDomain: string,
+    accessToken: string,
+    orderId: string,
+    tagToRemove: string
+  ): Promise<void> {
     if (!this.validateCredentials(shopDomain, accessToken)) {
-      logger.warn(
-        "Shopify credentials not configured, skipping tag removal"
-      );
+      logger.warn("Shopify credentials not configured, skipping tag removal");
       return;
     }
 
@@ -382,10 +438,14 @@ export class ShopifyService {
 
       const data = await getResponse.json();
       const order = data.order;
-      const currentTags = order.tags ? order.tags.split(", ").filter((t: string) => t.trim()) : [];
+      const currentTags = order.tags
+        ? order.tags.split(", ").filter((t: string) => t.trim())
+        : [];
 
       // Remove the specified tag
-      const updatedTags = currentTags.filter((tag: string) => tag.trim() !== tagToRemove.trim());
+      const updatedTags = currentTags.filter(
+        (tag: string) => tag.trim() !== tagToRemove.trim()
+      );
 
       // Update the order with the new tags
       const updateResponse = await fetch(url, {
@@ -406,7 +466,9 @@ export class ShopifyService {
         throw new Error(`Shopify API error: ${updateResponse.statusText}`);
       }
 
-      logger.info(`[Shopify] Removed tag "${tagToRemove}" from order ${orderId}`);
+      logger.info(
+        `[Shopify] Removed tag "${tagToRemove}" from order ${orderId}`
+      );
     } catch (error) {
       logger.error("Failed to remove tag from order in Shopify:", error);
       throw error;

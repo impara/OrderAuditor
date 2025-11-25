@@ -76,10 +76,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Apply middleware to all /api routes EXCEPT auth and webhooks
   app.use("/api", (req, res, next) => {
     const path = req.path;
-    if (
-      path.startsWith("/auth") ||
-      path.startsWith("/webhooks")
-    ) {
+    if (path.startsWith("/auth") || path.startsWith("/webhooks")) {
       next();
     } else {
       verifyRequest(req, res, next);
@@ -233,20 +230,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { shop, accessToken } = res.locals.shopify;
       logger.info("[API] Webhook registration requested");
-      
+
       if (!process.env.APP_URL) {
         return res.status(500).json({ error: "APP_URL not configured" });
       }
-      
+
       const baseUrl = process.env.APP_URL.replace(/\/$/, "");
-      
+
       const ordersCreateResult = await shopifyService.registerWebhook(
         shop,
         accessToken,
         "orders/create",
         `${baseUrl}/api/webhooks/shopify/orders/create`
       );
-      
+
       const ordersUpdatedResult = await shopifyService.registerWebhook(
         shop,
         accessToken,
@@ -337,34 +334,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     "/api/webhooks/shopify/orders/create",
     async (req: any, res: Response) => {
       try {
-        const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
-        const shopDomain = req.get("X-Shopify-Shop-Domain");
-        const topic = req.get("X-Shopify-Topic");
-        // With express.raw middleware, req.body is the raw Buffer
-        const rawBody: Buffer = req.body;
+        // With express.text middleware, req.body is a string
+        const rawBody: string = req.body;
 
-        logger.debug(`[Webhook] Received webhook for shop: ${shopDomain}, topic: ${topic}`);
-        logger.debug(`[Webhook] Body size: ${rawBody.length} bytes`);
-        logger.debug(`[Webhook] HMAC header present: ${!!hmacHeader}`);
+        logger.debug(
+          `[Webhook] Received webhook, body size: ${rawBody.length} bytes`
+        );
 
-        // Verify HMAC signature using raw bytes
-        if (!hmacHeader) {
-          logger.error("[Webhook] ❌ Missing HMAC header");
-          return res
-            .status(401)
-            .json({ error: "Missing webhook signature header" });
-        }
+        // Validate webhook using Shopify API library (handles HMAC verification automatically)
+        const validation = await shopify.webhooks.validate({
+          rawBody,
+          rawRequest: req,
+          rawResponse: res,
+        });
 
-        const isValid = shopifyService.verifyWebhook(rawBody, hmacHeader);
-        if (!isValid) {
+        if (!validation.valid) {
           logger.warn("[Webhook] ❌ Invalid webhook signature");
           return res.status(401).json({ error: "Invalid webhook signature" });
         }
 
-        logger.debug("[Webhook] ✅ Signature verified successfully!");
+        const shopDomain = validation.domain;
+        const topic = validation.topic;
+        if (!shopDomain) {
+          logger.error("[Webhook] ❌ Missing shop domain in validated webhook");
+          return res.status(400).json({ error: "Missing shop domain" });
+        }
+
+        logger.debug(
+          `[Webhook] ✅ Signature verified successfully! Shop: ${shopDomain}, Topic: ${
+            topic || "unknown"
+          }`
+        );
 
         // Parse JSON after verification
-        const shopifyOrder = JSON.parse(rawBody.toString("utf8"));
+        const shopifyOrder = JSON.parse(rawBody);
 
         // Load session to get access token
         let accessToken = "";
@@ -610,7 +613,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // Send notifications if enabled
           try {
-            const updatedOrder = await storage.getOrder(shopDomain, flaggedOrder.id);
+            const updatedOrder = await storage.getOrder(
+              shopDomain,
+              flaggedOrder.id
+            );
             const duplicateOfOrder = await storage.getOrder(
               shopDomain,
               duplicateMatch.order.id
@@ -641,7 +647,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           }
 
-          const updatedOrder = await storage.getOrder(shopDomain, flaggedOrder.id);
+          const updatedOrder = await storage.getOrder(
+            shopDomain,
+            flaggedOrder.id
+          );
           res.json({
             success: true,
             flagged: true,
@@ -676,34 +685,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     "/api/webhooks/shopify/orders/updated",
     async (req: any, res: Response) => {
       try {
-        const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
-        const shopDomain = req.get("X-Shopify-Shop-Domain");
-        const topic = req.get("X-Shopify-Topic");
-        // With express.raw middleware, req.body is the raw Buffer
-        const rawBody: Buffer = req.body;
+        // With express.text middleware, req.body is a string
+        const rawBody: string = req.body;
 
-        logger.debug(`[Webhook] Received orders/updated webhook for shop: ${shopDomain}`);
-        logger.debug(`[Webhook] Body size: ${rawBody.length} bytes`);
-        logger.debug(`[Webhook] HMAC header present: ${!!hmacHeader}`);
+        logger.debug(
+          `[Webhook] Received orders/updated webhook, body size: ${rawBody.length} bytes`
+        );
 
-        // Verify HMAC signature using raw bytes
-        if (!hmacHeader) {
-          logger.error("[Webhook] ❌ Missing HMAC header");
-          return res
-            .status(401)
-            .json({ error: "Missing webhook signature header" });
-        }
+        // Validate webhook using Shopify API library (handles HMAC verification automatically)
+        const validation = await shopify.webhooks.validate({
+          rawBody,
+          rawRequest: req,
+          rawResponse: res,
+        });
 
-        const isValid = shopifyService.verifyWebhook(rawBody, hmacHeader);
-        if (!isValid) {
+        if (!validation.valid) {
           logger.warn("[Webhook] ❌ Invalid webhook signature");
           return res.status(401).json({ error: "Invalid webhook signature" });
         }
 
-        logger.debug("[Webhook] ✅ Signature verified successfully!");
+        const shopDomain = validation.domain;
+        const topic = validation.topic;
+        if (!shopDomain) {
+          logger.error("[Webhook] ❌ Missing shop domain in validated webhook");
+          return res.status(400).json({ error: "Missing shop domain" });
+        }
+
+        logger.debug(
+          `[Webhook] ✅ Signature verified successfully! Shop: ${shopDomain}, Topic: ${
+            topic || "unknown"
+          }`
+        );
 
         // Parse JSON after verification
-        const shopifyOrder = JSON.parse(rawBody.toString("utf8"));
+        const shopifyOrder = JSON.parse(rawBody);
 
         // Check if order exists in our database
         const order = await storage.getOrderByShopifyId(
@@ -767,7 +782,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     }
   );
-  
+
   // Subscription endpoints
   app.get("/api/subscription", async (_req: Request, res: Response) => {
     try {
@@ -778,7 +793,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(subscription);
     } catch (error) {
       logger.error("Error fetching subscription:", error);
-      logger.error("Stack trace:", error instanceof Error ? error.stack : 'No stack trace');
+      logger.error(
+        "Stack trace:",
+        error instanceof Error ? error.stack : "No stack trace"
+      );
       res.status(500).json({ error: "Failed to fetch subscription" });
     }
   });
@@ -827,7 +845,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({ error: "chargeId is required" });
         }
 
-        const success = await shopifyBillingService.activateCharge(shop, accessToken, chargeId);
+        const success = await shopifyBillingService.activateCharge(
+          shop,
+          accessToken,
+          chargeId
+        );
         if (!success) {
           return res.status(500).json({ error: "Failed to activate charge" });
         }
