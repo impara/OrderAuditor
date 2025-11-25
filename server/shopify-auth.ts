@@ -1,9 +1,5 @@
 import "@shopify/shopify-api/adapters/node";
-import {
-  shopifyApi,
-  ApiVersion,
-  BillingInterval,
-} from "@shopify/shopify-api";
+import { shopifyApi, ApiVersion, BillingInterval } from "@shopify/shopify-api";
 import { PostgresSessionStorage } from "./shopify-session-storage";
 import { Request, Response, NextFunction } from "express";
 import { logger } from "./utils/logger";
@@ -34,7 +30,7 @@ export async function auth(req: Request, res: Response) {
       res.status(500).send("No shop provided");
       return;
     }
-    
+
     // The library handles the redirect to Shopify
     await shopify.auth.begin({
       shop: shopify.utils.sanitizeShop(req.query.shop as string, true)!,
@@ -57,7 +53,7 @@ export async function authCallback(req: Request, res: Response) {
     });
 
     const { session } = callback;
-    
+
     // Register webhooks after auth
     const response = await shopify.webhooks.register({
       session,
@@ -70,7 +66,7 @@ export async function authCallback(req: Request, res: Response) {
         )}`
       );
     }
-    
+
     if (!response["orders/updated"]?.[0]?.success) {
       logger.error(
         `Failed to register orders/updated webhook: ${JSON.stringify(
@@ -82,13 +78,12 @@ export async function authCallback(req: Request, res: Response) {
     // Redirect to app with host param
     const host = req.query.host;
     const shop = session.shop;
-    
+
     // Redirect to the embedded app URL
     // If running locally with ngrok, this might be different, but standard flow is:
     // https://admin.shopify.com/store/{shop}/apps/{api_key}
     // But since we are serving the frontend from the same domain, we can redirect to /?shop=...&host=...
     res.redirect(`/?shop=${shop}&host=${host}`);
-    
   } catch (e: any) {
     logger.error(`Failed to complete auth callback: ${e.message}`);
     res.status(500).send(e.message);
@@ -102,27 +97,40 @@ export async function verifyRequest(
 ) {
   try {
     const authHeader = req.headers.authorization;
+    logger.debug(`[Auth] Verifying request to ${req.path}`);
+    logger.debug(`[Auth] Authorization header present: ${!!authHeader}`);
+
     if (!authHeader?.startsWith("Bearer ")) {
+      logger.warn(`[Auth] Missing or invalid Bearer token for ${req.path}`);
       res.status(401).send("Unauthorized: Missing Bearer token");
       return;
     }
 
     const token = authHeader.substring(7);
-    
+    logger.debug(`[Auth] Token length: ${token.length}`);
+
     // Verify session token (JWT)
     const payload = await shopify.session.decodeSessionToken(token);
     const shop = payload.dest.replace("https://", "");
-    
+    logger.debug(`[Auth] Decoded token for shop: ${shop}`);
+
     // Load the offline session for this shop to get the access token
     // The offline session ID is usually "offline_{shop}"
     const offlineSessionId = shopify.session.getOfflineId(shop);
-    const session = await shopify.config.sessionStorage.loadSession(offlineSessionId);
+    logger.debug(`[Auth] Looking for offline session: ${offlineSessionId}`);
+    const session = await shopify.config.sessionStorage.loadSession(
+      offlineSessionId
+    );
 
     if (!session || !session.accessToken) {
-      logger.error(`No offline session found for shop ${shop}`);
+      logger.error(`[Auth] No offline session found for shop ${shop}`);
       res.status(401).send("Unauthorized: No valid session found");
       return;
     }
+
+    logger.debug(
+      `[Auth] Session found for shop ${shop}, authentication successful`
+    );
 
     // Store shop and accessToken in res.locals for downstream use
     res.locals.shopify = {
@@ -132,7 +140,8 @@ export async function verifyRequest(
 
     next();
   } catch (e: any) {
-    logger.error(`Failed to verify request: ${e.message}`);
+    logger.error(`[Auth] Failed to verify request: ${e.message}`);
+    logger.debug(`[Auth] Error stack: ${e.stack}`);
     res.status(401).send("Unauthorized");
   }
 }

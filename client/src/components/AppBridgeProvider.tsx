@@ -1,9 +1,23 @@
 import { useMemo, useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { Provider } from "@shopify/app-bridge-react";
+import { Provider, useAppBridge } from "@shopify/app-bridge-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
+import { setAppBridge } from "@/lib/queryClient";
+
+function AppBridgeInitializer({ children }: { children: React.ReactNode }) {
+    const app = useAppBridge();
+
+    useEffect(() => {
+        if (app) {
+            setAppBridge(app);
+            console.log("App Bridge initialized successfully");
+        }
+    }, [app]);
+
+    return <>{children}</>;
+}
 
 export function AppBridgeProvider({ children }: { children: React.ReactNode }) {
     const [location] = useLocation();
@@ -16,7 +30,16 @@ export function AppBridgeProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
         const host = urlParams.get("host");
+        const shop = urlParams.get("shop");
         const apiKey = import.meta.env.VITE_SHOPIFY_API_KEY;
+
+        console.log("[AppBridge] Initializing with:", {
+            host: host ? "present" : "missing",
+            shop: shop || "missing",
+            apiKey: apiKey ? "present" : "missing",
+            isInIframe: window !== window.parent,
+            location: window.location.href
+        });
 
         if (host && apiKey) {
             setAppBridgeConfig({
@@ -58,7 +81,9 @@ export function AppBridgeProvider({ children }: { children: React.ReactNode }) {
 
     return (
         <Provider config={appBridgeConfig}>
-            {children}
+            <AppBridgeInitializer>
+                {children}
+            </AppBridgeInitializer>
         </Provider>
     );
 }
