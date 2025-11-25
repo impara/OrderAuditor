@@ -349,7 +349,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         if (!validation.valid) {
-          logger.warn("[Webhook] ❌ Invalid webhook signature");
+          logger.warn(`[Webhook] ❌ Invalid webhook signature. Reason: ${validation.reason || 'unknown'}`);
+          if (validation.missingHeaders) {
+            logger.warn(`[Webhook] Missing headers: ${validation.missingHeaders.join(', ')}`);
+          }
           return res.status(401).json({ error: "Invalid webhook signature" });
         }
 
@@ -700,7 +703,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         if (!validation.valid) {
-          logger.warn("[Webhook] ❌ Invalid webhook signature");
+          logger.warn(`[Webhook] ❌ Invalid webhook signature. Reason: ${validation.reason || 'unknown'}`);
+          if (validation.missingHeaders) {
+            logger.warn(`[Webhook] Missing headers: ${validation.missingHeaders.join(', ')}`);
+          }
           return res.status(401).json({ error: "Invalid webhook signature" });
         }
 
