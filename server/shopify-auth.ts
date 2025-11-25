@@ -47,12 +47,25 @@ export async function auth(req: Request, res: Response) {
 
 export async function authCallback(req: Request, res: Response) {
   try {
+    logger.info(`[AuthCallback] Starting OAuth callback`);
+
     const callback = await shopify.auth.callback({
       rawRequest: req,
       rawResponse: res,
     });
 
     const { session } = callback;
+    logger.info(
+      `[AuthCallback] OAuth callback completed, session ID: ${session.id}, shop: ${session.shop}, isOnline: ${session.isOnline}`
+    );
+    logger.info(
+      `[AuthCallback] Session has accessToken: ${!!session.accessToken}`
+    );
+
+    // Manually store the session to ensure it's saved
+    logger.info(`[AuthCallback] Manually storing session...`);
+    const stored = await shopify.config.sessionStorage!.storeSession(session);
+    logger.info(`[AuthCallback] Manual session storage result: ${stored}`);
 
     // Register webhooks after auth
     const response = await shopify.webhooks.register({

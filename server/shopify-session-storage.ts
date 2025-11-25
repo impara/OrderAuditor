@@ -1,13 +1,14 @@
-import { Session } from "@shopify/shopify-api";
+import { Session, SessionStorage } from "@shopify/shopify-api";
 import { db } from "./db";
 import { shopifySessions } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { logger } from "./utils/logger";
 
-export class PostgresSessionStorage {
+export class PostgresSessionStorage implements SessionStorage {
   async storeSession(session: Session): Promise<boolean> {
+    logger.info(`[SessionStorage] *** storeSession CALLED *** for shop: ${session.shop}, isOnline: ${session.isOnline}, id: ${session.id}`);
     try {
-      logger.info(`[SessionStorage] Storing session for shop: ${session.shop}, isOnline: ${session.isOnline}, id: ${session.id}`);
+      logger.info(`[SessionStorage] Attempting database insert...`);
       
       await db
         .insert(shopifySessions)
