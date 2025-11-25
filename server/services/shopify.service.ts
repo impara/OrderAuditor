@@ -22,7 +22,13 @@ export class ShopifyService {
   private apiVersion: string = "2025-10";
 
   constructor() {
-    this.webhookSecret = process.env.SHOPIFY_WEBHOOK_SECRET || "";
+    // For embedded apps using session tokens, webhook verification uses the API Secret Key
+    // NOT a separate webhook secret. The SHOPIFY_API_SECRET is the Client Secret from Shopify Partners.
+    this.webhookSecret = process.env.SHOPIFY_API_SECRET || process.env.SHOPIFY_WEBHOOK_SECRET || "";
+    
+    if (!this.webhookSecret) {
+      logger.error("[ShopifyService] CRITICAL: SHOPIFY_API_SECRET not set! Webhook verification will fail.");
+    }
   }
 
   private getBaseApiUrl(shopDomain: string): string {
@@ -48,19 +54,30 @@ export class ShopifyService {
       return false;
     }
 
+    logger.debug(`[ShopifyService] Verifying webhook signature...`);
+    logger.debug(`[ShopifyService] Webhook secret length: ${this.webhookSecret.length}`);
+    logger.debug(`[ShopifyService] HMAC header: ${hmacHeader.substring(0, 10)}...`);
+    logger.debug(`[ShopifyService] Body length: ${Buffer.isBuffer(body) ? body.length : body.length} bytes`);
+
     // Calculate HMAC on raw bytes (Buffer) - Shopify calculates HMAC on raw request body
     const hash = crypto
       .createHmac("sha256", this.webhookSecret)
       .update(body)
       .digest("base64");
 
+    logger.debug(`[ShopifyService] Calculated hash: ${hash.substring(0, 10)}...`);
+    logger.debug(`[ShopifyService] Expected hash:   ${hmacHeader.substring(0, 10)}...`);
+
     try {
-      return crypto.timingSafeEqual(
+      const isValid = crypto.timingSafeEqual(
         Buffer.from(hash),
         Buffer.from(hmacHeader)
       );
-    } catch (error) {
+      logger.debug(`[ShopifyService] Signature validation result: ${isValid}`);
+      return isValid;
+    } catch (error: any) {
       logger.error("[ShopifyService] timingSafeEqual error:", error);
+      logger.error(`[ShopifyService] Hash lengths - calculated: ${hash.length}, header: ${hmacHeader.length}`);
       return false;
     }
   }

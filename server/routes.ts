@@ -339,10 +339,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
         const shopDomain = req.get("X-Shopify-Shop-Domain");
+        const topic = req.get("X-Shopify-Topic");
         // With express.raw middleware, req.body is the raw Buffer
         const rawBody: Buffer = req.body;
 
-        logger.debug(`[Webhook] Received webhook for shop: ${shopDomain}`);
+        logger.debug(`[Webhook] Received webhook for shop: ${shopDomain}, topic: ${topic}`);
+        logger.debug(`[Webhook] Body size: ${rawBody.length} bytes`);
+        logger.debug(`[Webhook] HMAC header present: ${!!hmacHeader}`);
 
         // Verify HMAC signature using raw bytes
         if (!hmacHeader) {
@@ -352,7 +355,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .json({ error: "Missing webhook signature header" });
         }
 
-        if (!shopifyService.verifyWebhook(rawBody, hmacHeader)) {
+        const isValid = shopifyService.verifyWebhook(rawBody, hmacHeader);
+        if (!isValid) {
           logger.warn("[Webhook] ❌ Invalid webhook signature");
           return res.status(401).json({ error: "Invalid webhook signature" });
         }
@@ -674,10 +678,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
         const shopDomain = req.get("X-Shopify-Shop-Domain");
+        const topic = req.get("X-Shopify-Topic");
         // With express.raw middleware, req.body is the raw Buffer
         const rawBody: Buffer = req.body;
 
-        logger.debug("[Webhook] Received orders/updated webhook");
+        logger.debug(`[Webhook] Received orders/updated webhook for shop: ${shopDomain}`);
+        logger.debug(`[Webhook] Body size: ${rawBody.length} bytes`);
+        logger.debug(`[Webhook] HMAC header present: ${!!hmacHeader}`);
 
         // Verify HMAC signature using raw bytes
         if (!hmacHeader) {
@@ -687,7 +694,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .json({ error: "Missing webhook signature header" });
         }
 
-        if (!shopifyService.verifyWebhook(rawBody, hmacHeader)) {
+        const isValid = shopifyService.verifyWebhook(rawBody, hmacHeader);
+        if (!isValid) {
           logger.warn("[Webhook] ❌ Invalid webhook signature");
           return res.status(401).json({ error: "Invalid webhook signature" });
         }
