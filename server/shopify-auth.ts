@@ -170,7 +170,7 @@ async function decodeSessionTokenWithClockTolerance(token: string) {
   try {
     const { payload } = await jose.jwtVerify(token, secretKey, {
       algorithms: ["HS256"],
-      clockTolerance: 60, // 60 seconds tolerance
+      clockTolerance: 120, // 120 seconds tolerance to handle larger drifts
     });
 
     // Validate audience

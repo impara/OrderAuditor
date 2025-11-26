@@ -334,12 +334,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     "/api/webhooks/shopify/orders/create",
     async (req: any, res: Response) => {
       try {
-        // With express.text middleware, req.body is a string
-        const rawBody: string = req.body;
+        // With express.raw middleware, req.body is a Buffer
+        const rawBody: Buffer = req.body;
 
         logger.debug(
           `[Webhook] Received webhook, body size: ${rawBody.length} bytes`
         );
+        logger.debug(`[Webhook] Body is Buffer: ${Buffer.isBuffer(rawBody)}`);
+        logger.debug(`[Webhook] Body preview: ${rawBody.toString('utf8').substring(0, 50)}...`);
 
         // Validate webhook using custom service
         const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
@@ -373,7 +375,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
 
         // Parse JSON after verification
-        const shopifyOrder = JSON.parse(rawBody);
+        const shopifyOrder = JSON.parse(rawBody.toString('utf8'));
 
         // Load session to get access token
         let accessToken = "";
@@ -691,12 +693,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     "/api/webhooks/shopify/orders/updated",
     async (req: any, res: Response) => {
       try {
-        // With express.text middleware, req.body is a string
-        const rawBody: string = req.body;
+        // With express.raw middleware, req.body is a Buffer
+        const rawBody: Buffer = req.body;
 
         logger.debug(
           `[Webhook] Received orders/updated webhook, body size: ${rawBody.length} bytes`
         );
+        logger.debug(`[Webhook] Body is Buffer: ${Buffer.isBuffer(rawBody)}`);
+        logger.debug(`[Webhook] Body preview: ${rawBody.toString('utf8').substring(0, 50)}...`);
 
         // Validate webhook using custom service
         const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
@@ -730,7 +734,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
 
         // Parse JSON after verification
-        const shopifyOrder = JSON.parse(rawBody);
+        const shopifyOrder = JSON.parse(rawBody.toString('utf8'));
 
         // Check if order exists in our database
         const order = await storage.getOrderByShopifyId(

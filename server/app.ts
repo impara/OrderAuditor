@@ -22,8 +22,8 @@ declare module 'http' {
   }
 }
 
-// Use express.text for Shopify webhooks - library expects body as string for validation
-app.use('/api/webhooks/shopify', express.text({ type: '*/*' }));
+// Use express.raw for Shopify webhooks to preserve byte-for-byte body for HMAC verification
+app.use('/api/webhooks/shopify', express.raw({ type: 'application/json' }));
 
 // Use express.json for all other routes
 app.use(express.json());
