@@ -1,5 +1,5 @@
 import "@shopify/shopify-api/adapters/node";
-import { shopifyApi, ApiVersion, BillingInterval } from "@shopify/shopify-api";
+import { shopifyApi, ApiVersion, BillingInterval, DeliveryMethod } from "@shopify/shopify-api";
 import { PostgresSessionStorage } from "./shopify-session-storage";
 import { Request, Response, NextFunction } from "express";
 import { logger } from "./utils/logger";
@@ -22,6 +22,18 @@ const shopify = shopifyApi({
   apiVersion: ApiVersion.October24,
   isEmbeddedApp: true,
   sessionStorage: new PostgresSessionStorage(),
+});
+
+// Register webhook handlers
+shopify.webhooks.addHandlers({
+  "orders/create": {
+    deliveryMethod: DeliveryMethod.Http,
+    callbackUrl: "/api/webhooks/shopify/orders/create",
+  },
+  "orders/updated": {
+    deliveryMethod: DeliveryMethod.Http,
+    callbackUrl: "/api/webhooks/shopify/orders/updated",
+  },
 });
 
 export { shopify };
