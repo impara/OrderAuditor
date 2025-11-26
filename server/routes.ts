@@ -76,7 +76,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Apply middleware to all /api routes EXCEPT auth and webhooks
   app.use("/api", (req, res, next) => {
     const path = req.path;
-    if (path.startsWith("/auth") || path.startsWith("/webhooks")) {
+    if (path.startsWith("/auth") || path.startsWith("/webhooks/shopify")) {
       next();
     } else {
       verifyRequest(req, res, next);
