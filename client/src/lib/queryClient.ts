@@ -72,6 +72,22 @@ async function getAuthToken(): Promise<string> {
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
+    if (res.status === 401) {
+      console.warn("[Auth] 401 Unauthorized received. Attempting to handle re-auth...");
+      try {
+        const data = await res.json();
+        if (data.retryAuth && data.shop) {
+          console.log(`[Auth] Redirecting to auth for shop: ${data.shop}`);
+          // Redirect to auth endpoint to start OAuth flow again
+          window.location.href = `/api/auth?shop=${data.shop}`;
+          // Return a promise that never resolves to pause execution while redirecting
+          return new Promise(() => {});
+        }
+      } catch (e) {
+        console.error("[Auth] Failed to parse 401 response for re-auth details", e);
+      }
+    }
+    
     const text = (await res.text()) || res.statusText;
     throw new Error(`${res.status}: ${text}`);
   }

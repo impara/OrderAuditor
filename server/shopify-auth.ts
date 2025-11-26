@@ -141,7 +141,12 @@ export async function verifyRequest(
 
     if (!session || !session.accessToken) {
       logger.error(`[Auth] No offline session found for shop ${shop}`);
-      res.status(401).send("Unauthorized: No valid session found");
+      // Return JSON with shop so frontend can redirect
+      res.status(401).json({ 
+        message: "Unauthorized: No valid session found",
+        shop: shop,
+        retryAuth: true
+      });
       return;
     }
 
@@ -159,7 +164,7 @@ export async function verifyRequest(
   } catch (e: any) {
     logger.error(`[Auth] Failed to verify request: ${e.message}`);
     logger.debug(`[Auth] Error stack: ${e.stack}`);
-    res.status(401).send("Unauthorized");
+    res.status(401).json({ message: "Unauthorized", error: e.message });
   }
 }
 

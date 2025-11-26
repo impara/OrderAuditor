@@ -275,7 +275,12 @@ export class ShopifyService {
 
       const data = await response.json();
       return data.order || null;
-    } catch (error) {
+    } catch (error: any) {
+      // Handle 403 Forbidden specifically for Protected Customer Data
+      if (error.message && error.message.includes("403")) {
+        logger.warn(`[Shopify] ⚠️ Access denied (403) fetching order ${orderId}. Likely missing 'Protected Customer Data' access.`);
+        return null;
+      }
       logger.error("[Shopify] Error fetching order:", error);
       return null;
     }
@@ -318,7 +323,12 @@ export class ShopifyService {
 
       const data = await response.json();
       return data.customer || null;
-    } catch (error) {
+    } catch (error: any) {
+      // Handle 403 Forbidden specifically for Protected Customer Data
+      if (error.message && error.message.includes("403")) {
+        logger.warn(`[Shopify] ⚠️ Access denied (403) fetching customer ${customerId}. Likely missing 'Protected Customer Data' access.`);
+        return null;
+      }
       logger.error("[Shopify] Error fetching customer:", error);
       return null;
     }
