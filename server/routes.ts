@@ -341,25 +341,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
           `[Webhook] Received webhook, body size: ${rawBody.length} bytes`
         );
 
-        // Validate webhook using Shopify API library (handles HMAC verification automatically)
-        const validation = await shopify.webhooks.validate({
-          rawBody,
-          rawRequest: req,
-          rawResponse: res,
-        });
+        // Validate webhook using custom service
+        const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
+        const topicHeader = req.get("X-Shopify-Topic");
+        const shopHeader = req.get("X-Shopify-Shop-Domain");
 
-        if (!validation.valid) {
-          logger.warn(`[Webhook] ❌ Invalid webhook signature. Reason: ${validation.reason || 'unknown'}`);
-          if (validation.missingHeaders) {
-            logger.warn(`[Webhook] Missing headers: ${validation.missingHeaders.join(', ')}`);
-          }
+        if (!hmacHeader) {
+          logger.warn("[Webhook] ❌ Missing HMAC header");
+          return res.status(401).json({ error: "Missing HMAC header" });
+        }
+
+        const isValid = shopifyService.verifyWebhook(rawBody, hmacHeader);
+
+        if (!isValid) {
+          logger.warn(`[Webhook] ❌ Invalid webhook signature.`);
           return res.status(401).json({ error: "Invalid webhook signature" });
         }
 
-        const shopDomain = validation.domain;
-        const topic = validation.topic;
+        const shopDomain = shopHeader;
+        const topic = topicHeader;
+
         if (!shopDomain) {
-          logger.error("[Webhook] ❌ Missing shop domain in validated webhook");
+          logger.error("[Webhook] ❌ Missing shop domain header");
           return res.status(400).json({ error: "Missing shop domain" });
         }
 
@@ -695,25 +698,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
           `[Webhook] Received orders/updated webhook, body size: ${rawBody.length} bytes`
         );
 
-        // Validate webhook using Shopify API library (handles HMAC verification automatically)
-        const validation = await shopify.webhooks.validate({
-          rawBody,
-          rawRequest: req,
-          rawResponse: res,
-        });
+        // Validate webhook using custom service
+        const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
+        const topicHeader = req.get("X-Shopify-Topic");
+        const shopHeader = req.get("X-Shopify-Shop-Domain");
 
-        if (!validation.valid) {
-          logger.warn(`[Webhook] ❌ Invalid webhook signature. Reason: ${validation.reason || 'unknown'}`);
-          if (validation.missingHeaders) {
-            logger.warn(`[Webhook] Missing headers: ${validation.missingHeaders.join(', ')}`);
-          }
+        if (!hmacHeader) {
+          logger.warn("[Webhook] ❌ Missing HMAC header");
+          return res.status(401).json({ error: "Missing HMAC header" });
+        }
+
+        const isValid = shopifyService.verifyWebhook(rawBody, hmacHeader);
+
+        if (!isValid) {
+          logger.warn(`[Webhook] ❌ Invalid webhook signature.`);
           return res.status(401).json({ error: "Invalid webhook signature" });
         }
 
-        const shopDomain = validation.domain;
-        const topic = validation.topic;
+        const shopDomain = shopHeader;
+        const topic = topicHeader;
+
         if (!shopDomain) {
-          logger.error("[Webhook] ❌ Missing shop domain in validated webhook");
+          logger.error("[Webhook] ❌ Missing shop domain header");
           return res.status(400).json({ error: "Missing shop domain" });
         }
 
