@@ -3,6 +3,8 @@ import { shopifyApi, ApiVersion, BillingInterval } from "@shopify/shopify-api";
 import { PostgresSessionStorage } from "./shopify-session-storage";
 import { Request, Response, NextFunction } from "express";
 import { logger } from "./utils/logger";
+import * as jose from "jose";
+import { createSecretKey } from "crypto";
 
 // Initialize Shopify API client
 const shopify = shopifyApi({
@@ -123,7 +125,9 @@ export async function verifyRequest(
     logger.debug(`[Auth] Token length: ${token.length}`);
 
     // Verify session token (JWT)
-    const payload = await shopify.session.decodeSessionToken(token);
+    // We use a custom verification to allow for clock tolerance
+    // const payload = await shopify.session.decodeSessionToken(token);
+    const payload = await decodeSessionTokenWithClockTolerance(token);
     const shop = payload.dest.replace("https://", "");
     logger.debug(`[Auth] Decoded token for shop: ${shop}`);
 
@@ -156,5 +160,29 @@ export async function verifyRequest(
     logger.error(`[Auth] Failed to verify request: ${e.message}`);
     logger.debug(`[Auth] Error stack: ${e.stack}`);
     res.status(401).send("Unauthorized");
+  }
+}
+
+async function decodeSessionTokenWithClockTolerance(token: string) {
+  const apiSecret = process.env.SHOPIFY_API_SECRET || "";
+  const secretKey = createSecretKey(Buffer.from(apiSecret, "utf-8"));
+
+  try {
+    const { payload } = await jose.jwtVerify(token, secretKey, {
+      algorithms: ["HS256"],
+      clockTolerance: 60, // 60 seconds tolerance
+    });
+
+    // Validate audience
+    const apiKey = process.env.SHOPIFY_API_KEY || "";
+    if (payload.aud !== apiKey) {
+      throw new Error("Session token had invalid API key");
+    }
+
+    return payload as any; // Cast to any to match Shopify's JwtPayload type structure roughly
+  } catch (error: any) {
+    throw new Error(
+      `Failed to parse session token '${token}': ${error.message}`
+    );
   }
 }
