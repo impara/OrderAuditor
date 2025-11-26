@@ -1,5 +1,6 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { getSessionToken } from "@shopify/app-bridge/utilities";
+import { Redirect } from "@shopify/app-bridge/actions";
 
 // Store the App Bridge instance globally
 let appBridgeInstance: any = null;
@@ -78,10 +79,26 @@ async function throwIfResNotOk(res: Response) {
         const data = await res.json();
         if (data.retryAuth && data.shop) {
           console.log(`[Auth] Redirecting to auth for shop: ${data.shop}`);
-          // Redirect to auth endpoint to start OAuth flow again
-          window.location.href = `/api/auth?shop=${data.shop}`;
-          // Return a promise that never resolves to pause execution while redirecting
-          return new Promise(() => {});
+          
+          // Use App Bridge to redirect the top-level window
+          // This is required because we are in an iframe and need to break out for OAuth
+          try {
+            const app = await waitForAppBridge();
+            const redirect = Redirect.create(app);
+            
+            // Redirect to our backend auth endpoint
+            // The backend will then redirect to Shopify's OAuth page
+            // We use REMOTE because we are navigating away from the embedded app view temporarily
+            const authUrl = `${window.location.origin}/api/auth?shop=${data.shop}`;
+            redirect.dispatch(Redirect.Action.REMOTE, authUrl);
+            
+            // Return a promise that never resolves to pause execution while redirecting
+            return new Promise(() => {});
+          } catch (err) {
+            console.error("[Auth] Failed to use App Bridge for redirect, falling back to window.location", err);
+            window.location.href = `/api/auth?shop=${data.shop}`;
+            return new Promise(() => {});
+          }
         }
       } catch (e) {
         console.error("[Auth] Failed to parse 401 response for re-auth details", e);
