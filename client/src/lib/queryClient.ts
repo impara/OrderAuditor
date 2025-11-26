@@ -49,15 +49,8 @@ function getSessionTokenFromUrl(): string | null {
 
 // Helper to get fresh session token
 async function getAuthToken(): Promise<string> {
-  // First, check if token is in URL (initial load)
-  const urlToken = getSessionTokenFromUrl();
-  if (urlToken) {
-    console.log("[Auth] Using session token from URL");
-    return urlToken;
-  }
-
-  // Otherwise, get fresh token from App Bridge
-  console.log("[Auth] No URL token, fetching from App Bridge...");
+  // Always get fresh token from App Bridge
+  console.log("[Auth] Fetching fresh session token from App Bridge...");
   const app = await waitForAppBridge();
 
   // Add timeout to detect hanging
