@@ -73,10 +73,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ... (webhooks are registered below)
 
   // Protected API Routes
-  // Apply middleware to all /api routes EXCEPT auth and webhooks
+  // Apply middleware to all /api routes EXCEPT auth, webhooks, and diagnostic endpoints
   app.use("/api", (req, res, next) => {
     const path = req.path;
-    if (path.startsWith("/auth") || path.startsWith("/webhooks/shopify")) {
+    if (
+      path.startsWith("/auth") ||
+      path.startsWith("/webhooks/shopify") ||
+      path.startsWith("/webhooks/diagnostic") ||
+      path.startsWith("/oauth/diagnostic") ||
+      path === "/health"
+    ) {
       next();
     } else {
       verifyRequest(req, res, next);
@@ -321,11 +327,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/oauth/diagnostic", async (_req: Request, res: Response) => {
     const shop = _req.query.shop as string | undefined;
     if (!shop) {
-      return res
-        .status(400)
-        .json({
-          error: "Missing shop parameter (?shop=yourstore.myshopify.com)",
-        });
+      return res.status(400).json({
+        error: "Missing shop parameter (?shop=yourstore.myshopify.com)",
+      });
     }
 
     const sanitizedShop = shopify.utils.sanitizeShop(shop, true);

@@ -51,8 +51,14 @@ export async function auth(req: Request, res: Response) {
     }
 
     const shop = shopify.utils.sanitizeShop(req.query.shop as string, true)!;
-    logger.info(`[Auth] Starting OAuth flow for shop: ${shop}, requesting OFFLINE token (isOnline: false)`);
-    logger.info(`[Auth] App configuration - isEmbeddedApp: ${shopify.config.isEmbeddedApp}, API Key: ${shopify.config.apiKey?.substring(0, 10)}...`);
+    logger.info(
+      `[Auth] Starting OAuth flow for shop: ${shop}, requesting OFFLINE token (isOnline: false)`
+    );
+    logger.info(
+      `[Auth] App configuration - isEmbeddedApp: ${
+        shopify.config.isEmbeddedApp
+      }, API Key: ${shopify.config.apiKey?.substring(0, 10)}...`
+    );
 
     // The library handles the redirect to Shopify
     // For offline tokens, isOnline MUST be false
@@ -63,7 +69,7 @@ export async function auth(req: Request, res: Response) {
       rawRequest: req,
       rawResponse: res,
     });
-    
+
     logger.debug(`[Auth] OAuth redirect initiated for shop: ${shop}`);
   } catch (e: any) {
     logger.error(`Failed to begin auth: ${e.message}`);
@@ -75,12 +81,16 @@ export async function auth(req: Request, res: Response) {
 export async function authCallback(req: Request, res: Response) {
   try {
     logger.info(`[AuthCallback] Starting OAuth callback`);
-    
+
     // Log OAuth callback query parameters (excluding sensitive data)
     const queryParams = { ...req.query };
     delete queryParams.code; // Don't log the code
     delete queryParams.hmac; // Don't log the hmac
-    logger.debug(`[AuthCallback] OAuth callback query params: ${JSON.stringify(Object.keys(queryParams))}`);
+    logger.debug(
+      `[AuthCallback] OAuth callback query params: ${JSON.stringify(
+        Object.keys(queryParams)
+      )}`
+    );
 
     const callback = await shopify.auth.callback({
       rawRequest: req,
@@ -90,15 +100,18 @@ export async function authCallback(req: Request, res: Response) {
     const { session } = callback;
     const tokenPrefix = session.accessToken?.substring(0, 6) || "N/A";
     const tokenLength = session.accessToken?.length || 0;
-    
+
     logger.info(
       `[AuthCallback] OAuth callback completed, session ID: ${session.id}, shop: ${session.shop}, isOnline: ${session.isOnline}`
     );
     logger.info(
       `[AuthCallback] Session has accessToken: ${!!session.accessToken}, token prefix: ${tokenPrefix}, token length: ${tokenLength}`
     );
-    
+
     // Log full session details for debugging
+    // Note: Token prefixes are NOT reliable indicators - check response structure instead
+    // Online tokens have: expires_in, associated_user_scope, associated_user
+    // Offline tokens have: only access_token and scope
     logger.debug(`[AuthCallback] Full session details:`, {
       id: session.id,
       shop: session.shop,
@@ -107,7 +120,28 @@ export async function authCallback(req: Request, res: Response) {
       expires: session.expires?.toISOString(),
       tokenPrefix,
       tokenLength,
+      hasOnlineAccessInfo: !!session.onlineAccessInfo,
+      onlineAccessInfo: session.onlineAccessInfo
+        ? {
+            hasAssociatedUser: !!session.onlineAccessInfo.associated_user,
+            expiresIn: session.onlineAccessInfo.expires_in,
+          }
+        : null,
     });
+
+    // Determine actual token type based on response structure (not prefix)
+    const isActuallyOnlineToken =
+      !!session.onlineAccessInfo?.associated_user || !!session.expires;
+    const isActuallyOfflineToken =
+      !session.onlineAccessInfo?.associated_user && !session.expires;
+
+    logger.info(
+      `[AuthCallback] Token type analysis - Prefix: ${tokenPrefix}, Has expires: ${!!session.expires}, Has associated_user: ${!!session
+        .onlineAccessInfo?.associated_user}`
+    );
+    logger.info(
+      `[AuthCallback] Actual token type - Is Online: ${isActuallyOnlineToken}, Is Offline: ${isActuallyOfflineToken}`
+    );
 
     // Validate that we got an offline session as expected
     if (session.isOnline) {
