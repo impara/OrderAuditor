@@ -127,6 +127,11 @@ export class ShopifyService {
     try {
       const url = `${this.getBaseApiUrl(shopDomain)}/webhooks.json`;
       logger.debug(`[Shopify] Fetching webhooks from: ${url}`);
+      logger.debug(
+        `[Shopify] Access token present: ${!!accessToken}, length: ${
+          accessToken?.length || 0
+        }, prefix: ${accessToken?.substring(0, 10) || "N/A"}...`
+      );
 
       const response = await fetch(url, {
         method: "GET",
@@ -138,16 +143,43 @@ export class ShopifyService {
 
       if (!response.ok) {
         const errorText = await response.text();
+        let errorDetails: any = {};
+        try {
+          errorDetails = JSON.parse(errorText);
+        } catch {
+          errorDetails = { raw: errorText };
+        }
+
         logger.error(
           `[Shopify] Failed to list webhooks: ${response.status} ${response.statusText}`,
-          errorText
+          errorDetails
         );
+        logger.error(
+          `[Shopify] Shop: ${shopDomain}, Token prefix: ${
+            accessToken?.substring(0, 15) || "N/A"
+          }...`
+        );
+
+        // Provide more specific error messages
+        if (response.status === 401) {
+          throw new Error(
+            `Shopify API authentication failed (401). The access token may be invalid, expired, or revoked. Please reinstall the app. Details: ${JSON.stringify(
+              errorDetails
+            )}`
+          );
+        }
+
         throw new Error(
-          `Shopify API error: ${response.status} ${response.statusText}`
+          `Shopify API error: ${response.status} ${
+            response.statusText
+          }. Details: ${JSON.stringify(errorDetails)}`
         );
       }
 
       const data = await response.json();
+      logger.debug(
+        `[Shopify] Successfully fetched ${data.webhooks?.length || 0} webhooks`
+      );
       return data.webhooks || [];
     } catch (error) {
       logger.error("[Shopify] Error listing webhooks:", error);
@@ -278,7 +310,9 @@ export class ShopifyService {
     } catch (error: any) {
       // Handle 403 Forbidden specifically for Protected Customer Data
       if (error.message && error.message.includes("403")) {
-        logger.warn(`[Shopify] ⚠️ Access denied (403) fetching order ${orderId}. Likely missing 'Protected Customer Data' access.`);
+        logger.warn(
+          `[Shopify] ⚠️ Access denied (403) fetching order ${orderId}. Likely missing 'Protected Customer Data' access.`
+        );
         return null;
       }
       logger.error("[Shopify] Error fetching order:", error);
@@ -326,7 +360,9 @@ export class ShopifyService {
     } catch (error: any) {
       // Handle 403 Forbidden specifically for Protected Customer Data
       if (error.message && error.message.includes("403")) {
-        logger.warn(`[Shopify] ⚠️ Access denied (403) fetching customer ${customerId}. Likely missing 'Protected Customer Data' access.`);
+        logger.warn(
+          `[Shopify] ⚠️ Access denied (403) fetching customer ${customerId}. Likely missing 'Protected Customer Data' access.`
+        );
         return null;
       }
       logger.error("[Shopify] Error fetching customer:", error);

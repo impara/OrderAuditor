@@ -199,6 +199,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { shop, accessToken } = res.locals.shopify;
       logger.debug("[API] Checking webhook registration status");
+      logger.debug(
+        `[API] Shop: ${shop}, Access token available: ${!!accessToken}, Token length: ${
+          accessToken?.length || 0
+        }`
+      );
+
+      // Validate access token format before making API call
+      if (!accessToken) {
+        logger.error("[API] No access token available in session");
+        return res.status(401).json({
+          error: "No access token available",
+          message:
+            "The app session does not have a valid access token. Please reinstall the app.",
+          shop: shop,
+          requiresReinstall: true,
+        });
+      }
+
+      // Check if token looks valid (Shopify tokens typically start with 'shpat_' or 'shpca_')
+      if (
+        !accessToken.startsWith("shpat_") &&
+        !accessToken.startsWith("shpca_")
+      ) {
+        logger.warn(
+          `[API] Access token has unexpected format. Prefix: ${accessToken.substring(
+            0,
+            10
+          )}...`
+        );
+      }
+
       const webhooks = await shopifyService.listWebhooks(shop, accessToken);
 
       const ordersCreateWebhook = webhooks.find(
@@ -219,9 +250,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       logger.error("[API] Error checking webhook status:", error);
-      res.status(500).json({
+
+      // Check if it's an authentication error
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      const isAuthError =
+        errorMessage.includes("401") ||
+        errorMessage.includes("authentication failed");
+
+      res.status(isAuthError ? 401 : 500).json({
         error: "Failed to check webhook status",
-        details: error instanceof Error ? error.message : String(error),
+        details: errorMessage,
+        requiresReinstall: isAuthError,
+        message: isAuthError
+          ? "The access token is invalid or expired. Please reinstall the app to refresh the authentication."
+          : "An error occurred while checking webhook status.",
       });
     }
   });
@@ -301,6 +344,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
+  // Diagnostic endpoint to check session and token status
+  app.get("/api/session/diagnostic", async (_req: Request, res: Response) => {
+    try {
+      const { shop, accessToken } = res.locals.shopify;
+
+      // Try to load the session directly to get more info
+      const offlineSessionId = shopify.session.getOfflineId(shop);
+      const session = await shopify.config.sessionStorage.loadSession(
+        offlineSessionId
+      );
+
+      // Try a simple API call to validate the token
+      let tokenValid = false;
+      let tokenValidationError: string | null = null;
+
+      if (accessToken) {
+        try {
+          const testUrl = `https://${shop}/admin/api/2025-10/shop.json`;
+          const testResponse = await fetch(testUrl, {
+            method: "GET",
+            headers: {
+              "X-Shopify-Access-Token": accessToken,
+              "Content-Type": "application/json",
+            },
+          });
+
+          tokenValid = testResponse.ok;
+          if (!testResponse.ok) {
+            const errorText = await testResponse.text();
+            tokenValidationError = `${testResponse.status} ${testResponse.statusText}: ${errorText}`;
+          }
+        } catch (error) {
+          tokenValidationError =
+            error instanceof Error ? error.message : String(error);
+        }
+      }
+
+      res.json({
+        shop: shop,
+        session: {
+          id: session?.id || "not found",
+          shop: session?.shop || "not found",
+          isOnline: session?.isOnline ?? null,
+          hasAccessToken: !!session?.accessToken,
+          accessTokenLength: session?.accessToken?.length || 0,
+          accessTokenPrefix: session?.accessToken?.substring(0, 15) || "N/A",
+          scope: session?.scope || "N/A",
+          expires: session?.expires?.toISOString() || null,
+        },
+        tokenValidation: {
+          hasToken: !!accessToken,
+          tokenLength: accessToken?.length || 0,
+          tokenPrefix: accessToken?.substring(0, 15) || "N/A",
+          isValid: tokenValid,
+          error: tokenValidationError,
+        },
+        recommendations: !tokenValid
+          ? [
+              "The access token appears to be invalid or expired.",
+              "Please reinstall the app to refresh the authentication.",
+              "Go to your Shopify admin and uninstall/reinstall the app.",
+            ]
+          : ["Session and token appear to be valid."],
+      });
+    } catch (error) {
+      logger.error("[API] Error in session diagnostic:", error);
+      res.status(500).json({
+        error: "Failed to run diagnostic",
+        details: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
   app.post("/api/webhooks/test", async (req: any, res: Response) => {
     const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
     const rawBody = req.rawBody || Buffer.from(JSON.stringify(req.body));
@@ -341,7 +457,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           `[Webhook] Received webhook, body size: ${rawBody.length} bytes`
         );
         logger.debug(`[Webhook] Body is Buffer: ${Buffer.isBuffer(rawBody)}`);
-        logger.debug(`[Webhook] Body preview: ${rawBody.toString('utf8').substring(0, 50)}...`);
+        logger.debug(
+          `[Webhook] Body preview: ${rawBody
+            .toString("utf8")
+            .substring(0, 50)}...`
+        );
 
         // Validate webhook using custom service
         const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
@@ -375,7 +495,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
 
         // Parse JSON after verification
-        const shopifyOrder = JSON.parse(rawBody.toString('utf8'));
+        const shopifyOrder = JSON.parse(rawBody.toString("utf8"));
 
         // Load session to get access token
         let accessToken = "";
@@ -700,7 +820,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           `[Webhook] Received orders/updated webhook, body size: ${rawBody.length} bytes`
         );
         logger.debug(`[Webhook] Body is Buffer: ${Buffer.isBuffer(rawBody)}`);
-        logger.debug(`[Webhook] Body preview: ${rawBody.toString('utf8').substring(0, 50)}...`);
+        logger.debug(
+          `[Webhook] Body preview: ${rawBody
+            .toString("utf8")
+            .substring(0, 50)}...`
+        );
 
         // Validate webhook using custom service
         const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
@@ -734,7 +858,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
 
         // Parse JSON after verification
-        const shopifyOrder = JSON.parse(rawBody.toString('utf8'));
+        const shopifyOrder = JSON.parse(rawBody.toString("utf8"));
 
         // Check if order exists in our database
         const order = await storage.getOrderByShopifyId(
