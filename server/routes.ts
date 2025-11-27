@@ -861,11 +861,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           settings = await storage.initializeSettings(shopDomain);
         }
 
+        logger.debug(
+          `[Webhook] Checking for duplicates - Email: ${validatedOrder.customerEmail}, Shop: ${shopDomain}`
+        );
         const duplicateMatch = await duplicateDetectionService.findDuplicates(
-          validatedOrder
+          validatedOrder,
+          shopDomain
         );
 
         if (duplicateMatch) {
+          logger.info(
+            `[Webhook] ✅ Duplicate detected! Match confidence: ${duplicateMatch.confidence}%, Reason: ${duplicateMatch.matchReason}`
+          );
           const flaggedOrder = await storage.createOrder(validatedOrder);
 
           await storage.updateOrder(shopDomain, flaggedOrder.id, {
@@ -953,6 +960,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             order: updatedOrder,
           });
         } else {
+          logger.debug(
+            `[Webhook] No duplicate match found for order ${validatedOrder.orderNumber}. Creating order without flag.`
+          );
           const order = await storage.createOrder(validatedOrder);
 
           // Record order for quota tracking

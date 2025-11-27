@@ -2,6 +2,7 @@ import { db } from "../db";
 import { orders, detectionSettings, auditLogs } from "@shared/schema";
 import { eq, and, gte, sql } from "drizzle-orm";
 import type { Order, InsertOrder } from "@shared/schema";
+import { logger } from "../utils/logger";
 
 interface DuplicateMatch {
   order: Order;
@@ -13,28 +14,48 @@ export class DuplicateDetectionService {
   /**
    * Find potential duplicates for a new order based on detection settings
    */
-  async findDuplicates(newOrder: InsertOrder): Promise<DuplicateMatch | null> {
-    const [settings] = await db.select().from(detectionSettings).limit(1);
+  async findDuplicates(newOrder: InsertOrder, shopDomain: string): Promise<DuplicateMatch | null> {
+    // Filter settings by shopDomain for multi-tenant support
+    const [settings] = await db
+      .select()
+      .from(detectionSettings)
+      .where(eq(detectionSettings.shopDomain, shopDomain))
+      .limit(1);
     
     if (!settings) {
+      logger.warn(`[DuplicateDetection] No settings found for shop: ${shopDomain}`);
       return null;
     }
 
+    logger.debug(
+      `[DuplicateDetection] Settings - Email: ${settings.matchEmail}, Phone: ${settings.matchPhone}, Address: ${settings.matchAddress}, TimeWindow: ${settings.timeWindowHours}h`
+    );
+
     const timeThreshold = new Date();
     timeThreshold.setHours(timeThreshold.getHours() - settings.timeWindowHours);
+    logger.debug(
+      `[DuplicateDetection] Looking for orders created after: ${timeThreshold.toISOString()}`
+    );
 
     let existingOrders: Order[] = [];
 
     if (settings.matchEmail) {
+      logger.debug(
+        `[DuplicateDetection] Searching for orders with email: ${newOrder.customerEmail}`
+      );
       const ordersByEmail = await db
         .select()
         .from(orders)
         .where(
           and(
+            eq(orders.shopDomain, shopDomain), // Filter by shopDomain
             gte(orders.createdAt, timeThreshold),
             eq(orders.customerEmail, newOrder.customerEmail)
           )
         );
+      logger.debug(
+        `[DuplicateDetection] Found ${ordersByEmail.length} orders matching email`
+      );
       existingOrders = [...existingOrders, ...ordersByEmail];
     }
 
@@ -44,6 +65,7 @@ export class DuplicateDetectionService {
         .from(orders)
         .where(
           and(
+            eq(orders.shopDomain, shopDomain), // Filter by shopDomain
             gte(orders.createdAt, timeThreshold),
             eq(orders.customerPhone, newOrder.customerPhone)
           )
@@ -57,12 +79,25 @@ export class DuplicateDetectionService {
     }
 
     if (existingOrders.length === 0) {
+      logger.debug(
+        `[DuplicateDetection] No existing orders found to compare against`
+      );
       return null;
     }
 
+    logger.debug(
+      `[DuplicateDetection] Comparing against ${existingOrders.length} existing order(s)`
+    );
+
     for (const existingOrder of existingOrders) {
       const match = this.calculateMatch(newOrder, existingOrder, settings);
+      logger.debug(
+        `[DuplicateDetection] Match with order ${existingOrder.orderNumber}: confidence=${match?.confidence || 0}, reason=${match?.reason || "no match"}`
+      );
       if (match && match.confidence >= 70) {
+        logger.info(
+          `[DuplicateDetection] ✅ Duplicate found! Order ${existingOrder.orderNumber} matches with ${match.confidence}% confidence`
+        );
         return {
           order: existingOrder,
           matchReason: match.reason,
@@ -71,6 +106,7 @@ export class DuplicateDetectionService {
       }
     }
 
+    logger.debug(`[DuplicateDetection] No duplicate match found (confidence < 70%)`);
     return null;
   }
 
