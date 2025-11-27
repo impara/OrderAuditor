@@ -68,7 +68,7 @@ export const shopifySessions = pgTable("shopify_sessions", {
   isOnline: boolean("is_online").notNull().default(false),
   scope: text("scope"),
   expires: timestamp("expires"),
-  accessToken: varchar("access_token"),
+  accessToken: text("access_token"), // Changed from varchar to text to support full-length tokens (Shopify tokens can be 40+ chars)
   userId: varchar("user_id"), // Shopify user ID (can be big int, storing as string for safety)
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
