@@ -665,6 +665,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Parse JSON after verification
         const shopifyOrder = JSON.parse(rawBody.toString("utf8"));
 
+        // Log webhook payload structure for debugging
+        logger.debug(
+          `[Webhook] Order payload - ID: ${
+            shopifyOrder.id
+          }, Email in payload: ${!!shopifyOrder.email}, Contact email: ${!!shopifyOrder.contact_email}, Customer ID: ${
+            shopifyOrder.customer?.id || "N/A"
+          }, Customer email in payload: ${!!shopifyOrder.customer?.email}`
+        );
+
         // Load session to get access token
         let accessToken = "";
         if (shopDomain) {
@@ -701,12 +710,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 fetchedOrder &&
                 (fetchedOrder.email || fetchedOrder.contact_email)
               ) {
-                logger.info("[Webhook] ✅ Successfully fetched order via API");
+                logger.info(
+                  `[Webhook] ✅ Successfully fetched order via API - Email: ${
+                    fetchedOrder.email || fetchedOrder.contact_email
+                  }`
+                );
                 Object.assign(shopifyOrder, {
                   email: fetchedOrder.email || shopifyOrder.email,
                   contact_email:
                     fetchedOrder.contact_email || shopifyOrder.contact_email,
                 });
+              } else {
+                logger.warn(
+                  `[Webhook] ⚠️ Order API fetch returned no email. Order data: ${JSON.stringify(
+                    fetchedOrder
+                      ? {
+                          id: fetchedOrder.id,
+                          hasEmail: !!fetchedOrder.email,
+                          hasContactEmail: !!fetchedOrder.contact_email,
+                        }
+                      : null
+                  )}`
+                );
               }
             } catch (err) {
               logger.error("[Webhook] ❌ Order API fetch failed", err);
@@ -731,12 +756,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
               );
               if (apiCustomer && apiCustomer.email) {
                 logger.info(
-                  "[Webhook] ✅ Successfully fetched customer via API"
+                  `[Webhook] ✅ Successfully fetched customer via API - Email: ${
+                    apiCustomer.email
+                  }, Name: ${apiCustomer.first_name || ""} ${
+                    apiCustomer.last_name || ""
+                  }`
                 );
                 customerData = apiCustomer;
+              } else {
+                logger.warn(
+                  `[Webhook] ⚠️ Customer API returned no email. Customer data: ${JSON.stringify(
+                    apiCustomer
+                      ? { id: apiCustomer.id, hasEmail: !!apiCustomer.email }
+                      : null
+                  )}`
+                );
               }
             } catch (err) {
-              logger.warn("[Webhook] ⚠️ Customer API fetch failed", err);
+              logger.error("[Webhook] ❌ Customer API fetch failed", err);
             }
           }
         }

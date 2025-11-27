@@ -326,11 +326,26 @@ export class ShopifyService {
           `[Shopify] Failed to fetch order: ${response.status}`,
           errorText
         );
+        if (response.status === 403) {
+          logger.warn(
+            `[Shopify] ⚠️ Access denied (403) fetching order ${orderId}. Likely missing 'Protected Customer Data' access.`
+          );
+        }
         return null;
       }
 
       const data = await response.json();
-      return data.order || null;
+      const order = data.order || null;
+      if (order) {
+        logger.debug(
+          `[Shopify] ✅ Successfully fetched order ${orderId} - Email: ${order.email || order.contact_email || "N/A"}`
+        );
+      } else {
+        logger.warn(
+          `[Shopify] ⚠️ Order API returned empty data for order ${orderId}`
+        );
+      }
+      return order;
     } catch (error: any) {
       // Handle 403 Forbidden specifically for Protected Customer Data
       if (error.message && error.message.includes("403")) {
@@ -376,11 +391,26 @@ export class ShopifyService {
           `[Shopify] Failed to fetch customer: ${response.status}`,
           errorText
         );
+        if (response.status === 403) {
+          logger.warn(
+            `[Shopify] ⚠️ Access denied (403) fetching customer ${customerId}. Likely missing 'Protected Customer Data' access.`
+          );
+        }
         return null;
       }
 
       const data = await response.json();
-      return data.customer || null;
+      const customer = data.customer || null;
+      if (customer) {
+        logger.debug(
+          `[Shopify] ✅ Successfully fetched customer ${customerId} - Email: ${customer.email || "N/A"}, Name: ${customer.first_name || ""} ${customer.last_name || ""}`
+        );
+      } else {
+        logger.warn(
+          `[Shopify] ⚠️ Customer API returned empty data for customer ${customerId}`
+        );
+      }
+      return customer;
     } catch (error: any) {
       // Handle 403 Forbidden specifically for Protected Customer Data
       if (error.message && error.message.includes("403")) {
