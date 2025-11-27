@@ -69,12 +69,42 @@ export async function authCallback(req: Request, res: Response) {
     });
 
     const { session } = callback;
+    const tokenPrefix = session.accessToken?.substring(0, 6) || "N/A";
+    const tokenLength = session.accessToken?.length || 0;
+    
     logger.info(
       `[AuthCallback] OAuth callback completed, session ID: ${session.id}, shop: ${session.shop}, isOnline: ${session.isOnline}`
     );
     logger.info(
-      `[AuthCallback] Session has accessToken: ${!!session.accessToken}`
+      `[AuthCallback] Session has accessToken: ${!!session.accessToken}, token prefix: ${tokenPrefix}, token length: ${tokenLength}`
     );
+
+    // Validate that we got an offline session as expected
+    if (session.isOnline) {
+      logger.error(
+        `[AuthCallback] WARNING: Received ONLINE session but expected OFFLINE session! This will cause API call failures.`
+      );
+      logger.error(
+        `[AuthCallback] Session details - ID: ${session.id}, Shop: ${session.shop}, Token prefix: ${tokenPrefix}`
+      );
+    } else {
+      // Validate offline token format
+      if (session.accessToken) {
+        if (tokenPrefix === "shpua_") {
+          logger.error(
+            `[AuthCallback] CRITICAL: Offline session has USER ACCESS TOKEN (shpua_) instead of OFFLINE TOKEN (shpat_)!`
+          );
+        } else if (tokenPrefix === "shpat_") {
+          logger.info(
+            `[AuthCallback] ✅ Valid offline token received (shpat_ prefix)`
+          );
+        } else {
+          logger.warn(
+            `[AuthCallback] Unexpected token prefix: ${tokenPrefix}. Expected 'shpat_' for offline tokens.`
+          );
+        }
+      }
+    }
 
     // Manually store the session to ensure it's saved
     logger.info(`[AuthCallback] Manually storing session...`);
@@ -162,14 +192,59 @@ export async function verifyRequest(
       return;
     }
 
+    // Validate that this is actually an offline session
+    if (session.isOnline) {
+      logger.error(
+        `[Auth] Session loaded is marked as ONLINE but should be OFFLINE for shop ${shop}. Session ID: ${session.id}`
+      );
+      res.status(401).json({
+        message: "Unauthorized: Invalid session type. Please reinstall the app.",
+        shop: shop,
+        retryAuth: true,
+        error: "Session is online but should be offline",
+      });
+      return;
+    }
+
+    // Validate access token format - offline tokens should start with 'shpat_' and be longer
+    const sessionAccessToken = session.accessToken;
+    const tokenPrefix = sessionAccessToken.substring(0, 6);
+    const tokenLength = sessionAccessToken.length;
+
     logger.debug(
-      `[Auth] Session found for shop ${shop}, authentication successful`
+      `[Auth] Session token info - prefix: ${tokenPrefix}, length: ${tokenLength}, isOnline: ${session.isOnline}`
+    );
+
+    // Offline tokens typically start with 'shpat_' and are much longer (usually 40+ chars)
+    // User tokens start with 'shpua_' and are shorter
+    if (tokenPrefix === "shpua_") {
+      logger.error(
+        `[Auth] Session has USER ACCESS TOKEN (shpua_) instead of OFFLINE TOKEN (shpat_) for shop ${shop}. This is invalid for API calls.`
+      );
+      res.status(401).json({
+        message: "Unauthorized: Invalid access token type. The app needs to be reinstalled to get a proper offline token.",
+        shop: shop,
+        retryAuth: true,
+        error: "User access token found instead of offline token",
+        requiresReinstall: true,
+      });
+      return;
+    }
+
+    if (tokenLength < 40) {
+      logger.warn(
+        `[Auth] Access token is unusually short (${tokenLength} chars) for shop ${shop}. Expected 40+ characters for offline tokens.`
+      );
+    }
+
+    logger.debug(
+      `[Auth] Session found for shop ${shop}, authentication successful. Token type: ${tokenPrefix}, length: ${tokenLength}`
     );
 
     // Store shop and accessToken in res.locals for downstream use
     res.locals.shopify = {
       shop,
-      accessToken: session.accessToken,
+      accessToken: sessionAccessToken,
     };
 
     next();

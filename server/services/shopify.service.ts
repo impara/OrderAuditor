@@ -22,25 +22,49 @@ export class ShopifyService {
   private apiVersion: string = "2025-10";
 
   constructor() {
-    // Shopify webhooks use a separate webhook secret for HMAC verification
-    // This is different from the Client Secret (SHOPIFY_API_SECRET) used for OAuth
-    // Priority: SHOPIFY_WEBHOOK_SECRET > SHOPIFY_API_SECRET (fallback for older apps)
-    this.webhookSecret =
-      process.env.SHOPIFY_WEBHOOK_SECRET ||
-      process.env.SHOPIFY_API_SECRET ||
-      "";
+    // Webhook HMAC verification secret configuration:
+    //
+    // For PARTNER APPS (multi-tenant embedded apps):
+    //   - Use SHOPIFY_API_SECRET (Client Secret) for webhook verification
+    //   - SHOPIFY_WEBHOOK_SECRET is NOT needed and should be removed
+    //
+    // For CUSTOM APPS (legacy):
+    //   - SHOPIFY_WEBHOOK_SECRET was a separate "API secret key"
+    //   - This is legacy and not used for partner apps
+    //
+    // Priority: SHOPIFY_API_SECRET (partner apps) > SHOPIFY_WEBHOOK_SECRET (legacy custom apps)
+    const apiSecret = process.env.SHOPIFY_API_SECRET || "";
+    const webhookSecret = process.env.SHOPIFY_WEBHOOK_SECRET || "";
+
+    // For partner apps, use API_SECRET. Only use WEBHOOK_SECRET if API_SECRET is missing (legacy support)
+    this.webhookSecret = apiSecret || webhookSecret || "";
 
     if (!this.webhookSecret) {
       logger.error(
-        "[ShopifyService] CRITICAL: Neither SHOPIFY_WEBHOOK_SECRET nor SHOPIFY_API_SECRET is set! Webhook verification will fail."
+        "[ShopifyService] CRITICAL: SHOPIFY_API_SECRET is not set! Webhook verification will fail."
       );
-    } else if (process.env.SHOPIFY_WEBHOOK_SECRET) {
-      logger.info(
-        "[ShopifyService] Using SHOPIFY_WEBHOOK_SECRET for webhook verification"
+      logger.error(
+        "[ShopifyService] For Partner Apps, set SHOPIFY_API_SECRET to your app's Client Secret."
       );
-    } else {
+    } else if (apiSecret) {
+      if (webhookSecret) {
+        logger.warn(
+          "[ShopifyService] Both SHOPIFY_API_SECRET and SHOPIFY_WEBHOOK_SECRET are set."
+        );
+        logger.warn(
+          "[ShopifyService] For Partner Apps, SHOPIFY_WEBHOOK_SECRET is legacy and not needed. Using SHOPIFY_API_SECRET."
+        );
+      } else {
+        logger.info(
+          "[ShopifyService] Using SHOPIFY_API_SECRET for webhook verification (Partner App configuration)"
+        );
+      }
+    } else if (webhookSecret) {
       logger.warn(
-        "[ShopifyService] Using SHOPIFY_API_SECRET as fallback for webhook verification (consider setting SHOPIFY_WEBHOOK_SECRET)"
+        "[ShopifyService] Using SHOPIFY_WEBHOOK_SECRET (legacy custom app configuration)"
+      );
+      logger.warn(
+        "[ShopifyService] For Partner Apps, you should use SHOPIFY_API_SECRET instead."
       );
     }
   }

@@ -319,28 +319,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Diagnostic endpoint to help troubleshoot webhook verification
   app.get("/api/webhooks/diagnostic", async (_req: Request, res: Response) => {
-    const secret = process.env.SHOPIFY_WEBHOOK_SECRET || "";
+    const apiSecret = process.env.SHOPIFY_API_SECRET || "";
+    const webhookSecret = process.env.SHOPIFY_WEBHOOK_SECRET || "";
+    const activeSecret = apiSecret || webhookSecret;
+
     res.json({
+      appType: apiSecret
+        ? "Partner App (multi-tenant)"
+        : webhookSecret
+        ? "Legacy Custom App"
+        : "Not configured",
       configured: {
         shopDomain: !!process.env.SHOPIFY_SHOP_DOMAIN, // Legacy check
         accessToken: !!process.env.SHOPIFY_ACCESS_TOKEN, // Legacy check
-        webhookSecret: !!secret,
+        apiSecret: !!apiSecret,
+        webhookSecret: !!webhookSecret,
+        activeSecret: !!activeSecret,
       },
       secretInfo: {
-        length: secret.length,
-        prefix: secret.substring(0, 6) + "...",
-        startsWithShpss: secret.startsWith("shpss_"),
-        startsWithShpat: secret.startsWith("shpat_"),
-        expectedFormat:
-          "Should be the 'API secret key' from Shopify app credentials (NOT the access token)",
+        apiSecret: {
+          configured: !!apiSecret,
+          length: apiSecret.length,
+          prefix: apiSecret ? apiSecret.substring(0, 6) + "..." : "N/A",
+        },
+        webhookSecret: {
+          configured: !!webhookSecret,
+          length: webhookSecret.length,
+          prefix: webhookSecret ? webhookSecret.substring(0, 6) + "..." : "N/A",
+          isLegacy: !!webhookSecret,
+        },
+        active: {
+          source: apiSecret
+            ? "SHOPIFY_API_SECRET"
+            : webhookSecret
+            ? "SHOPIFY_WEBHOOK_SECRET (legacy)"
+            : "none",
+          length: activeSecret.length,
+          prefix: activeSecret ? activeSecret.substring(0, 6) + "..." : "N/A",
+        },
       },
-      instructions: [
-        "1. Go to Shopify Admin → Settings → Apps → Develop apps",
-        "2. Click your custom app",
-        "3. Go to 'App credentials' tab",
-        "4. Copy the 'API secret key' (NOT the 'Admin API access token')",
-        "5. Update SHOPIFY_WEBHOOK_SECRET with that value",
-      ],
+      instructions: apiSecret
+        ? [
+            "✅ Partner App Configuration Detected",
+            "Using SHOPIFY_API_SECRET (Client Secret) for webhook verification",
+            "",
+            "If SHOPIFY_WEBHOOK_SECRET is set, it's legacy and can be removed.",
+            "For Partner Apps, only SHOPIFY_API_SECRET is needed.",
+          ]
+        : webhookSecret
+        ? [
+            "⚠️ Legacy Custom App Configuration Detected",
+            "Using SHOPIFY_WEBHOOK_SECRET (legacy)",
+            "",
+            "For Partner Apps, you should:",
+            "1. Go to https://partners.shopify.com → Your App → API credentials",
+            "2. Copy the 'Client secret'",
+            "3. Set SHOPIFY_API_SECRET to that value",
+            "4. Remove SHOPIFY_WEBHOOK_SECRET (it's not needed for Partner Apps)",
+          ]
+        : [
+            "❌ No webhook secret configured",
+            "",
+            "For Partner Apps:",
+            "1. Go to https://partners.shopify.com → Your App → API credentials",
+            "2. Copy the 'Client secret'",
+            "3. Set SHOPIFY_API_SECRET to that value",
+          ],
     });
   });
 
@@ -381,6 +425,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      const tokenPrefix = accessToken?.substring(0, 6) || "N/A";
+      const isUserToken = tokenPrefix === "shpua_";
+      const isOfflineToken = tokenPrefix === "shpat_";
+      const isOfflineSession = session?.isOnline === false;
+      const hasTokenTypeMismatch = isOfflineSession && isUserToken;
+
+      const recommendations: string[] = [];
+
+      if (hasTokenTypeMismatch) {
+        recommendations.push(
+          "❌ CRITICAL: Offline session has USER ACCESS TOKEN (shpua_) instead of OFFLINE TOKEN (shpat_)!",
+          "This is invalid and will cause all API calls to fail.",
+          "ACTION REQUIRED: Reinstall the app to get a proper offline token."
+        );
+      } else if (!tokenValid) {
+        recommendations.push(
+          "The access token appears to be invalid or expired.",
+          "Please reinstall the app to refresh the authentication.",
+          "Go to your Shopify admin and uninstall/reinstall the app."
+        );
+      } else if (isOfflineToken && isOfflineSession) {
+        recommendations.push(
+          "✅ Session and token are valid and correctly configured."
+        );
+      }
+
       res.json({
         shop: shop,
         session: {
@@ -397,16 +467,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
           hasToken: !!accessToken,
           tokenLength: accessToken?.length || 0,
           tokenPrefix: accessToken?.substring(0, 15) || "N/A",
+          tokenType: isUserToken
+            ? "user"
+            : isOfflineToken
+            ? "offline"
+            : "unknown",
           isValid: tokenValid,
           error: tokenValidationError,
         },
-        recommendations: !tokenValid
-          ? [
-              "The access token appears to be invalid or expired.",
-              "Please reinstall the app to refresh the authentication.",
-              "Go to your Shopify admin and uninstall/reinstall the app.",
-            ]
-          : ["Session and token appear to be valid."],
+        tokenTypeCheck: {
+          isOfflineSession: isOfflineSession,
+          isUserToken: isUserToken,
+          isOfflineToken: isOfflineToken,
+          hasMismatch: hasTokenTypeMismatch,
+          status: hasTokenTypeMismatch
+            ? "CRITICAL: Token type mismatch"
+            : isOfflineToken && isOfflineSession
+            ? "OK: Correct token type"
+            : "WARNING: Unexpected token type",
+        },
+        recommendations:
+          recommendations.length > 0
+            ? recommendations
+            : ["Session and token appear to be valid."],
       });
     } catch (error) {
       logger.error("[API] Error in session diagnostic:", error);

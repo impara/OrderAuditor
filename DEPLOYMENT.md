@@ -220,9 +220,11 @@ curl https://your-domain.com/api/dashboard/stats
 ### Webhook Not Receiving Events
 
 1. Verify webhook is registered: `curl https://your-domain.com/api/webhooks/status`
-2. Check webhook secret matches Shopify app credentials
-3. Verify `APP_URL` is set correctly in `.env`
-4. Check application logs for webhook errors
+2. **For Partner Apps**: Verify `SHOPIFY_API_SECRET` matches your app's Client Secret from Partner Dashboard
+3. **For Legacy Custom Apps**: Check `SHOPIFY_WEBHOOK_SECRET` matches Shopify app credentials
+4. Use diagnostic endpoint: `curl https://your-domain.com/api/webhooks/diagnostic` to verify configuration
+5. Verify `APP_URL` is set correctly in `.env`
+6. Check application logs for webhook errors
 
 ### Docker Compose ContainerConfig Error
 

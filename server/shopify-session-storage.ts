@@ -1,12 +1,42 @@
-import { Session, SessionStorage } from "@shopify/shopify-api";
+import { Session } from "@shopify/shopify-api";
 import { db } from "./db";
 import { shopifySessions } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { logger } from "./utils/logger";
 
+interface SessionStorage {
+  storeSession(session: Session): Promise<boolean>;
+  loadSession(id: string): Promise<Session | undefined>;
+  deleteSession(id: string): Promise<boolean>;
+  deleteSessions(ids: string[]): Promise<boolean>;
+  findSessionsByShop(shop: string): Promise<Session[]>;
+}
+
 export class PostgresSessionStorage implements SessionStorage {
   async storeSession(session: Session): Promise<boolean> {
-    logger.info(`[SessionStorage] *** storeSession CALLED *** for shop: ${session.shop}, isOnline: ${session.isOnline}, id: ${session.id}`);
+    const tokenPrefix = session.accessToken?.substring(0, 6) || "N/A";
+    const tokenLength = session.accessToken?.length || 0;
+    
+    logger.info(
+      `[SessionStorage] *** storeSession CALLED *** for shop: ${session.shop}, isOnline: ${session.isOnline}, id: ${session.id}, token prefix: ${tokenPrefix}, token length: ${tokenLength}`
+    );
+    
+    // Validate session type matches token type
+    if (!session.isOnline && session.accessToken) {
+      if (tokenPrefix === "shpua_") {
+        logger.error(
+          `[SessionStorage] CRITICAL: Attempting to store USER ACCESS TOKEN (shpua_) in OFFLINE session! This is invalid and will cause API failures.`
+        );
+        logger.error(
+          `[SessionStorage] Session ID: ${session.id}, Shop: ${session.shop}`
+        );
+      } else if (tokenPrefix === "shpat_") {
+        logger.info(
+          `[SessionStorage] ✅ Valid offline token (shpat_) being stored in offline session`
+        );
+      }
+    }
+    
     try {
       logger.info(`[SessionStorage] Attempting database insert...`);
       
@@ -77,7 +107,7 @@ export class PostgresSessionStorage implements SessionStorage {
       const session = new Session({
         id: row.id,
         shop: row.shop,
-        state: row.state,
+        state: row.state || "",
         isOnline: row.isOnline,
         scope: row.scope || undefined,
         expires: row.expires ? new Date(row.expires) : undefined,
@@ -101,6 +131,23 @@ export class PostgresSessionStorage implements SessionStorage {
         };
       }
 
+      // Validate loaded session
+      if (row.accessToken) {
+        const tokenPrefix = row.accessToken.substring(0, 6);
+        const tokenLength = row.accessToken.length;
+        
+        logger.debug(
+          `[SessionStorage] Loaded session - isOnline: ${row.isOnline}, token prefix: ${tokenPrefix}, token length: ${tokenLength}`
+        );
+        
+        // Warn if offline session has user token
+        if (!row.isOnline && tokenPrefix === "shpua_") {
+          logger.error(
+            `[SessionStorage] CRITICAL: Offline session has USER ACCESS TOKEN (shpua_)! This is invalid. Shop: ${row.shop}`
+          );
+        }
+      }
+      
       logger.debug(`[SessionStorage] Successfully loaded session for shop: ${row.shop}`);
       return session;
     } catch (error: any) {
@@ -148,7 +195,7 @@ export class PostgresSessionStorage implements SessionStorage {
         const session = new Session({
           id: row.id,
           shop: row.shop,
-          state: row.state,
+          state: row.state || "",
           isOnline: row.isOnline,
           scope: row.scope || undefined,
           expires: row.expires ? new Date(row.expires) : undefined,

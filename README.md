@@ -435,8 +435,9 @@ SMTP_FROM=your-email@gmail.com
 | Variable                   | Required | Description                          | Example                                              |
 | -------------------------- | -------- | ------------------------------------ | ---------------------------------------------------- |
 | `DATABASE_URL`             | Yes      | PostgreSQL connection string         | `postgresql://user:pass@localhost:5432/db`           |
-| `SHOPIFY_API_KEY`          | Yes      | Shopify Client ID                    | `your_client_id`                                     |
-| `SHOPIFY_WEBHOOK_SECRET`   | Yes      | Webhook verification secret          | `shpss_...`                                          |
+| `SHOPIFY_API_KEY`          | Yes      | Shopify Client ID (Partner App)      | `your_client_id`                                     |
+| `SHOPIFY_API_SECRET`       | Yes      | Shopify Client Secret (Partner App)  | `your_client_secret`                                 |
+| `SHOPIFY_WEBHOOK_SECRET`   | No\*\*\* | Legacy webhook secret (Custom Apps)  | `shpss_...` (legacy, not needed for Partner Apps)   |
 | `PORT`                     | No       | Server port (default: 5000)          | `5000`                                               |
 | `APP_URL`                  | Yes\*    | Public URL for webhook registration  | `http://localhost:5000` or `https://your-domain.com` |
 | `LOG_LEVEL`                | No       | Log verbosity level (default: debug) | `error`, `warn`, `info`, `debug`                     |
@@ -450,6 +451,19 @@ SMTP_FROM=your-email@gmail.com
 
 \*\*Required for email notifications. See [Email Notifications](#email-notifications) section below.
 
+\*\*\***For Partner Apps (multi-tenant embedded apps)**: `SHOPIFY_WEBHOOK_SECRET` is **NOT needed**. The app uses `SHOPIFY_API_SECRET` (Client Secret) for webhook verification. `SHOPIFY_WEBHOOK_SECRET` is only for legacy Custom Apps and should be removed.
+
+### Shopify Credentials Mapping
+
+**For Partner Apps (Current Setup):**
+- **Client ID** → `SHOPIFY_API_KEY` and `VITE_SHOPIFY_API_KEY`
+- **Client Secret** → `SHOPIFY_API_SECRET` (used for both OAuth and webhook verification)
+- `SHOPIFY_WEBHOOK_SECRET` → **NOT NEEDED** (legacy, can be removed)
+
+**For Legacy Custom Apps (Deprecated):**
+- `SHOPIFY_WEBHOOK_SECRET` was a separate "API secret key"
+- This is no longer used for Partner Apps
+
 ## Troubleshooting
 
 ### Database Connection Issues
@@ -462,8 +476,10 @@ SMTP_FROM=your-email@gmail.com
 
 - Verify webhook is registered: `GET /api/webhooks/status`
 - Check `APP_URL` is publicly accessible
-- Verify `SHOPIFY_WEBHOOK_SECRET` matches Shopify app credentials
+- For Partner Apps: Verify `SHOPIFY_API_SECRET` matches your app's Client Secret
+- For Legacy Custom Apps: Verify `SHOPIFY_WEBHOOK_SECRET` matches app credentials
 - Check server logs for HMAC verification errors
+- Use `/api/webhooks/diagnostic` endpoint to verify webhook secret configuration
 
 ### npm Install Issues (Windows/WSL)
 
