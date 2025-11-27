@@ -176,6 +176,8 @@ export async function authCallback(req: Request, res: Response) {
     logger.info(`[AuthCallback] Manual session storage result: ${stored}`);
 
     // Register webhooks after auth
+    // Note: Webhook registration may fail if Protected Customer Data access is not approved
+    // This is non-blocking - the app can still function, but duplicate detection will be limited
     try {
       logger.info(
         `[AuthCallback] Attempting to register webhooks for shop: ${session.shop}`
@@ -195,8 +197,10 @@ export async function authCallback(req: Request, res: Response) {
         JSON.stringify(response, null, 2)
       );
 
-      // Check orders/create webhook
-      const ordersCreateResult = response["orders/create"];
+      // Shopify SDK returns webhook keys in uppercase with underscores (e.g., "ORDERS_CREATE")
+      // Check orders/create webhook (try both formats)
+      const ordersCreateResult =
+        response["ORDERS_CREATE"] || response["orders/create"];
       if (
         ordersCreateResult &&
         Array.isArray(ordersCreateResult) &&
@@ -208,8 +212,21 @@ export async function authCallback(req: Request, res: Response) {
             `[AuthCallback] ✅ Successfully registered orders/create webhook`
           );
         } else {
-          logger.error(
-            `[AuthCallback] ❌ Failed to register orders/create webhook:`,
+          // Extract error message from GraphQL response
+          const resultData = result.result as any;
+          const errorMessage =
+            resultData?.data?.webhookSubscriptionCreate?.userErrors?.[0]
+              ?.message ||
+            resultData?.errors?.[0]?.message ||
+            "Unknown error";
+          logger.warn(
+            `[AuthCallback] ⚠️ Failed to register orders/create webhook: ${errorMessage}`
+          );
+          logger.info(
+            `[AuthCallback] 💡 This is non-blocking. The app will still function, but duplicate detection may be limited without webhooks.`
+          );
+          logger.debug(
+            `[AuthCallback] Full error details:`,
             JSON.stringify(result, null, 2)
           );
         }
@@ -220,8 +237,9 @@ export async function authCallback(req: Request, res: Response) {
         );
       }
 
-      // Check orders/updated webhook
-      const ordersUpdatedResult = response["orders/updated"];
+      // Check orders/updated webhook (try both formats)
+      const ordersUpdatedResult =
+        response["ORDERS_UPDATED"] || response["orders/updated"];
       if (
         ordersUpdatedResult &&
         Array.isArray(ordersUpdatedResult) &&
@@ -233,8 +251,21 @@ export async function authCallback(req: Request, res: Response) {
             `[AuthCallback] ✅ Successfully registered orders/updated webhook`
           );
         } else {
-          logger.error(
-            `[AuthCallback] ❌ Failed to register orders/updated webhook:`,
+          // Extract error message from GraphQL response
+          const resultData = result.result as any;
+          const errorMessage =
+            resultData?.data?.webhookSubscriptionCreate?.userErrors?.[0]
+              ?.message ||
+            resultData?.errors?.[0]?.message ||
+            "Unknown error";
+          logger.warn(
+            `[AuthCallback] ⚠️ Failed to register orders/updated webhook: ${errorMessage}`
+          );
+          logger.info(
+            `[AuthCallback] 💡 This is non-blocking. The app will still function, but duplicate detection may be limited without webhooks.`
+          );
+          logger.debug(
+            `[AuthCallback] Full error details:`,
             JSON.stringify(result, null, 2)
           );
         }
@@ -245,12 +276,14 @@ export async function authCallback(req: Request, res: Response) {
         );
       }
     } catch (error: any) {
-      logger.error(
-        `[AuthCallback] ❌ Error during webhook registration:`,
+      logger.warn(
+        `[AuthCallback] ⚠️ Error during webhook registration:`,
         error
       );
-      logger.error(`[AuthCallback] Error message: ${error.message}`);
-      logger.error(`[AuthCallback] Error stack: ${error.stack}`);
+      logger.warn(`[AuthCallback] Error message: ${error.message}`);
+      logger.info(
+        `[AuthCallback] 💡 OAuth completed successfully. Webhook registration can be done manually later via the Settings page once Protected Customer Data access is approved.`
+      );
       // Don't fail the OAuth flow if webhook registration fails - user can register manually later
     }
 
