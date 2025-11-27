@@ -343,6 +343,7 @@ export default function Settings() {
                               type="email"
                               placeholder="admin@example.com"
                               {...field}
+                              value={field.value || ""}
                               data-testid="input-notification-email"
                             />
                           </FormControl>
@@ -364,6 +365,7 @@ export default function Settings() {
                               type="url"
                               placeholder="https://hooks.slack.com/services/..."
                               {...field}
+                              value={field.value || ""}
                               data-testid="input-slack-webhook"
                             />
                           </FormControl>
@@ -398,6 +400,8 @@ export default function Settings() {
                     />
                   </CardContent>
                 </Card>
+
+                <WebhookStatus />
               </TabsContent>
             </Tabs>
 
@@ -415,5 +419,73 @@ export default function Settings() {
         </Form>
       </main>
     </div>
+  );
+}
+
+interface WebhookStatusResponse {
+  registered: boolean;
+  webhooks: {
+    ordersCreate: any;
+    ordersUpdated: any;
+  };
+}
+
+function WebhookStatus() {
+  const { data: status, isLoading, error } = useQuery<WebhookStatusResponse>({
+    queryKey: ['/api/webhooks/status'],
+  });
+
+  if (isLoading) return <Skeleton className="h-32 w-full" />;
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-section-header text-destructive">Webhook Status Error</CardTitle>
+          <CardDescription>Failed to check webhook status</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            {(error as Error).message}
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const isRegistered = status?.registered;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-section-header">Webhook Status</CardTitle>
+        <CardDescription>
+          Status of Shopify webhooks for order updates.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center gap-2">
+          <div className={`h-3 w-3 rounded-full ${isRegistered ? 'bg-green-500' : 'bg-red-500'}`} />
+          <span className="font-medium">
+            {isRegistered ? 'Active & Registered' : 'Not Registered'}
+          </span>
+        </div>
+        {!isRegistered && (
+          <p className="text-sm text-muted-foreground mt-2">
+            Webhooks are not currently registered. Try reinstalling the app to fix this.
+          </p>
+        )}
+        {status?.webhooks && (
+          <div className="mt-4 space-y-2">
+            <div className="text-sm">
+              <span className="font-medium">Orders Create:</span> {status.webhooks.ordersCreate ? '✅' : '❌'}
+            </div>
+            <div className="text-sm">
+              <span className="font-medium">Orders Updated:</span> {status.webhooks.ordersUpdated ? '✅' : '❌'}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
