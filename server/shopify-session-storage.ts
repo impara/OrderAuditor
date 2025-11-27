@@ -16,11 +16,11 @@ export class PostgresSessionStorage implements SessionStorage {
   async storeSession(session: Session): Promise<boolean> {
     const tokenPrefix = session.accessToken?.substring(0, 6) || "N/A";
     const tokenLength = session.accessToken?.length || 0;
-    
+
     logger.info(
       `[SessionStorage] *** storeSession CALLED *** for shop: ${session.shop}, isOnline: ${session.isOnline}, id: ${session.id}, token prefix: ${tokenPrefix}, token length: ${tokenLength}`
     );
-    
+
     // Validate session type matches token type
     if (!session.isOnline && session.accessToken) {
       if (tokenPrefix === "shpua_") {
@@ -36,10 +36,10 @@ export class PostgresSessionStorage implements SessionStorage {
         );
       }
     }
-    
+
     try {
       logger.info(`[SessionStorage] Attempting database insert...`);
-      
+
       await db
         .insert(shopifySessions)
         .values({
@@ -57,7 +57,8 @@ export class PostgresSessionStorage implements SessionStorage {
           accountOwner: session.onlineAccessInfo?.associated_user.account_owner,
           locale: session.onlineAccessInfo?.associated_user.locale,
           collaborator: session.onlineAccessInfo?.associated_user.collaborator,
-          emailVerified: session.onlineAccessInfo?.associated_user.email_verified,
+          emailVerified:
+            session.onlineAccessInfo?.associated_user.email_verified,
         })
         .onConflictDoUpdate({
           target: shopifySessions.id,
@@ -72,17 +73,25 @@ export class PostgresSessionStorage implements SessionStorage {
             firstName: session.onlineAccessInfo?.associated_user.first_name,
             lastName: session.onlineAccessInfo?.associated_user.last_name,
             email: session.onlineAccessInfo?.associated_user.email,
-            accountOwner: session.onlineAccessInfo?.associated_user.account_owner,
+            accountOwner:
+              session.onlineAccessInfo?.associated_user.account_owner,
             locale: session.onlineAccessInfo?.associated_user.locale,
-            collaborator: session.onlineAccessInfo?.associated_user.collaborator,
-            emailVerified: session.onlineAccessInfo?.associated_user.email_verified,
+            collaborator:
+              session.onlineAccessInfo?.associated_user.collaborator,
+            emailVerified:
+              session.onlineAccessInfo?.associated_user.email_verified,
           },
         });
-      
-      logger.info(`[SessionStorage] Successfully stored session for shop: ${session.shop}`);
+
+      logger.info(
+        `[SessionStorage] Successfully stored session for shop: ${session.shop}`
+      );
       return true;
     } catch (error: any) {
-      logger.error(`[SessionStorage] FAILED to store session for shop: ${session.shop}`, error);
+      logger.error(
+        `[SessionStorage] FAILED to store session for shop: ${session.shop}`,
+        error
+      );
       logger.error(`[SessionStorage] Error details: ${error.message}`);
       logger.error(`[SessionStorage] Error stack: ${error.stack}`);
       return false;
@@ -92,7 +101,7 @@ export class PostgresSessionStorage implements SessionStorage {
   async loadSession(id: string): Promise<Session | undefined> {
     try {
       logger.debug(`[SessionStorage] Loading session: ${id}`);
-      
+
       const [row] = await db
         .select()
         .from(shopifySessions)
@@ -135,11 +144,11 @@ export class PostgresSessionStorage implements SessionStorage {
       if (row.accessToken) {
         const tokenPrefix = row.accessToken.substring(0, 6);
         const tokenLength = row.accessToken.length;
-        
+
         logger.debug(
           `[SessionStorage] Loaded session - isOnline: ${row.isOnline}, token prefix: ${tokenPrefix}, token length: ${tokenLength}`
         );
-        
+
         // Warn if offline session has user token
         if (!row.isOnline && tokenPrefix === "shpua_") {
           logger.error(
@@ -147,8 +156,10 @@ export class PostgresSessionStorage implements SessionStorage {
           );
         }
       }
-      
-      logger.debug(`[SessionStorage] Successfully loaded session for shop: ${row.shop}`);
+
+      logger.debug(
+        `[SessionStorage] Successfully loaded session for shop: ${row.shop}`
+      );
       return session;
     } catch (error: any) {
       logger.error(`[SessionStorage] Error loading session ${id}:`, error);
@@ -183,13 +194,15 @@ export class PostgresSessionStorage implements SessionStorage {
   async findSessionsByShop(shop: string): Promise<Session[]> {
     try {
       logger.debug(`[SessionStorage] Finding sessions for shop: ${shop}`);
-      
+
       const rows = await db
         .select()
         .from(shopifySessions)
         .where(eq(shopifySessions.shop, shop));
 
-      logger.debug(`[SessionStorage] Found ${rows.length} sessions for shop: ${shop}`);
+      logger.debug(
+        `[SessionStorage] Found ${rows.length} sessions for shop: ${shop}`
+      );
 
       return rows.map((row) => {
         const session = new Session({
@@ -201,7 +214,7 @@ export class PostgresSessionStorage implements SessionStorage {
           expires: row.expires ? new Date(row.expires) : undefined,
           accessToken: row.accessToken || undefined,
         });
-        
+
         // Rehydrate onlineAccessInfo if user data exists
         if (row.userId) {
           session.onlineAccessInfo = {
@@ -219,11 +232,14 @@ export class PostgresSessionStorage implements SessionStorage {
             expires_in: 0,
           };
         }
-        
+
         return session;
       });
     } catch (error: any) {
-      logger.error(`[SessionStorage] Error finding sessions by shop ${shop}:`, error);
+      logger.error(
+        `[SessionStorage] Error finding sessions by shop ${shop}:`,
+        error
+      );
       return [];
     }
   }

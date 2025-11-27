@@ -317,7 +317,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Diagnostic endpoint to help troubleshoot webhook verification
+  // OAuth configuration diagnostic (public, no auth required)
+  app.get("/api/oauth/diagnostic", async (_req: Request, res: Response) => {
+    const shop = _req.query.shop as string | undefined;
+    if (!shop) {
+      return res
+        .status(400)
+        .json({
+          error: "Missing shop parameter (?shop=yourstore.myshopify.com)",
+        });
+    }
+
+    const sanitizedShop = shopify.utils.sanitizeShop(shop, true);
+    const offlineSessionId = shopify.session.getOfflineId(
+      sanitizedShop || shop
+    );
+
+    // Try to load existing session
+    const existingSession = await shopify.config.sessionStorage.loadSession(
+      offlineSessionId
+    );
+
+    // Get scopes as string - use the scopes from config initialization
+    // Default scopes if config.scopes is not available
+    const defaultScopes = [
+      "read_orders",
+      "write_orders",
+      "read_customers",
+      "read_merchant_managed_fulfillment_orders",
+      "write_merchant_managed_fulfillment_orders",
+    ];
+    const scopesArray = Array.isArray(shopify.config.scopes)
+      ? shopify.config.scopes
+      : defaultScopes;
+    const scopesString = scopesArray.join(",");
+
+    res.json({
+      shop: shop,
+      sanitizedShop: sanitizedShop,
+      offlineSessionId: offlineSessionId,
+      existingSession: existingSession
+        ? {
+            id: existingSession.id,
+            shop: existingSession.shop,
+            isOnline: existingSession.isOnline,
+            hasAccessToken: !!existingSession.accessToken,
+            tokenPrefix: existingSession.accessToken?.substring(0, 6) || "N/A",
+            tokenLength: existingSession.accessToken?.length || 0,
+            scope: existingSession.scope,
+          }
+        : null,
+      appConfig: {
+        apiKey: shopify.config.apiKey?.substring(0, 10) + "...",
+        isEmbeddedApp: shopify.config.isEmbeddedApp,
+        apiVersion: shopify.config.apiVersion,
+        hostName: shopify.config.hostName,
+        hostScheme: shopify.config.hostScheme,
+        scopes: scopesArray,
+      },
+      oauthUrl:
+        sanitizedShop && shopify.config.apiKey
+          ? `https://${sanitizedShop}/admin/oauth/authorize?client_id=${
+              shopify.config.apiKey
+            }&scope=${encodeURIComponent(
+              scopesString
+            )}&redirect_uri=${encodeURIComponent(
+              (shopify.config.hostScheme || "https") +
+                "://" +
+                shopify.config.hostName +
+                "/api/auth/callback"
+            )}&state=...`
+          : "N/A",
+      instructions: [
+        "1. Check if existing session has correct token type (should be shpat_ for offline)",
+        "2. If token is shpua_, the OAuth flow is returning user tokens instead of offline tokens",
+        "3. This might be a Shopify Partners app configuration issue",
+        "4. Try uninstalling the app completely from Shopify Admin → Settings → Apps",
+        "5. Then reinstall using the OAuth URL shown above",
+      ],
+    });
+  });
+
+  // Diagnostic endpoint to help troubleshoot webhook verification (public, no auth required)
   app.get("/api/webhooks/diagnostic", async (_req: Request, res: Response) => {
     const apiSecret = process.env.SHOPIFY_API_SECRET || "";
     const webhookSecret = process.env.SHOPIFY_WEBHOOK_SECRET || "";

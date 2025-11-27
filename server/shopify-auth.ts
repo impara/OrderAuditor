@@ -1,5 +1,10 @@
 import "@shopify/shopify-api/adapters/node";
-import { shopifyApi, ApiVersion, BillingInterval, DeliveryMethod } from "@shopify/shopify-api";
+import {
+  shopifyApi,
+  ApiVersion,
+  BillingInterval,
+  DeliveryMethod,
+} from "@shopify/shopify-api";
 import { PostgresSessionStorage } from "./shopify-session-storage";
 import { Request, Response, NextFunction } from "express";
 import { logger } from "./utils/logger";
@@ -45,16 +50,24 @@ export async function auth(req: Request, res: Response) {
       return;
     }
 
+    const shop = shopify.utils.sanitizeShop(req.query.shop as string, true)!;
+    logger.info(`[Auth] Starting OAuth flow for shop: ${shop}, requesting OFFLINE token (isOnline: false)`);
+    logger.info(`[Auth] App configuration - isEmbeddedApp: ${shopify.config.isEmbeddedApp}, API Key: ${shopify.config.apiKey?.substring(0, 10)}...`);
+
     // The library handles the redirect to Shopify
+    // For offline tokens, isOnline MUST be false
     await shopify.auth.begin({
-      shop: shopify.utils.sanitizeShop(req.query.shop as string, true)!,
+      shop: shop,
       callbackPath: "/api/auth/callback",
-      isOnline: false, // Offline token for background jobs (webhooks)
+      isOnline: false, // Offline token for background jobs (webhooks) - CRITICAL: must be false
       rawRequest: req,
       rawResponse: res,
     });
+    
+    logger.debug(`[Auth] OAuth redirect initiated for shop: ${shop}`);
   } catch (e: any) {
     logger.error(`Failed to begin auth: ${e.message}`);
+    logger.error(`[Auth] Error stack: ${e.stack}`);
     res.status(500).send(e.message);
   }
 }
@@ -62,6 +75,12 @@ export async function auth(req: Request, res: Response) {
 export async function authCallback(req: Request, res: Response) {
   try {
     logger.info(`[AuthCallback] Starting OAuth callback`);
+    
+    // Log OAuth callback query parameters (excluding sensitive data)
+    const queryParams = { ...req.query };
+    delete queryParams.code; // Don't log the code
+    delete queryParams.hmac; // Don't log the hmac
+    logger.debug(`[AuthCallback] OAuth callback query params: ${JSON.stringify(Object.keys(queryParams))}`);
 
     const callback = await shopify.auth.callback({
       rawRequest: req,
@@ -78,6 +97,17 @@ export async function authCallback(req: Request, res: Response) {
     logger.info(
       `[AuthCallback] Session has accessToken: ${!!session.accessToken}, token prefix: ${tokenPrefix}, token length: ${tokenLength}`
     );
+    
+    // Log full session details for debugging
+    logger.debug(`[AuthCallback] Full session details:`, {
+      id: session.id,
+      shop: session.shop,
+      isOnline: session.isOnline,
+      scope: session.scope,
+      expires: session.expires?.toISOString(),
+      tokenPrefix,
+      tokenLength,
+    });
 
     // Validate that we got an offline session as expected
     if (session.isOnline) {
@@ -184,10 +214,10 @@ export async function verifyRequest(
     if (!session || !session.accessToken) {
       logger.error(`[Auth] No offline session found for shop ${shop}`);
       // Return JSON with shop so frontend can redirect
-      res.status(401).json({ 
+      res.status(401).json({
         message: "Unauthorized: No valid session found",
         shop: shop,
-        retryAuth: true
+        retryAuth: true,
       });
       return;
     }
@@ -198,7 +228,8 @@ export async function verifyRequest(
         `[Auth] Session loaded is marked as ONLINE but should be OFFLINE for shop ${shop}. Session ID: ${session.id}`
       );
       res.status(401).json({
-        message: "Unauthorized: Invalid session type. Please reinstall the app.",
+        message:
+          "Unauthorized: Invalid session type. Please reinstall the app.",
         shop: shop,
         retryAuth: true,
         error: "Session is online but should be offline",
@@ -222,7 +253,8 @@ export async function verifyRequest(
         `[Auth] Session has USER ACCESS TOKEN (shpua_) instead of OFFLINE TOKEN (shpat_) for shop ${shop}. This is invalid for API calls.`
       );
       res.status(401).json({
-        message: "Unauthorized: Invalid access token type. The app needs to be reinstalled to get a proper offline token.",
+        message:
+          "Unauthorized: Invalid access token type. The app needs to be reinstalled to get a proper offline token.",
         shop: shop,
         retryAuth: true,
         error: "User access token found instead of offline token",
