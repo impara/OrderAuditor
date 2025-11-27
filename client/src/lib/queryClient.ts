@@ -73,40 +73,69 @@ async function getAuthToken(): Promise<string> {
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
+    // Clone the response before reading it, so we can read it multiple times if needed
+    const clonedRes = res.clone();
+    let errorText = res.statusText;
+
     if (res.status === 401) {
-      console.warn("[Auth] 401 Unauthorized received. Attempting to handle re-auth...");
+      console.warn(
+        "[Auth] 401 Unauthorized received. Attempting to handle re-auth..."
+      );
       try {
-        const data = await res.json();
+        const data = await clonedRes.json();
         if (data.retryAuth && data.shop) {
           console.log(`[Auth] Redirecting to auth for shop: ${data.shop}`);
-          
+
           // Use App Bridge to redirect the top-level window
           // This is required because we are in an iframe and need to break out for OAuth
           try {
             const app = await waitForAppBridge();
             const redirect = Redirect.create(app);
-            
+
             // Redirect to our backend auth endpoint
             // The backend will then redirect to Shopify's OAuth page
             // We use REMOTE because we are navigating away from the embedded app view temporarily
             const authUrl = `${window.location.origin}/api/auth?shop=${data.shop}`;
             redirect.dispatch(Redirect.Action.REMOTE, authUrl);
-            
+
             // Return a promise that never resolves to pause execution while redirecting
             return new Promise(() => {});
           } catch (err) {
-            console.error("[Auth] Failed to use App Bridge for redirect, falling back to window.location", err);
+            console.error(
+              "[Auth] Failed to use App Bridge for redirect, falling back to window.location",
+              err
+            );
             window.location.href = `/api/auth?shop=${data.shop}`;
             return new Promise(() => {});
           }
         }
+        // If we got JSON but no retryAuth, use the error message from JSON
+        errorText = data.message || data.error || JSON.stringify(data);
       } catch (e) {
-        console.error("[Auth] Failed to parse 401 response for re-auth details", e);
+        console.error(
+          "[Auth] Failed to parse 401 response for re-auth details",
+          e
+        );
+        // If JSON parsing fails, try to get text error message from a fresh clone
+        try {
+          const textClone = res.clone();
+          errorText = await textClone.text();
+        } catch (textError) {
+          // If that fails, just use status text
+          errorText = res.statusText;
+        }
+      }
+    } else {
+      // For non-401 errors, read the response text from cloned response
+      try {
+        const textClone = res.clone();
+        errorText = await textClone.text();
+      } catch (textError) {
+        errorText = res.statusText;
       }
     }
-    
-    const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+
+    throw new Error(`${res.status}: ${errorText}`);
   }
 }
 
@@ -188,7 +217,11 @@ export const getQueryFn: <T>(options: {
     }
 
     await throwIfResNotOk(res);
-    return await res.json();
+
+    // Clone the response before reading JSON, in case throwIfResNotOk already read it
+    // This prevents "body stream already read" errors
+    const jsonClone = res.clone();
+    return await jsonClone.json();
   };
 
 export const queryClient = new QueryClient({
