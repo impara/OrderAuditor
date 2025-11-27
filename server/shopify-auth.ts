@@ -176,24 +176,82 @@ export async function authCallback(req: Request, res: Response) {
     logger.info(`[AuthCallback] Manual session storage result: ${stored}`);
 
     // Register webhooks after auth
-    const response = await shopify.webhooks.register({
-      session,
-    });
-
-    if (!response["orders/create"]?.[0]?.success) {
-      logger.error(
-        `Failed to register orders/create webhook: ${JSON.stringify(
-          response["orders/create"]
-        )}`
+    try {
+      logger.info(
+        `[AuthCallback] Attempting to register webhooks for shop: ${session.shop}`
       );
-    }
-
-    if (!response["orders/updated"]?.[0]?.success) {
-      logger.error(
-        `Failed to register orders/updated webhook: ${JSON.stringify(
-          response["orders/updated"]
-        )}`
+      logger.debug(
+        `[AuthCallback] Session access token available: ${!!session.accessToken}, token prefix: ${
+          session.accessToken?.substring(0, 6) || "N/A"
+        }`
       );
+
+      const response = await shopify.webhooks.register({
+        session,
+      });
+
+      logger.debug(
+        `[AuthCallback] Webhook registration response:`,
+        JSON.stringify(response, null, 2)
+      );
+
+      // Check orders/create webhook
+      const ordersCreateResult = response["orders/create"];
+      if (
+        ordersCreateResult &&
+        Array.isArray(ordersCreateResult) &&
+        ordersCreateResult.length > 0
+      ) {
+        const result = ordersCreateResult[0];
+        if (result.success) {
+          logger.info(
+            `[AuthCallback] ✅ Successfully registered orders/create webhook`
+          );
+        } else {
+          logger.error(
+            `[AuthCallback] ❌ Failed to register orders/create webhook:`,
+            JSON.stringify(result, null, 2)
+          );
+        }
+      } else {
+        logger.warn(
+          `[AuthCallback] ⚠️ orders/create webhook registration response is missing or invalid:`,
+          JSON.stringify(ordersCreateResult, null, 2)
+        );
+      }
+
+      // Check orders/updated webhook
+      const ordersUpdatedResult = response["orders/updated"];
+      if (
+        ordersUpdatedResult &&
+        Array.isArray(ordersUpdatedResult) &&
+        ordersUpdatedResult.length > 0
+      ) {
+        const result = ordersUpdatedResult[0];
+        if (result.success) {
+          logger.info(
+            `[AuthCallback] ✅ Successfully registered orders/updated webhook`
+          );
+        } else {
+          logger.error(
+            `[AuthCallback] ❌ Failed to register orders/updated webhook:`,
+            JSON.stringify(result, null, 2)
+          );
+        }
+      } else {
+        logger.warn(
+          `[AuthCallback] ⚠️ orders/updated webhook registration response is missing or invalid:`,
+          JSON.stringify(ordersUpdatedResult, null, 2)
+        );
+      }
+    } catch (error: any) {
+      logger.error(
+        `[AuthCallback] ❌ Error during webhook registration:`,
+        error
+      );
+      logger.error(`[AuthCallback] Error message: ${error.message}`);
+      logger.error(`[AuthCallback] Error stack: ${error.stack}`);
+      // Don't fail the OAuth flow if webhook registration fails - user can register manually later
     }
 
     // Redirect to app with host param
