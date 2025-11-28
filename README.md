@@ -409,12 +409,14 @@ SMTP_FROM=your-email@gmail.com
 ### 3. Common SMTP Providers
 
 **Gmail:**
+
 - `SMTP_HOST=smtp.gmail.com`
 - `SMTP_PORT=587` (TLS) or `465` (SSL)
 - Use an [App Password](https://support.google.com/accounts/answer/185833) instead of your regular password
 - `SMTP_FROM` should match `SMTP_USER`
 
 **SendGrid:**
+
 - `SMTP_HOST=smtp.sendgrid.net`
 - `SMTP_PORT=587`
 - `SMTP_USER=apikey`
@@ -422,6 +424,7 @@ SMTP_FROM=your-email@gmail.com
 - `SMTP_FROM=your-verified-sender@example.com`
 
 **Mailgun:**
+
 - `SMTP_HOST=smtp.mailgun.org`
 - `SMTP_PORT=587`
 - `SMTP_USER=postmaster@your-domain.mailgun.org`
@@ -432,20 +435,20 @@ SMTP_FROM=your-email@gmail.com
 
 ## Environment Variables Reference
 
-| Variable                   | Required | Description                          | Example                                              |
-| -------------------------- | -------- | ------------------------------------ | ---------------------------------------------------- |
-| `DATABASE_URL`             | Yes      | PostgreSQL connection string         | `postgresql://user:pass@localhost:5432/db`           |
-| `SHOPIFY_API_KEY`          | Yes      | Shopify Client ID (Partner App)      | `your_client_id`                                     |
-| `SHOPIFY_API_SECRET`       | Yes      | Shopify Client Secret (Partner App)  | `your_client_secret`                                 |
-| `SHOPIFY_WEBHOOK_SECRET`   | No\*\*\* | Legacy webhook secret (Custom Apps)  | `shpss_...` (legacy, not needed for Partner Apps)   |
-| `PORT`                     | No       | Server port (default: 5000)          | `5000`                                               |
-| `APP_URL`                  | Yes\*    | Public URL for webhook registration  | `http://localhost:5000` or `https://your-domain.com` |
-| `LOG_LEVEL`                | No       | Log verbosity level (default: debug) | `error`, `warn`, `info`, `debug`                     |
-| `SMTP_HOST`                | No\*\*   | SMTP server hostname                 | `smtp.gmail.com`                                     |
-| `SMTP_PORT`                | No\*\*   | SMTP server port                     | `587`                                                |
-| `SMTP_USER`                 | No\*\*   | SMTP authentication username         | `your-email@gmail.com`                               |
-| `SMTP_PASS`                 | No\*\*   | SMTP authentication password         | `your-app-password`                                  |
-| `SMTP_FROM`                 | No\*\*   | Email sender address                 | `your-email@gmail.com`                               |
+| Variable                 | Required | Description                          | Example                                              |
+| ------------------------ | -------- | ------------------------------------ | ---------------------------------------------------- |
+| `DATABASE_URL`           | Yes      | PostgreSQL connection string         | `postgresql://user:pass@localhost:5432/db`           |
+| `SHOPIFY_API_KEY`        | Yes      | Shopify Client ID (Partner App)      | `your_client_id`                                     |
+| `SHOPIFY_API_SECRET`     | Yes      | Shopify Client Secret (Partner App)  | `your_client_secret`                                 |
+| `SHOPIFY_WEBHOOK_SECRET` | No\*\*\* | Legacy webhook secret (Custom Apps)  | `shpss_...` (legacy, not needed for Partner Apps)    |
+| `PORT`                   | No       | Server port (default: 5000)          | `5000`                                               |
+| `APP_URL`                | Yes\*    | Public URL for webhook registration  | `http://localhost:5000` or `https://your-domain.com` |
+| `LOG_LEVEL`              | No       | Log verbosity level (default: debug) | `error`, `warn`, `info`, `debug`                     |
+| `SMTP_HOST`              | No\*\*   | SMTP server hostname                 | `smtp.gmail.com`                                     |
+| `SMTP_PORT`              | No\*\*   | SMTP server port                     | `587`                                                |
+| `SMTP_USER`              | No\*\*   | SMTP authentication username         | `your-email@gmail.com`                               |
+| `SMTP_PASS`              | No\*\*   | SMTP authentication password         | `your-app-password`                                  |
+| `SMTP_FROM`              | No\*\*   | Email sender address                 | `your-email@gmail.com`                               |
 
 \*Required for webhook registration. Use ngrok or similar tunneling service for local development.
 
@@ -456,11 +459,13 @@ SMTP_FROM=your-email@gmail.com
 ### Shopify Credentials Mapping
 
 **For Partner Apps (Current Setup):**
+
 - **Client ID** → `SHOPIFY_API_KEY` and `VITE_SHOPIFY_API_KEY`
 - **Client Secret** → `SHOPIFY_API_SECRET` (used for both OAuth and webhook verification)
 - `SHOPIFY_WEBHOOK_SECRET` → **NOT NEEDED** (legacy, can be removed)
 
 **For Legacy Custom Apps (Deprecated):**
+
 - `SHOPIFY_WEBHOOK_SECRET` was a separate "API secret key"
 - This is no longer used for Partner Apps
 
@@ -479,7 +484,7 @@ SMTP_FROM=your-email@gmail.com
 - For Partner Apps: Verify `SHOPIFY_API_SECRET` matches your app's Client Secret
 - For Legacy Custom Apps: Verify `SHOPIFY_WEBHOOK_SECRET` matches app credentials
 - Check server logs for HMAC verification errors
-- Use `/api/webhooks/diagnostic` endpoint to verify webhook secret configuration
+- Check server logs for webhook verification errors and configuration issues
 
 ### npm Install Issues (Windows/WSL)
 
