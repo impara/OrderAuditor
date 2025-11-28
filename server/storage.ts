@@ -3,6 +3,8 @@ import {
   detectionSettings,
   auditLogs,
   subscriptions,
+  webhookDeliveries,
+  shopifySessions,
   type Order,
   type InsertOrder,
   type DetectionSettings,
@@ -14,9 +16,10 @@ import {
   type Subscription,
   type InsertSubscription,
   type UpdateSubscription,
+  type InsertWebhookDelivery,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, gte, sql, and } from "drizzle-orm";
+import { eq, desc, gte, sql, and, ne } from "drizzle-orm";
 
 export interface IStorage {
   getOrder(shopDomain: string, id: string): Promise<Order | undefined>;
@@ -44,6 +47,15 @@ export interface IStorage {
 
   dismissOrder(shopDomain: string, orderId: string): Promise<Order>;
   resolveOrder(shopDomain: string, orderId: string, resolvedBy: string): Promise<Order>;
+
+  // Webhook delivery tracking
+  hasWebhookDelivery(shopDomain: string, deliveryId: string): Promise<boolean>;
+  recordWebhookDelivery(delivery: InsertWebhookDelivery): Promise<void>;
+  // Atomic insert-or-detect-duplicate: returns true if inserted (new), false if duplicate
+  tryRecordWebhookDelivery(delivery: InsertWebhookDelivery): Promise<boolean>;
+
+  // Shop cleanup (for app uninstall)
+  deleteShopData(shopDomain: string, excludeDeliveryId?: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -327,6 +339,90 @@ export class DatabaseStorage implements IStorage {
         | "shopify_tag_removed"
         | "auto_merged",
     });
+  }
+
+  async hasWebhookDelivery(
+    shopDomain: string,
+    deliveryId: string
+  ): Promise<boolean> {
+    const [delivery] = await db
+      .select()
+      .from(webhookDeliveries)
+      .where(
+        and(
+          eq(webhookDeliveries.shopDomain, shopDomain),
+          eq(webhookDeliveries.deliveryId, deliveryId)
+        )
+      )
+      .limit(1);
+    return !!delivery;
+  }
+
+  async recordWebhookDelivery(
+    delivery: InsertWebhookDelivery
+  ): Promise<void> {
+    await db.insert(webhookDeliveries).values(delivery).onConflictDoNothing();
+  }
+
+  /**
+   * Atomically try to record webhook delivery.
+   * Returns true if the delivery was inserted (first time), false if it already existed (duplicate).
+   * This prevents TOCTOU race conditions by using database-level atomicity.
+   */
+  async tryRecordWebhookDelivery(
+    delivery: InsertWebhookDelivery
+  ): Promise<boolean> {
+    const result = await db
+      .insert(webhookDeliveries)
+      .values(delivery)
+      .onConflictDoNothing()
+      .returning({ id: webhookDeliveries.id });
+    // If result has a row, we inserted it (first time). If empty, it was a duplicate.
+    return result.length > 0;
+  }
+
+  async deleteShopData(
+    shopDomain: string,
+    excludeDeliveryId?: string
+  ): Promise<void> {
+    // Delete in order to respect foreign key constraints
+    // 1. Delete audit logs (references orders)
+    await db
+      .delete(auditLogs)
+      .where(eq(auditLogs.shopDomain, shopDomain));
+
+    // 2. Delete orders
+    await db.delete(orders).where(eq(orders.shopDomain, shopDomain));
+
+    // 3. Delete webhook deliveries (excluding the current delivery ID to preserve idempotency)
+    // Explicitly check for non-empty string to handle empty string edge case
+    if (excludeDeliveryId && excludeDeliveryId.trim().length > 0) {
+      await db
+        .delete(webhookDeliveries)
+        .where(
+          and(
+            eq(webhookDeliveries.shopDomain, shopDomain),
+            ne(webhookDeliveries.deliveryId, excludeDeliveryId)
+          )
+        );
+    } else {
+      await db
+        .delete(webhookDeliveries)
+        .where(eq(webhookDeliveries.shopDomain, shopDomain));
+    }
+
+    // 4. Delete detection settings
+    await db
+      .delete(detectionSettings)
+      .where(eq(detectionSettings.shopDomain, shopDomain));
+
+    // 5. Delete subscriptions
+    await db
+      .delete(subscriptions)
+      .where(eq(subscriptions.shopifyShopDomain, shopDomain));
+
+    // 6. Delete Shopify sessions
+    await db.delete(shopifySessions).where(eq(shopifySessions.shop, shopDomain));
   }
 }
 

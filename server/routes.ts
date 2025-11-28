@@ -244,12 +244,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const ordersUpdatedWebhook = webhooks.find(
         (wh) => wh.topic === "orders/updated"
       );
+      const appUninstalledWebhook = webhooks.find(
+        (wh) => wh.topic === "app/uninstalled"
+      );
 
       res.json({
-        registered: !!(ordersCreateWebhook && ordersUpdatedWebhook),
+        registered: !!(
+          ordersCreateWebhook &&
+          ordersUpdatedWebhook &&
+          appUninstalledWebhook
+        ),
         webhooks: {
           ordersCreate: ordersCreateWebhook || null,
           ordersUpdated: ordersUpdatedWebhook || null,
+          appUninstalled: appUninstalledWebhook || null,
         },
         totalWebhooks: webhooks.length,
         allWebhooks: webhooks,
@@ -300,14 +308,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         `${baseUrl}/api/webhooks/shopify/orders/updated`
       );
 
+      const appUninstalledResult = await shopifyService.registerWebhook(
+        shop,
+        accessToken,
+        "app/uninstalled",
+        `${baseUrl}/api/webhooks/shopify/app/uninstalled`
+      );
+
       const allSuccess =
-        ordersCreateResult.success && ordersUpdatedResult.success;
+        ordersCreateResult.success &&
+        ordersUpdatedResult.success &&
+        appUninstalledResult.success;
 
       res.json({
         success: allSuccess,
         webhooks: {
           ordersCreate: ordersCreateResult,
           ordersUpdated: ordersUpdatedResult,
+          appUninstalled: appUninstalledResult,
         },
         message: allSuccess
           ? "All webhooks registered successfully"
@@ -635,6 +653,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
         const topicHeader = req.get("X-Shopify-Topic");
         const shopHeader = req.get("X-Shopify-Shop-Domain");
+        const deliveryIdHeader =
+          req.get("X-Shopify-Delivery-Id") ||
+          req.get("X-Shopify-Webhook-Id") ||
+          "";
 
         if (!hmacHeader) {
           logger.warn("[Webhook] ❌ Missing HMAC header");
@@ -661,6 +683,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
             topic || "unknown"
           }`
         );
+
+        // Atomically check and record webhook delivery ID to prevent TOCTOU race conditions
+        // This uses database-level atomicity: if insert succeeds, it's new; if it fails (conflict), it's duplicate
+        if (deliveryIdHeader) {
+          try {
+            const isNew = await storage.tryRecordWebhookDelivery({
+              shopDomain,
+              deliveryId: deliveryIdHeader,
+              topic: topic || "orders/create",
+            });
+            if (!isNew) {
+              logger.info(
+                `[Webhook] ⚠️ Duplicate webhook delivery detected (ID: ${deliveryIdHeader}). Skipping processing.`
+              );
+              return res.json({
+                success: true,
+                message: "Webhook already processed",
+                duplicate: true,
+              });
+            }
+            logger.debug(
+              `[Webhook] Recorded delivery ID ${deliveryIdHeader} before processing`
+            );
+          } catch (error) {
+            logger.error("Failed to record webhook delivery ID:", error);
+            // If recording fails, we should still proceed but idempotency won't be guaranteed
+          }
+        }
 
         // Parse JSON after verification
         const shopifyOrder = JSON.parse(rawBody.toString("utf8"));
@@ -868,6 +918,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           logger.info(
             `[Webhook] Order ${validatedOrder.shopifyOrderId} already exists, skipping duplicate processing`
           );
+          // Record webhook delivery ID for idempotency before returning
+          if (deliveryIdHeader) {
+            try {
+              await storage.recordWebhookDelivery({
+                shopDomain,
+                deliveryId: deliveryIdHeader,
+                topic: topic || "orders/create",
+              });
+            } catch (error) {
+              logger.error("Failed to record webhook delivery ID:", error);
+            }
+          }
           return res.json({
             success: true,
             flagged: existingOrder.isFlagged,
@@ -883,6 +945,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
             logger.warn(
               `[Webhook] Quota exceeded for ${shopDomain}: ${quotaCheck.reason}`
             );
+            // Record webhook delivery ID for idempotency before returning
+            if (deliveryIdHeader) {
+              try {
+                await storage.recordWebhookDelivery({
+                  shopDomain,
+                  deliveryId: deliveryIdHeader,
+                  topic: topic || "orders/create",
+                });
+              } catch (error) {
+                logger.error("Failed to record webhook delivery ID:", error);
+              }
+            }
             return res.status(403).json({
               success: false,
               error: "QUOTA_EXCEEDED",
@@ -991,6 +1065,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             shopDomain,
             flaggedOrder.id
           );
+
+          // Delivery ID already recorded immediately after duplicate check
           res.json({
             success: true,
             flagged: true,
@@ -1011,6 +1087,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           }
 
+          // Delivery ID already recorded immediately after duplicate check
           res.json({
             success: true,
             flagged: false,
@@ -1045,6 +1122,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
         const topicHeader = req.get("X-Shopify-Topic");
         const shopHeader = req.get("X-Shopify-Shop-Domain");
+        const deliveryIdHeader =
+          req.get("X-Shopify-Delivery-Id") ||
+          req.get("X-Shopify-Webhook-Id") ||
+          "";
 
         if (!hmacHeader) {
           logger.warn("[Webhook] ❌ Missing HMAC header");
@@ -1072,6 +1153,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }`
         );
 
+        // Atomically check and record webhook delivery ID to prevent TOCTOU race conditions
+        // This uses database-level atomicity: if insert succeeds, it's new; if it fails (conflict), it's duplicate
+        if (deliveryIdHeader) {
+          try {
+            const isNew = await storage.tryRecordWebhookDelivery({
+              shopDomain,
+              deliveryId: deliveryIdHeader,
+              topic: topic || "orders/updated",
+            });
+            if (!isNew) {
+              logger.info(
+                `[Webhook] ⚠️ Duplicate webhook delivery detected (ID: ${deliveryIdHeader}). Skipping processing.`
+              );
+              return res.json({
+                success: true,
+                message: "Webhook already processed",
+                duplicate: true,
+              });
+            }
+            logger.debug(
+              `[Webhook] Recorded delivery ID ${deliveryIdHeader} before processing`
+            );
+          } catch (error) {
+            logger.error("Failed to record webhook delivery ID:", error);
+            // If recording fails, we should still proceed but idempotency won't be guaranteed
+          }
+        }
+
         // Parse JSON after verification
         const shopifyOrder = JSON.parse(rawBody.toString("utf8"));
 
@@ -1083,12 +1192,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         if (!order) {
           logger.debug("[Webhook] Order not found in database, skipping");
+          // Record webhook delivery ID for idempotency before returning
+          if (deliveryIdHeader) {
+            try {
+              await storage.recordWebhookDelivery({
+                shopDomain,
+                deliveryId: deliveryIdHeader,
+                topic: topic || "orders/updated",
+              });
+            } catch (error) {
+              logger.error("Failed to record webhook delivery ID:", error);
+            }
+          }
           return res.json({ success: true, message: "Order not tracked" });
         }
 
         // Only process if order is currently flagged
         if (!order.isFlagged) {
           logger.debug("[Webhook] Order is not flagged, skipping");
+          // Record webhook delivery ID for idempotency before returning
+          if (deliveryIdHeader) {
+            try {
+              await storage.recordWebhookDelivery({
+                shopDomain,
+                deliveryId: deliveryIdHeader,
+                topic: topic || "orders/updated",
+              });
+            } catch (error) {
+              logger.error("Failed to record webhook delivery ID:", error);
+            }
+          }
           return res.json({ success: true, message: "Order not flagged" });
         }
 
@@ -1100,6 +1233,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         if (hasTag) {
           logger.debug("[Webhook] Tag still present, no action needed");
+          // Record webhook delivery ID for idempotency before returning
+          if (deliveryIdHeader) {
+            try {
+              await storage.recordWebhookDelivery({
+                shopDomain,
+                deliveryId: deliveryIdHeader,
+                topic: topic || "orders/updated",
+              });
+            } catch (error) {
+              logger.error("Failed to record webhook delivery ID:", error);
+            }
+          }
           return res.json({ success: true, message: "Tag still present" });
         }
 
@@ -1126,6 +1271,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           },
         });
 
+        // Delivery ID already recorded immediately after duplicate check
         res.json({
           success: true,
           order: resolvedOrder,
@@ -1133,6 +1279,107 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       } catch (error) {
         logger.error("Error processing orders/updated webhook:", error);
+        res.status(500).json({ error: "Failed to process webhook" });
+      }
+    }
+  );
+
+  app.post(
+    "/api/webhooks/shopify/app/uninstalled",
+    async (req: any, res: Response) => {
+      try {
+        // With express.raw middleware, req.body is a Buffer
+        const rawBody: Buffer = req.body;
+
+        logger.info(
+          `[Webhook] Received app/uninstalled webhook, body size: ${rawBody.length} bytes`
+        );
+
+        // Validate webhook using custom service
+        const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
+        const topicHeader = req.get("X-Shopify-Topic");
+        const shopHeader = req.get("X-Shopify-Shop-Domain");
+        const deliveryIdHeader =
+          req.get("X-Shopify-Delivery-Id") ||
+          req.get("X-Shopify-Webhook-Id") ||
+          "";
+
+        if (!hmacHeader) {
+          logger.warn("[Webhook] ❌ Missing HMAC header");
+          return res.status(401).json({ error: "Missing HMAC header" });
+        }
+
+        const isValid = shopifyService.verifyWebhook(rawBody, hmacHeader);
+
+        if (!isValid) {
+          logger.warn(`[Webhook] ❌ Invalid webhook signature.`);
+          return res.status(401).json({ error: "Invalid webhook signature" });
+        }
+
+        const shopDomain = shopHeader;
+        const topic = topicHeader;
+
+        if (!shopDomain) {
+          logger.error("[Webhook] ❌ Missing shop domain header");
+          return res.status(400).json({ error: "Missing shop domain" });
+        }
+
+        logger.info(
+          `[Webhook] ✅ Signature verified successfully! Shop: ${shopDomain}, Topic: ${
+            topic || "unknown"
+          }`
+        );
+
+        // Atomically check and record webhook delivery ID to prevent TOCTOU race conditions
+        // This uses database-level atomicity: if insert succeeds, it's new; if it fails (conflict), it's duplicate
+        // Also preserves idempotency by recording before deleting shop data
+        if (deliveryIdHeader) {
+          try {
+            const isNew = await storage.tryRecordWebhookDelivery({
+              shopDomain,
+              deliveryId: deliveryIdHeader,
+              topic: topic || "app/uninstalled",
+            });
+            if (!isNew) {
+              logger.info(
+                `[Webhook] ⚠️ Duplicate app/uninstalled webhook detected (ID: ${deliveryIdHeader}). Skipping processing.`
+              );
+              return res.json({
+                success: true,
+                message: "Webhook already processed",
+                duplicate: true,
+              });
+            }
+            logger.debug(
+              `[Webhook] Recorded delivery ID ${deliveryIdHeader} before cleanup`
+            );
+          } catch (error) {
+            logger.error("Failed to record webhook delivery ID:", error);
+            // If recording fails, we should still proceed with cleanup
+            // but idempotency won't be guaranteed for this delivery
+            // Note: cleanup is idempotent, so retries won't cause issues
+          }
+        }
+
+        // Parse JSON after verification
+        const webhookData = JSON.parse(rawBody.toString("utf8"));
+        logger.info(
+          `[Webhook] App uninstalled for shop: ${shopDomain}. Cleaning up shop data...`
+        );
+
+        // Delete all shop data (excluding the current delivery ID to preserve idempotency)
+        // If this fails, we must return an error - the operation didn't complete successfully
+        await storage.deleteShopData(shopDomain, deliveryIdHeader);
+        logger.info(
+          `[Webhook] ✅ Successfully cleaned up all data for shop: ${shopDomain}`
+        );
+
+        res.json({
+          success: true,
+          message: "App uninstalled and shop data cleaned up",
+        });
+      } catch (error) {
+        logger.error("Error processing app/uninstalled webhook:", error);
         res.status(500).json({ error: "Failed to process webhook" });
       }
     }

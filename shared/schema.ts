@@ -1,11 +1,23 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, boolean, jsonb, decimal } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  varchar,
+  timestamp,
+  integer,
+  boolean,
+  jsonb,
+  decimal,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // Orders table - stores order data from Shopify webhooks
 export const orders = pgTable("orders", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   shopDomain: varchar("shop_domain").notNull(), // Multi-tenancy support
   shopifyOrderId: varchar("shopify_order_id").notNull(), // Removed unique constraint as different shops might have same ID (unlikely but possible with different shops) or same order ID across shops? No, shopify IDs are unique globally usually, but safer to scope by shop. Actually, let's keep it unique per shop if possible, but for now just remove unique or make it unique(shop, orderId).
   // To avoid complex composite keys in Drizzle for now, let's just remove unique constraint on shopifyOrderId or make it unique per shop.
@@ -36,28 +48,42 @@ export const orders = pgTable("orders", {
 
 // Detection settings table - stores configuration for duplicate detection
 export const detectionSettings = pgTable("detection_settings", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   shopDomain: varchar("shop_domain").notNull().unique(), // One settings row per shop
   timeWindowHours: integer("time_window_hours").notNull().default(24),
   matchEmail: boolean("match_email").notNull().default(true),
   matchPhone: boolean("match_phone").notNull().default(false),
   matchAddress: boolean("match_address").notNull().default(true),
-  addressSensitivity: varchar("address_sensitivity", { length: 20 }).notNull().default("medium"), // low, medium, high
+  addressSensitivity: varchar("address_sensitivity", { length: 20 })
+    .notNull()
+    .default("medium"), // low, medium, high
   enableNotifications: boolean("enable_notifications").notNull().default(false),
   notificationEmail: text("notification_email"),
   slackWebhookUrl: text("slack_webhook_url"),
-  notificationThreshold: integer("notification_threshold").notNull().default(80), // Only notify if confidence >= this
-  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+  notificationThreshold: integer("notification_threshold")
+    .notNull()
+    .default(80), // Only notify if confidence >= this
+  updatedAt: timestamp("updated_at")
+    .notNull()
+    .default(sql`now()`),
 });
 
 // Audit logs table - tracks all duplicate detection events
 export const auditLogs = pgTable("audit_logs", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   shopDomain: varchar("shop_domain").notNull(),
-  orderId: varchar("order_id").notNull().references(() => orders.id),
+  orderId: varchar("order_id")
+    .notNull()
+    .references(() => orders.id),
   action: varchar("action", { length: 50 }).notNull(), // 'flagged', 'tagged', 'reviewed', 'dismissed', 'resolved'
   details: jsonb("details").$type<Record<string, any>>(),
-  performedAt: timestamp("performed_at").notNull().default(sql`now()`),
+  performedAt: timestamp("performed_at")
+    .notNull()
+    .default(sql`now()`),
 });
 
 // Shopify Sessions table - stores OAuth sessions
@@ -81,18 +107,51 @@ export const shopifySessions = pgTable("shopify_sessions", {
 
 // Subscriptions table - tracks subscription tier and usage
 export const subscriptions = pgTable("subscriptions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  shopifyShopDomain: varchar("shopify_shop_domain", { length: 255 }).notNull().unique(),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  shopifyShopDomain: varchar("shopify_shop_domain", { length: 255 })
+    .notNull()
+    .unique(),
   tier: varchar("tier", { length: 20 }).notNull().default("free"), // 'free', 'paid'
   status: varchar("status", { length: 20 }).notNull().default("active"), // 'active', 'cancelled', 'expired'
   monthlyOrderCount: integer("monthly_order_count").notNull().default(0),
   orderLimit: integer("order_limit").notNull().default(50), // 50 for free, -1 for unlimited paid
-  currentBillingPeriodStart: timestamp("current_billing_period_start").notNull().default(sql`now()`),
+  currentBillingPeriodStart: timestamp("current_billing_period_start")
+    .notNull()
+    .default(sql`now()`),
   currentBillingPeriodEnd: timestamp("current_billing_period_end"),
   shopifyChargeId: varchar("shopify_charge_id", { length: 255 }), // Shopify Billing API charge ID
-  createdAt: timestamp("created_at").notNull().default(sql`now()`),
-  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+  createdAt: timestamp("created_at")
+    .notNull()
+    .default(sql`now()`),
+  updatedAt: timestamp("updated_at")
+    .notNull()
+    .default(sql`now()`),
 });
+
+// Webhook deliveries table - tracks webhook delivery IDs to prevent duplicate processing
+export const webhookDeliveries = pgTable(
+  "webhook_deliveries",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    shopDomain: varchar("shop_domain").notNull(),
+    deliveryId: varchar("delivery_id", { length: 255 }).notNull(), // X-Shopify-Delivery-Id or X-Shopify-Webhook-Id header
+    topic: varchar("topic", { length: 100 }).notNull(), // e.g., 'orders/create', 'orders/updated', 'app/uninstalled'
+    processedAt: timestamp("processed_at")
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => ({
+    // Unique constraint to prevent duplicate processing of the same webhook delivery
+    shopDeliveryUnique: uniqueIndex("webhook_deliveries_shop_delivery_idx").on(
+      table.shopDomain,
+      table.deliveryId
+    ),
+  })
+);
 
 // Insert schemas for validation
 export const insertOrderSchema = createInsertSchema(orders).omit({
@@ -104,7 +163,9 @@ export const insertOrderSchema = createInsertSchema(orders).omit({
   matchConfidence: true,
 });
 
-export const insertDetectionSettingsSchema = createInsertSchema(detectionSettings).omit({
+export const insertDetectionSettingsSchema = createInsertSchema(
+  detectionSettings
+).omit({
   id: true,
   updatedAt: true,
 });
@@ -120,8 +181,16 @@ export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({
   updatedAt: true,
 });
 
+export const insertWebhookDeliverySchema = createInsertSchema(
+  webhookDeliveries
+).omit({
+  id: true,
+  processedAt: true,
+});
+
 // Update schema for settings
-export const updateDetectionSettingsSchema = insertDetectionSettingsSchema.partial();
+export const updateDetectionSettingsSchema =
+  insertDetectionSettingsSchema.partial();
 
 export const updateSubscriptionSchema = insertSubscriptionSchema.partial();
 
@@ -129,13 +198,19 @@ export const updateSubscriptionSchema = insertSubscriptionSchema.partial();
 export type Order = typeof orders.$inferSelect;
 export type InsertOrder = z.infer<typeof insertOrderSchema>;
 export type DetectionSettings = typeof detectionSettings.$inferSelect;
-export type InsertDetectionSettings = z.infer<typeof insertDetectionSettingsSchema>;
-export type UpdateDetectionSettings = z.infer<typeof updateDetectionSettingsSchema>;
+export type InsertDetectionSettings = z.infer<
+  typeof insertDetectionSettingsSchema
+>;
+export type UpdateDetectionSettings = z.infer<
+  typeof updateDetectionSettingsSchema
+>;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type Subscription = typeof subscriptions.$inferSelect;
 export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
 export type UpdateSubscription = z.infer<typeof updateSubscriptionSchema>;
+export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
+export type InsertWebhookDelivery = z.infer<typeof insertWebhookDeliverySchema>;
 export type ShopifySession = typeof shopifySessions.$inferSelect;
 
 // Dashboard stats type
