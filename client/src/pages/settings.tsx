@@ -17,6 +17,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import type { DetectionSettings, UpdateDetectionSettings } from "@shared/schema";
 import { updateDetectionSettingsSchema } from "@shared/schema";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { Header } from "@/components/Header";
 
 export default function Settings() {
   const { toast } = useToast();
@@ -83,27 +84,7 @@ export default function Settings() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background">
-        <header className="border-b border-border bg-background">
-          <div className="container mx-auto px-4 sm:px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Flag className="h-5 w-5 text-primary" />
-                <h1 className="text-page-title">Order Auditor</h1>
-              </div>
-              <nav className="flex gap-4">
-                <Button variant="ghost" asChild data-testid="link-dashboard">
-                  <a href={`/${window.location.search}`} className="text-sm font-medium">Dashboard</a>
-                </Button>
-                <Button variant="ghost" asChild data-testid="link-settings">
-                  <a href={`/settings${window.location.search}`} className="text-sm font-medium">Settings</a>
-                </Button>
-                <Button variant="ghost" asChild data-testid="link-subscription">
-                  <a href={`/subscription${window.location.search}`} className="text-sm font-medium">Subscription</a>
-                </Button>
-              </nav>
-            </div>
-          </div>
-        </header>
+        <Header />
         <main className="container mx-auto px-4 sm:px-6 py-6 max-w-4xl">
           <Skeleton className="h-96 w-full" />
         </main>
@@ -113,24 +94,7 @@ export default function Settings() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-background">
-        <div className="container mx-auto px-4 sm:px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Flag className="h-5 w-5 text-primary" />
-              <h1 className="text-page-title">Order Auditor</h1>
-            </div>
-            <nav className="flex gap-4">
-              <Button variant="ghost" asChild data-testid="link-dashboard">
-                <a href={`/${window.location.search}`} className="text-sm font-medium">Dashboard</a>
-              </Button>
-              <Button variant="ghost" asChild data-testid="link-settings">
-                <a href={`/settings${window.location.search}`} className="text-sm font-medium">Settings</a>
-              </Button>
-            </nav>
-          </div>
-        </div>
-      </header>
+      <Header />
 
       <main className="container mx-auto px-4 sm:px-6 py-6 max-w-4xl">
         <div className="mb-6">

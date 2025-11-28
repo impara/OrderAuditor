@@ -50,6 +50,12 @@ function getSessionTokenFromUrl(): string | null {
 
 // Helper to get fresh session token
 async function getAuthToken(): Promise<string> {
+  // DEVELOPMENT BYPASS
+  if (import.meta.env.DEV && !window.location.search.includes("host")) {
+    console.log("[Auth] 🛡️ Using DEV BYPASS token");
+    return "dev-token";
+  }
+
   // Always get fresh token from App Bridge
   console.log("[Auth] Fetching fresh session token from App Bridge...");
   const app = await waitForAppBridge();

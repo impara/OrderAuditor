@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Check, X, Zap, CreditCard, AlertCircle, Flag } from "lucide-react";
 import { useState, useEffect } from "react";
 import { apiRequest } from "@/lib/queryClient";
+import { Header } from "@/components/Header";
 
 interface Subscription {
   id: string;
@@ -97,27 +98,7 @@ function SubscriptionPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background">
-        <header className="border-b border-border bg-background">
-          <div className="container mx-auto px-4 sm:px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Flag className="h-5 w-5 text-primary" />
-                <h1 className="text-page-title">Order Auditor</h1>
-              </div>
-              <nav className="flex gap-4">
-                <Button variant="ghost" asChild>
-                  <a href={`/${window.location.search}`} className="text-sm font-medium">Dashboard</a>
-                </Button>
-                <Button variant="ghost" asChild>
-                  <a href={`/settings${window.location.search}`} className="text-sm font-medium">Settings</a>
-                </Button>
-                <Button variant="ghost" asChild>
-                  <a href={`/subscription${window.location.search}`} className="text-sm font-medium">Subscription</a>
-                </Button>
-              </nav>
-            </div>
-          </div>
-        </header>
+        <Header />
         <main className="container mx-auto p-6 max-w-4xl">
           <Skeleton className="h-8 w-64 mb-6" />
           <Skeleton className="h-64 w-full" />
@@ -129,27 +110,7 @@ function SubscriptionPage() {
   if (!subscription) {
     return (
       <div className="min-h-screen bg-background">
-        <header className="border-b border-border bg-background">
-          <div className="container mx-auto px-4 sm:px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Flag className="h-5 w-5 text-primary" />
-                <h1 className="text-page-title">Order Auditor</h1>
-              </div>
-              <nav className="flex gap-4">
-                <Button variant="ghost" asChild>
-                  <a href={`/${window.location.search}`} className="text-sm font-medium">Dashboard</a>
-                </Button>
-                <Button variant="ghost" asChild>
-                  <a href={`/settings${window.location.search}`} className="text-sm font-medium">Settings</a>
-                </Button>
-                <Button variant="ghost" asChild>
-                  <a href={`/subscription${window.location.search}`} className="text-sm font-medium">Subscription</a>
-                </Button>
-              </nav>
-            </div>
-          </div>
-        </header>
+        <Header />
         <main className="container mx-auto p-6 max-w-4xl">
           <Alert>
             <AlertCircle className="h-4 w-4" />
@@ -179,27 +140,7 @@ function SubscriptionPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-background">
-        <div className="container mx-auto px-4 sm:px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Flag className="h-5 w-5 text-primary" />
-              <h1 className="text-page-title">Order Auditor</h1>
-            </div>
-            <nav className="flex gap-4">
-              <Button variant="ghost" asChild data-testid="link-dashboard">
-                <a href={`/${window.location.search}`} className="text-sm font-medium">Dashboard</a>
-              </Button>
-              <Button variant="ghost" asChild data-testid="link-settings">
-                <a href={`/settings${window.location.search}`} className="text-sm font-medium">Settings</a>
-              </Button>
-              <Button variant="ghost" asChild data-testid="link-subscription">
-                <a href={`/subscription${window.location.search}`} className="text-sm font-medium">Subscription</a>
-              </Button>
-            </nav>
-          </div>
-        </div>
-      </header>
+      <Header />
 
       <main className="container mx-auto px-4 sm:px-6 py-6 max-w-4xl">
         <div className="mb-6">
@@ -235,10 +176,10 @@ function SubscriptionPage() {
                   <div className="w-full bg-secondary rounded-full h-2 mt-2">
                     <div
                       className={`h-2 rounded-full ${usagePercentage >= 90
-                          ? "bg-destructive"
-                          : usagePercentage >= 75
-                            ? "bg-chart-4"
-                            : "bg-primary"
+                        ? "bg-destructive"
+                        : usagePercentage >= 75
+                          ? "bg-chart-4"
+                          : "bg-primary"
                         }`}
                       style={{ width: `${usagePercentage}%` }}
                     />
@@ -373,4 +314,3 @@ function SubscriptionPage() {
 }
 
 export default SubscriptionPage;
-

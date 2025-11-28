@@ -7,12 +7,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
-import { AlertCircle, TrendingUp, TrendingDown, DollarSign, Clock, Flag, Package, MapPin, Mail, Phone, Calendar, X } from "lucide-react";
+import { AlertCircle, TrendingUp, TrendingDown, DollarSign, Clock, Flag, Package, MapPin, Mail, Phone, Calendar, X, Menu, ChevronRight } from "lucide-react";
 import type { Order, DashboardStats } from "@shared/schema";
 import { format } from "date-fns";
 import { useState } from "react";
 import { apiRequest } from "@/lib/queryClient";
+import { Link, useLocation } from "wouter";
+import { Header } from "@/components/Header";
 
 function StatsCard({
   title,
@@ -31,15 +34,15 @@ function StatsCard({
   const TrendIcon = isPositiveTrend ? TrendingUp : TrendingDown;
 
   return (
-    <Card data-testid={`card-stat-${title.toLowerCase().replace(/\s+/g, '-')}`}>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-        <CardTitle className="text-data-label text-muted-foreground font-medium">
+    <Card data-testid={`card-stat-${title.toLowerCase().replace(/\s+/g, '-')}`} className="overflow-hidden">
+      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 p-4">
+        <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground truncate">
           {title}
         </CardTitle>
-        <Icon className="h-4 w-4 text-muted-foreground" />
+        <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
       </CardHeader>
-      <CardContent>
-        <div className="text-stats-number text-foreground">{value}</div>
+      <CardContent className="p-4 pt-0">
+        <div className="text-xl sm:text-2xl font-bold text-foreground">{value}</div>
         {trend !== undefined && (
           <div className="flex items-center gap-1 mt-1">
             <TrendIcon className={`h-3 w-3 ${isPositiveTrend ? 'text-chart-1' : 'text-destructive'}`} />
@@ -47,7 +50,7 @@ function StatsCard({
               {Math.abs(trend)}%
             </span>
             {trendLabel && (
-              <span className="text-xs text-muted-foreground">{trendLabel}</span>
+              <span className="text-xs text-muted-foreground hidden sm:inline">{trendLabel}</span>
             )}
           </div>
         )}
@@ -58,21 +61,21 @@ function StatsCard({
 
 function ConfidenceBadge({ confidence }: { confidence: number }) {
   if (confidence >= 90) {
-    return <Badge variant="destructive" data-testid="badge-confidence-high">High ({confidence}%)</Badge>;
+    return <Badge variant="destructive" className="whitespace-nowrap" data-testid="badge-confidence-high">High ({confidence}%)</Badge>;
   } else if (confidence >= 70) {
-    return <Badge className="bg-chart-4 text-white hover:bg-chart-4/90" data-testid="badge-confidence-medium">Medium ({confidence}%)</Badge>;
+    return <Badge className="bg-chart-4 text-white hover:bg-chart-4/90 whitespace-nowrap" data-testid="badge-confidence-medium">Medium ({confidence}%)</Badge>;
   }
-  return <Badge variant="secondary" data-testid="badge-confidence-low">Low ({confidence}%)</Badge>;
+  return <Badge variant="secondary" className="whitespace-nowrap" data-testid="badge-confidence-low">Low ({confidence}%)</Badge>;
 }
 
 function EmptyState() {
   return (
-    <Card className="mt-4">
+    <Card className="mt-4 border-dashed">
       <CardContent className="flex flex-col items-center justify-center py-16 px-4">
         <div className="rounded-full bg-muted p-4 mb-4">
           <Package className="h-8 w-8 text-muted-foreground" />
         </div>
-        <h3 className="text-section-header mb-2">No duplicate orders detected</h3>
+        <h3 className="text-lg font-semibold mb-2">No duplicate orders detected</h3>
         <p className="text-sm text-muted-foreground text-center max-w-md mb-4">
           Your detection rules are running. We'll notify you when duplicates are found.
         </p>
@@ -126,7 +129,7 @@ function OrderDetailsModal({ order, isOpen, onClose }: { order: Order; isOpen: b
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-w-2xl" data-testid="dialog-order-details">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-order-details">
           <DialogHeader>
             <DialogTitle className="text-xl">Order #{order.orderNumber} Details</DialogTitle>
             <DialogDescription>
@@ -193,10 +196,10 @@ function OrderDetailsModal({ order, isOpen, onClose }: { order: Order; isOpen: b
                       {order.customerName?.charAt(0) || order.customerEmail.charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
-                  <div>
-                    <div className="text-sm font-medium">{order.customerName || 'Unknown Customer'}</div>
-                    <div className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Mail className="h-3 w-3" />
+                  <div className="overflow-hidden">
+                    <div className="text-sm font-medium truncate">{order.customerName || 'Unknown Customer'}</div>
+                    <div className="text-xs text-muted-foreground flex items-center gap-1 truncate">
+                      <Mail className="h-3 w-3 shrink-0" />
                       {order.customerEmail}
                     </div>
                   </div>
@@ -233,7 +236,7 @@ function OrderDetailsModal({ order, isOpen, onClose }: { order: Order; isOpen: b
               </div>
             )}
 
-            <div className="flex gap-2 pt-4">
+            <div className="flex flex-col sm:flex-row gap-2 pt-4">
               <Button variant="outline" className="flex-1" onClick={onClose} data-testid="button-close-details">
                 Close
               </Button>
@@ -286,14 +289,56 @@ function OrderDetailsModal({ order, isOpen, onClose }: { order: Order; isOpen: b
   );
 }
 
+function MobileOrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
+  return (
+    <Card className="mb-3 active:scale-[0.99] transition-transform" onClick={onClick}>
+      <CardContent className="p-4">
+        <div className="flex justify-between items-start mb-3">
+          <div>
+            <div className="font-semibold text-sm">#{order.orderNumber}</div>
+            <div className="text-xs text-muted-foreground">
+              {order.flaggedAt ? format(new Date(order.flaggedAt), 'MMM d, h:mm a') : '-'}
+            </div>
+          </div>
+          <div className="text-right">
+            {order.matchConfidence && <ConfidenceBadge confidence={order.matchConfidence} />}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 mb-3">
+          <Avatar className="h-9 w-9">
+            <AvatarFallback className="text-xs bg-primary/10 text-primary">
+              {order.customerName?.charAt(0) || order.customerEmail.charAt(0).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <div className="overflow-hidden">
+            <div className="text-sm font-medium truncate">{order.customerName || 'Unknown'}</div>
+            <div className="text-xs text-muted-foreground truncate">{order.customerEmail}</div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between pt-2 border-t border-border/50">
+          <div className="text-sm font-medium">
+            {order.currency} ${order.totalPrice}
+          </div>
+          <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-primary hover:text-primary/80">
+            View Details <ChevronRight className="h-3 w-3 ml-1" />
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function FlaggedOrdersTable({ orders }: { orders: Order[] }) {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   return (
     <>
-      <Card>
+      {/* Desktop Table View */}
+      <Card className="hidden md:block">
         <CardHeader>
-          <CardTitle className="text-section-header">Flagged Orders</CardTitle>
+          <CardTitle className="text-lg font-semibold">Flagged Orders</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
@@ -311,7 +356,8 @@ function FlaggedOrdersTable({ orders }: { orders: Order[] }) {
               {orders.map((order) => (
                 <TableRow
                   key={order.id}
-                  className="hover-elevate"
+                  className="hover-elevate cursor-pointer"
+                  onClick={() => setSelectedOrder(order)}
                   data-testid={`row-order-${order.id}`}
                 >
                   <TableCell className="font-semibold" data-testid={`text-order-number-${order.id}`}>
@@ -350,7 +396,10 @@ function FlaggedOrdersTable({ orders }: { orders: Order[] }) {
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => setSelectedOrder(order)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedOrder(order);
+                      }}
                       data-testid={`button-view-details-${order.id}`}
                     >
                       View Details
@@ -362,6 +411,18 @@ function FlaggedOrdersTable({ orders }: { orders: Order[] }) {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Mobile List View */}
+      <div className="md:hidden space-y-3">
+        <h3 className="text-lg font-semibold mb-2 px-1">Flagged Orders</h3>
+        {orders.map((order) => (
+          <MobileOrderCard
+            key={order.id}
+            order={order}
+            onClick={() => setSelectedOrder(order)}
+          />
+        ))}
+      </div>
 
       {selectedOrder && (
         <OrderDetailsModal
@@ -387,30 +448,10 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-background sticky top-0 z-10">
-        <div className="container mx-auto px-4 sm:px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Flag className="h-5 w-5 text-primary" />
-              <h1 className="text-page-title">Order Auditor</h1>
-            </div>
-            <nav className="flex gap-4">
-              <Button variant="ghost" asChild data-testid="link-dashboard">
-                <a href={`/${window.location.search}`} className="text-sm font-medium">Dashboard</a>
-              </Button>
-              <Button variant="ghost" asChild data-testid="link-settings">
-                <a href={`/settings${window.location.search}`} className="text-sm font-medium">Settings</a>
-              </Button>
-              <Button variant="ghost" asChild data-testid="link-subscription">
-                <a href={`/subscription${window.location.search}`} className="text-sm font-medium">Subscription</a>
-              </Button>
-            </nav>
-          </div>
-        </div>
-      </header>
+      <Header />
 
       <main className="container mx-auto px-4 sm:px-6 py-6">
-        <div className="flex flex-col lg:flex-row gap-4">
+        <div className="flex flex-col lg:flex-row gap-6">
           <div className="flex-1 order-2 lg:order-1">
             {ordersLoading ? (
               <Card>
@@ -425,9 +466,9 @@ export default function Dashboard() {
             )}
           </div>
 
-          <div className="w-full lg:w-80 order-1 lg:order-2 space-y-4">
+          <div className="w-full lg:w-80 order-1 lg:order-2">
             {statsLoading ? (
-              <>
+              <div className="grid grid-cols-2 lg:flex lg:flex-col gap-3">
                 {[1, 2, 3, 4].map((i) => (
                   <Card key={i}>
                     <CardContent className="p-6">
@@ -435,32 +476,32 @@ export default function Dashboard() {
                     </CardContent>
                   </Card>
                 ))}
-              </>
+              </div>
             ) : stats ? (
-              <>
+              <div className="grid grid-cols-2 lg:flex lg:flex-col gap-3">
                 <StatsCard
-                  title="Total Flagged Orders"
+                  title="Total Flagged"
                   value={stats.totalFlagged}
                   icon={AlertCircle}
                   trend={stats.totalFlaggedTrend}
-                  trendLabel="vs last 7 days"
+                  trendLabel="vs last 7d"
                 />
                 <StatsCard
-                  title="Potential Duplicate Value"
+                  title="Potential Value"
                   value={`$${stats.potentialDuplicateValue.toLocaleString()}`}
                   icon={DollarSign}
                 />
                 <StatsCard
-                  title="Orders Flagged Today"
+                  title="Flagged Today"
                   value={stats.ordersFlaggedToday}
                   icon={Flag}
                 />
                 <StatsCard
-                  title="Avg Resolution Time"
+                  title="Avg Resolution"
                   value={`${stats.averageResolutionTime}h`}
                   icon={Clock}
                 />
-              </>
+              </div>
             ) : null}
           </div>
         </div>

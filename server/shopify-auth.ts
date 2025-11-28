@@ -430,6 +430,18 @@ export async function verifyRequest(
   next: NextFunction
 ) {
   try {
+    // DEVELOPMENT BYPASS
+    // If we are in development mode and receive a specific dev token, bypass verification
+    if (process.env.NODE_ENV !== 'production' && req.headers.authorization === 'Bearer dev-token') {
+      logger.info('[Auth] 🛡️ Using DEV BYPASS for authentication');
+      res.locals.shopify = {
+        shop: 'test-shop.myshopify.com',
+        accessToken: 'shpat_dev_token_1234567890', // Dummy offline token
+      };
+      next();
+      return;
+    }
+
     const authHeader = req.headers.authorization;
     logger.debug(`[Auth] Verifying request to ${req.path}`);
     logger.debug(`[Auth] Authorization header present: ${!!authHeader}`);
