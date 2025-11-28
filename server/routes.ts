@@ -294,26 +294,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const baseUrl = process.env.APP_URL.replace(/\/$/, "");
 
-      const ordersCreateResult = await shopifyService.registerWebhook(
+      const ordersCreateResult = await shopifyService.registerWebhookWithRetry(
         shop,
         accessToken,
         "orders/create",
         `${baseUrl}/api/webhooks/shopify/orders/create`
       );
 
-      const ordersUpdatedResult = await shopifyService.registerWebhook(
+      const ordersUpdatedResult = await shopifyService.registerWebhookWithRetry(
         shop,
         accessToken,
         "orders/updated",
         `${baseUrl}/api/webhooks/shopify/orders/updated`
       );
 
-      const appUninstalledResult = await shopifyService.registerWebhook(
-        shop,
-        accessToken,
-        "app/uninstalled",
-        `${baseUrl}/api/webhooks/shopify/app/uninstalled`
-      );
+      const appUninstalledResult =
+        await shopifyService.registerWebhookWithRetry(
+          shop,
+          accessToken,
+          "app/uninstalled",
+          `${baseUrl}/api/webhooks/shopify/app/uninstalled`
+        );
 
       const allSuccess =
         ordersCreateResult.success &&
@@ -1066,7 +1067,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             flaggedOrder.id
           );
 
-          // Delivery ID already recorded immediately after duplicate check
+          // Ensure delivery ID is recorded for idempotency (if header was present)
+          // Note: If deliveryIdHeader was empty, we can't record anything, but the webhook was still processed
+          if (deliveryIdHeader) {
+            try {
+              await storage.recordWebhookDelivery({
+                shopDomain,
+                deliveryId: deliveryIdHeader,
+                topic: topic || "orders/create",
+              });
+            } catch (error) {
+              logger.error("Failed to record webhook delivery ID:", error);
+            }
+          }
+
           res.json({
             success: true,
             flagged: true,
@@ -1087,7 +1101,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           }
 
-          // Delivery ID already recorded immediately after duplicate check
+          // Ensure delivery ID is recorded for idempotency (if header was present)
+          // Note: If deliveryIdHeader was empty, we can't record anything, but the webhook was still processed
+          if (deliveryIdHeader) {
+            try {
+              await storage.recordWebhookDelivery({
+                shopDomain,
+                deliveryId: deliveryIdHeader,
+                topic: topic || "orders/create",
+              });
+            } catch (error) {
+              logger.error("Failed to record webhook delivery ID:", error);
+            }
+          }
+
           res.json({
             success: true,
             flagged: false,
@@ -1271,7 +1298,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
           },
         });
 
-        // Delivery ID already recorded immediately after duplicate check
+        // Ensure delivery ID is recorded for idempotency (if header was present)
+        // Note: If deliveryIdHeader was empty, we can't record anything, but the webhook was still processed
+        if (deliveryIdHeader) {
+          try {
+            await storage.recordWebhookDelivery({
+              shopDomain,
+              deliveryId: deliveryIdHeader,
+              topic: topic || "orders/updated",
+            });
+          } catch (error) {
+            logger.error("Failed to record webhook delivery ID:", error);
+          }
+        }
+
         res.json({
           success: true,
           order: resolvedOrder,
@@ -1333,7 +1373,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Atomically check and record webhook delivery ID to prevent TOCTOU race conditions
         // This uses database-level atomicity: if insert succeeds, it's new; if it fails (conflict), it's duplicate
         // Also preserves idempotency by recording before deleting shop data
-        if (deliveryIdHeader) {
+        const hasDeliveryId =
+          deliveryIdHeader && deliveryIdHeader.trim().length > 0;
+
+        if (!hasDeliveryId) {
+          logger.warn(
+            `[Webhook] ⚠️ Missing delivery ID headers (X-Shopify-Delivery-Id and X-Shopify-Webhook-Id). Idempotency protection will be limited for this webhook.`
+          );
+        }
+
+        if (hasDeliveryId) {
           try {
             const isNew = await storage.tryRecordWebhookDelivery({
               shopDomain,
@@ -1368,8 +1417,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
 
         // Delete all shop data (excluding the current delivery ID to preserve idempotency)
+        // Only pass excludeDeliveryId if it's a non-empty string to avoid deleting all delivery records
         // If this fails, we must return an error - the operation didn't complete successfully
-        await storage.deleteShopData(shopDomain, deliveryIdHeader);
+        await storage.deleteShopData(
+          shopDomain,
+          hasDeliveryId ? deliveryIdHeader : undefined
+        );
         logger.info(
           `[Webhook] ✅ Successfully cleaned up all data for shop: ${shopDomain}`
         );

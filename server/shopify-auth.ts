@@ -192,9 +192,88 @@ export async function authCallback(req: Request, res: Response) {
         }`
       );
 
-      const response = await shopify.webhooks.register({
-        session,
-      });
+      // Retry webhook registration with exponential backoff
+      const maxRetries = 3;
+      let lastError: any = null;
+      let response: any = null;
+
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        if (attempt > 0) {
+          const delayMs = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+          logger.info(
+            `[AuthCallback] Retrying webhook registration (attempt ${
+              attempt + 1
+            }/${maxRetries + 1}) after ${delayMs}ms delay...`
+          );
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+
+        try {
+          response = await shopify.webhooks.register({
+            session,
+          });
+          // If we got a response, break out of retry loop
+          break;
+        } catch (error: any) {
+          lastError = error;
+          const errorMessage = error?.message || String(error);
+          const lowerMessage = errorMessage.toLowerCase();
+
+          // Check if error is retryable
+          const isRetryable =
+            lowerMessage.includes("network") ||
+            lowerMessage.includes("fetch failed") ||
+            lowerMessage.includes("econnrefused") ||
+            lowerMessage.includes("etimedout") ||
+            lowerMessage.includes("timeout") ||
+            lowerMessage.includes("enotfound") ||
+            lowerMessage.includes("rate limit") ||
+            lowerMessage.includes("too many requests");
+
+          // Don't retry on authentication/authorization errors
+          const isNotRetryable =
+            lowerMessage.includes("unauthorized") ||
+            lowerMessage.includes("forbidden") ||
+            lowerMessage.includes("bad request") ||
+            lowerMessage.includes("invalid") ||
+            lowerMessage.includes("permission denied");
+
+          if (isNotRetryable || (!isRetryable && attempt < maxRetries)) {
+            if (isNotRetryable) {
+              logger.info(
+                `[AuthCallback] Error is not retryable, stopping retries: ${errorMessage}`
+              );
+            }
+            // If not retryable or last attempt, break
+            if (isNotRetryable || attempt === maxRetries) {
+              break;
+            }
+          }
+
+          if (attempt < maxRetries) {
+            logger.warn(
+              `[AuthCallback] Webhook registration failed (attempt ${
+                attempt + 1
+              }/${maxRetries + 1}): ${errorMessage}`
+            );
+          }
+        }
+      }
+
+      // If all retries failed, throw the last error
+      if (!response && lastError) {
+        throw lastError;
+      }
+
+      // If we still don't have a response after retries, log and continue
+      if (!response) {
+        logger.error(
+          `[AuthCallback] ❌ Webhook registration failed after ${
+            maxRetries + 1
+          } attempts`
+        );
+        throw new Error("Webhook registration failed after retries");
+      }
 
       logger.debug(
         `[AuthCallback] Webhook registration response:`,
@@ -277,6 +356,45 @@ export async function authCallback(req: Request, res: Response) {
         logger.warn(
           `[AuthCallback] ⚠️ orders/updated webhook registration response is missing or invalid:`,
           JSON.stringify(ordersUpdatedResult, null, 2)
+        );
+      }
+
+      // Check app/uninstalled webhook (try both formats)
+      const appUninstalledResult =
+        response["APP_UNINSTALLED"] || response["app/uninstalled"];
+      if (
+        appUninstalledResult &&
+        Array.isArray(appUninstalledResult) &&
+        appUninstalledResult.length > 0
+      ) {
+        const result = appUninstalledResult[0];
+        if (result.success) {
+          logger.info(
+            `[AuthCallback] ✅ Successfully registered app/uninstalled webhook`
+          );
+        } else {
+          // Extract error message from GraphQL response
+          const resultData = result.result as any;
+          const errorMessage =
+            resultData?.data?.webhookSubscriptionCreate?.userErrors?.[0]
+              ?.message ||
+            resultData?.errors?.[0]?.message ||
+            "Unknown error";
+          logger.warn(
+            `[AuthCallback] ⚠️ Failed to register app/uninstalled webhook: ${errorMessage}`
+          );
+          logger.info(
+            `[AuthCallback] 💡 This is non-blocking. The app will still function, but app uninstall cleanup may not work without this webhook.`
+          );
+          logger.debug(
+            `[AuthCallback] Full error details:`,
+            JSON.stringify(result, null, 2)
+          );
+        }
+      } else {
+        logger.warn(
+          `[AuthCallback] ⚠️ app/uninstalled webhook registration response is missing or invalid:`,
+          JSON.stringify(appUninstalledResult, null, 2)
         );
       }
     } catch (error: any) {

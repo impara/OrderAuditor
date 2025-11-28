@@ -212,6 +212,162 @@ export class ShopifyService {
   }
 
   /**
+   * Helper function to determine if an error is retryable
+   * @param error - The error object or error message
+   * @param statusCode - Optional HTTP status code
+   */
+  private isRetryableError(error: any, statusCode?: number): boolean {
+    // Check status code if provided
+    if (statusCode !== undefined) {
+      // Retry on rate limits and server errors
+      if (statusCode === 429 || statusCode === 500 || statusCode === 503) {
+        return true;
+      }
+      // Don't retry on client errors (except 429)
+      if (statusCode >= 400 && statusCode < 500) {
+        return false;
+      }
+    }
+
+    // Check error message for network-related errors
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const lowerMessage = errorMessage.toLowerCase();
+
+    // Retry on network errors
+    if (
+      lowerMessage.includes("network") ||
+      lowerMessage.includes("fetch failed") ||
+      lowerMessage.includes("econnrefused") ||
+      lowerMessage.includes("etimedout") ||
+      lowerMessage.includes("timeout") ||
+      lowerMessage.includes("enotfound")
+    ) {
+      return true;
+    }
+
+    // Don't retry on authentication/authorization errors
+    if (
+      lowerMessage.includes("unauthorized") ||
+      lowerMessage.includes("forbidden") ||
+      lowerMessage.includes("bad request") ||
+      lowerMessage.includes("not found")
+    ) {
+      return false;
+    }
+
+    // Default: retry on unknown errors (could be transient)
+    return true;
+  }
+
+  /**
+   * Sleep helper for exponential backoff
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Register a new webhook with retry logic
+   * Retries up to 3 times with exponential backoff (1s, 2s, 4s)
+   */
+  async registerWebhookWithRetry(
+    shopDomain: string,
+    accessToken: string,
+    topic: string,
+    address: string,
+    maxRetries: number = 3
+  ): Promise<WebhookRegistrationResult> {
+    let lastError: WebhookRegistrationResult | null = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      if (attempt > 0) {
+        const delayMs = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+        logger.info(
+          `[Shopify] Retrying webhook registration (attempt ${attempt + 1}/${
+            maxRetries + 1
+          }) after ${delayMs}ms delay...`
+        );
+        await this.sleep(delayMs);
+      }
+
+      const result = await this.registerWebhook(
+        shopDomain,
+        accessToken,
+        topic,
+        address
+      );
+
+      // If successful, return immediately
+      if (result.success) {
+        if (attempt > 0) {
+          logger.info(
+            `[Shopify] ✅ Webhook registration succeeded on retry attempt ${
+              attempt + 1
+            }`
+          );
+        }
+        return result;
+      }
+
+      // Check if error is retryable
+      const statusCode = this.extractStatusCode(result.error);
+      const isRetryable = this.isRetryableError(result.error, statusCode);
+
+      if (!isRetryable) {
+        logger.info(
+          `[Shopify] Error is not retryable (status: ${
+            statusCode || "unknown"
+          }), stopping retries`
+        );
+        return result;
+      }
+
+      // Store error for final return if all retries fail
+      lastError = result;
+
+      if (attempt < maxRetries) {
+        logger.warn(
+          `[Shopify] Webhook registration failed (attempt ${attempt + 1}/${
+            maxRetries + 1
+          }): ${result.error}`
+        );
+      }
+    }
+
+    // All retries exhausted
+    logger.error(
+      `[Shopify] ❌ Webhook registration failed after ${
+        maxRetries + 1
+      } attempts`
+    );
+    return (
+      lastError || {
+        success: false,
+        error: "Max retries exceeded",
+        message: "Failed to register webhook after multiple attempts",
+      }
+    );
+  }
+
+  /**
+   * Extract HTTP status code from error message
+   */
+  private extractStatusCode(error?: string): number | undefined {
+    if (!error) return undefined;
+
+    // Try to extract status code from error messages like "HTTP 429: Too Many Requests"
+    const match = error.match(/HTTP\s+(\d{3})/i) || error.match(/\b(\d{3})\b/);
+    if (match) {
+      const code = parseInt(match[1], 10);
+      if (code >= 100 && code < 600) {
+        return code;
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
    * Register a new webhook
    */
   async registerWebhook(
