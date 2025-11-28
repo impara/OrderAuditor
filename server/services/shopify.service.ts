@@ -338,8 +338,26 @@ export class ShopifyService {
       const order = data.order || null;
       if (order) {
         logger.debug(
-          `[Shopify] ✅ Successfully fetched order ${orderId} - Email: ${order.email || order.contact_email || "N/A"}`
+          `[Shopify] ✅ Successfully fetched order ${orderId} - Email: ${
+            order.email || order.contact_email || "N/A"
+          }`
         );
+        // Log if customer data is present but empty (Protected Customer Data issue)
+        if (
+          order.customer &&
+          !order.customer.email &&
+          !order.email &&
+          !order.contact_email
+        ) {
+          logger.warn(
+            `[Shopify] ⚠️ Order has customer object but no email/name. Protected Customer Data access may not be enabled. Customer ID: ${order.customer.id}`
+          );
+          logger.debug(
+            `[Shopify] Order customer object keys: ${Object.keys(
+              order.customer || {}
+            ).join(", ")}`
+          );
+        }
       } else {
         logger.warn(
           `[Shopify] ⚠️ Order API returned empty data for order ${orderId}`
@@ -403,8 +421,26 @@ export class ShopifyService {
       const customer = data.customer || null;
       if (customer) {
         logger.debug(
-          `[Shopify] ✅ Successfully fetched customer ${customerId} - Email: ${customer.email || "N/A"}, Name: ${customer.first_name || ""} ${customer.last_name || ""}`
+          `[Shopify] ✅ Successfully fetched customer ${customerId} - Email: ${
+            customer.email || "N/A"
+          }, Name: ${customer.first_name || ""} ${customer.last_name || ""}`
         );
+        // Log if customer object exists but has no protected data
+        if (!customer.email && !customer.first_name && !customer.last_name) {
+          logger.warn(
+            `[Shopify] ⚠️ Customer object exists but has no email/name. Protected Customer Data access may not be enabled.`
+          );
+          logger.debug(
+            `[Shopify] Customer object keys: ${Object.keys(customer).join(
+              ", "
+            )}`
+          );
+          logger.debug(
+            `[Shopify] Customer object sample: ${JSON.stringify(
+              Object.fromEntries(Object.entries(customer).slice(0, 5))
+            )}`
+          );
+        }
       } else {
         logger.warn(
           `[Shopify] ⚠️ Customer API returned empty data for customer ${customerId}`
