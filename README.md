@@ -346,11 +346,18 @@ The app will be available at `http://localhost:5000`
 The system calculates a confidence score (0-100%) based on:
 
 - **Email Match** (40 points): Same customer email
-- **Address Match** (up to 40 points): Similar shipping address based on sensitivity setting
-  - High sensitivity: Exact match required (address1, city, zip)
-  - Medium sensitivity: Two of three must match
-  - Low sensitivity: One match sufficient
-- **Name Match** (20 points): Same customer name (case-insensitive)
+- **Phone Match** (40 points): Same customer phone number (normalized for format differences)
+- **Address Match** (25-40 points): Similar shipping address based on sensitivity setting
+  - High sensitivity: Exact match required (address1, city, zip) - 40 points
+  - Medium sensitivity: Two of three must match - 30 points
+  - Low sensitivity: One match sufficient - 25 points
+- **Name Match** (20 points): Same customer name (case-insensitive, supporting evidence only)
+
+### Scoring Philosophy
+
+- **Conservative by default**: Multiple criteria should combine to reach the 70% threshold (e.g., Email 40 + Address 30 = 70%)
+- **Respect merchant choice**: If only one criterion is enabled (email OR phone) and it matches, it's sufficient to flag (boosted to 75%)
+- **Phone normalization**: Phone numbers are normalized to handle format differences (e.g., "+1234567890" vs "(123) 456-7890")
 
 ### Threshold
 
