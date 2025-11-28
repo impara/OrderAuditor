@@ -214,6 +214,8 @@ export class DuplicateDetectionService {
     }
 
     // Name matching is supporting evidence only (not a primary criterion)
+    // IMPORTANT: Name matching does NOT add to matchedCriteria - it's always applied
+    // as supporting evidence but should not affect the single-criterion boost logic
     if (newOrder.customerName && existingOrder.customerName) {
       if (
         newOrder.customerName.toLowerCase() ===
@@ -221,11 +223,16 @@ export class DuplicateDetectionService {
       ) {
         confidence += 20;
         reasons.push("Same name");
+        // Note: We intentionally do NOT add "name" to matchedCriteria
+        // because name matching is not a configurable criterion and should not
+        // interfere with the single-criterion boost logic below
       }
     }
 
     // Special case: If merchant enabled only ONE criterion and it matched, respect their choice
     // This allows merchants to use phone-only or email-only matching if they prefer
+    // Note: matchedCriteria only contains configurable criteria (email, phone, address)
+    // Name matching is excluded from matchedCriteria, so it won't interfere with this logic
     if (enabledCriteriaCount === 1 && matchedCriteria.length === 1) {
       // Boost confidence to 75% to exceed threshold when single enabled criterion matches
       // This respects the merchant's explicit configuration choice

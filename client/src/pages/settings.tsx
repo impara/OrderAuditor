@@ -18,6 +18,8 @@ import type { DetectionSettings, UpdateDetectionSettings } from "@shared/schema"
 import { updateDetectionSettingsSchema } from "@shared/schema";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Header } from "@/components/Header";
+import { InfoTooltip } from "@/components/InfoTooltip";
+import { WelcomeBanner } from "@/components/WelcomeBanner";
 
 export default function Settings() {
   const { toast } = useToast();
@@ -104,6 +106,8 @@ export default function Settings() {
           </p>
         </div>
 
+        <WelcomeBanner />
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
             <Tabs defaultValue="detection" className="space-y-4">
@@ -130,7 +134,13 @@ export default function Settings() {
                       name="timeWindowHours"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Hours: {field.value}</FormLabel>
+                          <FormLabel className="flex items-center gap-2">
+                            Hours: {field.value}
+                            <InfoTooltip
+                              content="Orders within this window are compared. Shorter = fewer false positives, longer = catches more duplicates"
+                              side="bottom"
+                            />
+                          </FormLabel>
                           <FormControl>
                             <Slider
                               min={1}
@@ -164,7 +174,13 @@ export default function Settings() {
                       render={({ field }) => (
                         <FormItem className="flex items-center justify-between">
                           <div className="space-y-0.5">
-                            <FormLabel>Email Address</FormLabel>
+                            <FormLabel className="flex items-center gap-2">
+                              Email Address
+                              <InfoTooltip
+                                content="Email is a strong identifier. Enabling this will flag orders with the same email address"
+                                side="bottom"
+                              />
+                            </FormLabel>
                             <FormDescription>
                               Match orders with the same email address
                             </FormDescription>
@@ -186,7 +202,13 @@ export default function Settings() {
                       render={({ field }) => (
                         <FormItem className="flex items-center justify-between">
                           <div className="space-y-0.5">
-                            <FormLabel>Phone Number</FormLabel>
+                            <FormLabel className="flex items-center gap-2">
+                              Phone Number
+                              <InfoTooltip
+                                content="Phone numbers are normalized for format differences. Enables detection even if formats differ (e.g., +1234567890 vs (123) 456-7890)"
+                                side="bottom"
+                              />
+                            </FormLabel>
                             <FormDescription>
                               Match orders with the same phone number
                             </FormDescription>
@@ -208,7 +230,13 @@ export default function Settings() {
                       render={({ field }) => (
                         <FormItem className="flex items-center justify-between">
                           <div className="space-y-0.5">
-                            <FormLabel>Shipping Address</FormLabel>
+                            <FormLabel className="flex items-center gap-2">
+                              Shipping Address
+                              <InfoTooltip
+                                content="Useful for detecting duplicates when customers use different emails. Less reliable than email/phone alone"
+                                side="bottom"
+                              />
+                            </FormLabel>
                             <FormDescription>
                               Match orders with similar shipping addresses
                             </FormDescription>
@@ -229,7 +257,13 @@ export default function Settings() {
                       name="addressSensitivity"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Address Matching Sensitivity</FormLabel>
+                          <FormLabel className="flex items-center gap-2">
+                            Address Matching Sensitivity
+                            <InfoTooltip
+                              content="Low: Matches if address OR (city + zip) match. Medium: Matches if (address + city) OR (address + zip) match. High: Requires exact match of address, city, and zip."
+                              side="bottom"
+                            />
+                          </FormLabel>
                           <Select
                             onValueChange={field.onChange}
                             defaultValue={field.value}
@@ -345,7 +379,13 @@ export default function Settings() {
                       name="notificationThreshold"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Confidence Threshold: {field.value}%</FormLabel>
+                          <FormLabel className="flex items-center gap-2">
+                            Confidence Threshold: {field.value}%
+                            <InfoTooltip
+                              content="Orders need 70%+ confidence to be flagged. Multiple matching criteria increase confidence"
+                              side="bottom"
+                            />
+                          </FormLabel>
                           <FormControl>
                             <Slider
                               min={50}
