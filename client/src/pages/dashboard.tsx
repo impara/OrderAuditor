@@ -12,6 +12,7 @@ import { AlertCircle, TrendingUp, TrendingDown, DollarSign, Clock, Flag, Package
 import type { Order, DashboardStats } from "@shared/schema";
 import { format } from "date-fns";
 import { useState } from "react";
+import { apiRequest } from "@/lib/queryClient";
 
 function StatsCard({
   title,
@@ -91,19 +92,8 @@ function OrderDetailsModal({ order, isOpen, onClose }: { order: Order; isOpen: b
 
   const dismissMutation = useMutation({
     mutationFn: async (orderId: string) => {
-      const response = await fetch(`/api/orders/${orderId}/dismiss`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to dismiss order");
-      }
-
-      return response.json();
+      const response = await apiRequest("POST", `/api/orders/${orderId}/dismiss`);
+      return await response.json();
     },
     onSuccess: () => {
       // Invalidate queries to refresh the list
