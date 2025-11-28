@@ -1,4 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAppBridge } from "@shopify/app-bridge-react";
+import { Redirect } from "@shopify/app-bridge/actions";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +33,7 @@ function SubscriptionPage() {
     queryKey: ["/api/subscription"],
   });
 
+  const app = useAppBridge();
   const upgradeMutation = useMutation({
     mutationFn: async () => {
       setUpgradeLoading(true);
@@ -41,14 +44,21 @@ function SubscriptionPage() {
     },
     onSuccess: (data) => {
       if (data.confirmationUrl) {
-        // Redirect to Shopify billing confirmation
-        window.location.href = data.confirmationUrl;
+        // Redirect to Shopify billing confirmation using App Bridge
+        if (app) {
+          const redirect = Redirect.create(app);
+          redirect.dispatch(Redirect.Action.REMOTE, data.confirmationUrl);
+        } else {
+          // Fallback to window.location if App Bridge is not available
+          window.location.href = data.confirmationUrl;
+        }
       } else {
         toast({
           title: "Upgrade initiated",
           description: "Redirecting to Shopify to complete payment...",
         });
       }
+      setUpgradeLoading(false);
     },
     onError: (error: Error) => {
       toast({
