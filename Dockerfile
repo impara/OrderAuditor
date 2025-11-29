@@ -1,4 +1,4 @@
-# Multi-stage Dockerfile for Order Auditor production deployment
+# Multi-stage Dockerfile for Duplicate Guard production deployment
 
 # Stage 1: Build
 FROM node:20-alpine AS builder

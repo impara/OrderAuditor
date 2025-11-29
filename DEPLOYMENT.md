@@ -1,6 +1,6 @@
 # Production Deployment Guide
 
-This guide covers deploying Order Auditor to a production server using Docker.
+This guide covers deploying Duplicate Guard to a production server using Docker.
 
 ## Prerequisites
 
@@ -27,8 +27,8 @@ sudo chmod +x /usr/local/bin/docker-compose
 ### 2. Clone the Repository
 
 ```bash
-git clone <your-repo-url> orderauditor
-cd orderauditor
+git clone <your-repo-url> duplicate-guard
+cd duplicate-guard
 ```
 
 ### 3. Configure Environment Variables
@@ -170,10 +170,10 @@ docker-compose -f docker-compose.prod.yml exec app npm run db:push
 
 ```bash
 # Create backup
-docker-compose -f docker-compose.prod.yml exec postgres pg_dump -U orderauditor orderauditor > backup_$(date +%Y%m%d_%H%M%S).sql
+docker-compose -f docker-compose.prod.yml exec postgres pg_dump -U duplicate-guard duplicate-guard > backup_$(date +%Y%m%d_%H%M%S).sql
 
 # Restore from backup
-docker-compose -f docker-compose.prod.yml exec -T postgres psql -U orderauditor orderauditor < backup_file.sql
+docker-compose -f docker-compose.prod.yml exec -T postgres psql -U duplicate-guard duplicate-guard < backup_file.sql
 ```
 
 ### Stop Services
@@ -215,7 +215,7 @@ curl https://your-domain.com/api/dashboard/stats
 
 1. Verify `DATABASE_URL` uses the service name `postgres` (not `localhost`)
 2. Check database logs: `docker-compose -f docker-compose.prod.yml logs postgres`
-3. Verify database is healthy: `docker-compose -f docker-compose.prod.yml exec postgres pg_isready -U orderauditor`
+3. Verify database is healthy: `docker-compose -f docker-compose.prod.yml exec postgres pg_isready -U duplicate-guard`
 
 ### Webhook Not Receiving Events
 
@@ -237,8 +237,8 @@ This usually happens when containers are in a bad state or orphaned from previou
 sudo docker-compose -f docker-compose.prod.yml down --remove-orphans
 
 # Remove any broken containers manually if needed
-sudo docker ps -a | grep orderauditor
-sudo docker rm -f orderauditor-app-prod orderauditor-db-prod 2>/dev/null || true
+sudo docker ps -a | grep duplicate-guard
+sudo docker rm -f duplicate-guard-app-prod duplicate-guard-db-prod 2>/dev/null || true
 
 # Clean up any broken containers
 sudo docker container prune -f

@@ -90,7 +90,7 @@ echo ""
 echo "5. Testing Database Schema"
 echo "---------------------------"
 echo -n "Checking subscriptions table exists... "
-if docker-compose exec -T postgres psql -U orderauditor -d orderauditor -c "\d subscriptions" > /dev/null 2>&1; then
+if docker-compose exec -T postgres psql -U duplicate-guard -d duplicate-guard -c "\d subscriptions" > /dev/null 2>&1; then
     echo -e "${GREEN}✓ PASSED${NC}"
     ((PASSED++))
 else

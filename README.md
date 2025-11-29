@@ -1,8 +1,8 @@
-# Order Auditor - Shopify Duplicate Order Detection App
+# Duplicate Guard - Shopify Duplicate Order Detection App
 
 ## Overview
 
-Order Auditor is a Shopify app that automatically detects and flags duplicate orders from the same customer using configurable detection rules. It processes orders via Shopify webhooks, analyzes them for duplicates based on email, shipping address, and other criteria, and automatically tags suspicious orders in Shopify for merchant review.
+Duplicate Guard is a Shopify app that automatically detects and flags duplicate orders from the same customer using configurable detection rules. It processes orders via Shopify webhooks, analyzes them for duplicates based on email, shipping address, and other criteria, and automatically tags suspicious orders in Shopify for merchant review.
 
 ## Current State
 
@@ -39,7 +39,7 @@ Order Auditor is a Shopify app that automatically detects and flags duplicate or
 
 ```bash
 # Navigate to project directory
-cd orderAuditor
+cd duplicate-guard
 
 # Install dependencies
 npm install
@@ -63,7 +63,7 @@ cp .env.example .env
 
 ```env
 # Database Configuration
-DATABASE_URL=postgresql://user:password@localhost:5432/orderauditor
+DATABASE_URL=postgresql://user:password@localhost:5432/duplicate-guard
 
 # Shopify Configuration
 SHOPIFY_SHOP_DOMAIN=yourstore.myshopify.com
@@ -85,7 +85,7 @@ VITE_SHOPIFY_SHOP_DOMAIN=yourstore.myshopify.com
 
    - Go to Shopify Admin → Settings → Apps and sales channels → Develop apps
    - Click "Create an app"
-   - Give it a name (e.g., "Order Auditor")
+   - Give it a name (e.g., "Duplicate Guard")
 
 2. **Configure API Scopes**:
 
@@ -147,15 +147,15 @@ VITE_SHOPIFY_SHOP_DOMAIN=yourstore.myshopify.com
 
    This will start a PostgreSQL 16 container with:
 
-   - Database: `orderauditor`
-   - User: `orderauditor`
-   - Password: `orderauditor`
+   - Database: `duplicate-guard`
+   - User: `duplicate-guard`
+   - Password: `duplicate-guard`
    - Port: `5432`
 
 2. **Update DATABASE_URL** in `.env`:
 
    ```env
-   DATABASE_URL=postgresql://orderauditor:orderauditor@localhost:5432/orderauditor
+   DATABASE_URL=postgresql://duplicate-guard:duplicate-guard@localhost:5432/duplicate-guard
    ```
 
 3. **Push Database Schema**:
@@ -194,17 +194,17 @@ VITE_SHOPIFY_SHOP_DOMAIN=yourstore.myshopify.com
 
    ```bash
    # Using psql
-   createdb orderauditor
+   createdb duplicate-guard
 
    # Or using SQL
    psql -U postgres
-   CREATE DATABASE orderauditor;
+   CREATE DATABASE "duplicate-guard";
    ```
 
 3. **Update DATABASE_URL** in `.env`:
 
    ```env
-   DATABASE_URL=postgresql://username:password@localhost:5432/orderauditor
+   DATABASE_URL=postgresql://username:password@localhost:5432/duplicate-guard
    ```
 
 4. **Push Database Schema**:
@@ -482,7 +482,7 @@ SMTP_FROM=your-email@gmail.com
 
 - Verify PostgreSQL is running: `pg_isready`
 - Check connection string format in `.env`
-- Ensure database exists: `psql -l | grep orderauditor`
+- Ensure database exists: `psql -l | grep duplicate-guard`
 
 ### Webhook Not Receiving Events
 

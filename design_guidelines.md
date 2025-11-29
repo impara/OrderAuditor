@@ -1,4 +1,4 @@
-# Order Auditor - Design Guidelines
+# Duplicate Guard - Design Guidelines
 
 ## Design Approach
 **Selected System:** Shopify Polaris Design System

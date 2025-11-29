@@ -3,18 +3,18 @@ version: '3.8'
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: orderauditor-db
+    container_name: duplicate-guard-db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: orderauditor
-      POSTGRES_PASSWORD: orderauditor
-      POSTGRES_DB: orderauditor
+      POSTGRES_USER: duplicate-guard
+      POSTGRES_PASSWORD: duplicate-guard
+      POSTGRES_DB: duplicate-guard
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U orderauditor"]
+      test: ["CMD-SHELL", "pg_isready -U duplicate-guard"]
       interval: 10s
       timeout: 5s
       retries: 5

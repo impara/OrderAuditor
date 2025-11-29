@@ -17,7 +17,10 @@ export class ShopifyBillingService {
     return `https://${shopDomain}/admin/api/${this.apiVersion}`;
   }
 
-  private validateCredentials(shopDomain: string, accessToken: string): boolean {
+  private validateCredentials(
+    shopDomain: string,
+    accessToken: string
+  ): boolean {
     if (!shopDomain || !accessToken) {
       logger.error("Shopify credentials not provided");
       return false;
@@ -28,14 +31,20 @@ export class ShopifyBillingService {
   /**
    * Create a recurring charge for $7.99/month
    */
-  async createRecurringCharge(shopDomain: string, accessToken: string, returnUrl: string): Promise<ShopifyRecurringCharge | null> {
+  async createRecurringCharge(
+    shopDomain: string,
+    accessToken: string,
+    returnUrl: string
+  ): Promise<ShopifyRecurringCharge | null> {
     if (!this.validateCredentials(shopDomain, accessToken)) {
       return null;
     }
 
     try {
-      const url = `${this.getBaseApiUrl(shopDomain)}/recurring_application_charges.json`;
-      
+      const url = `${this.getBaseApiUrl(
+        shopDomain
+      )}/recurring_application_charges.json`;
+
       const response = await fetch(url, {
         method: "POST",
         headers: {
@@ -44,7 +53,7 @@ export class ShopifyBillingService {
         },
         body: JSON.stringify({
           recurring_application_charge: {
-            name: "Order Auditor - Unlimited Plan",
+            name: "Duplicate Guard - Unlimited Plan",
             price: 7.99,
             return_url: returnUrl,
             test: process.env.NODE_ENV !== "production", // Test mode in development
@@ -62,7 +71,9 @@ export class ShopifyBillingService {
       }
 
       const data = await response.json();
-      logger.info(`[ShopifyBilling] Created recurring charge: ${data.recurring_application_charge.id}`);
+      logger.info(
+        `[ShopifyBilling] Created recurring charge: ${data.recurring_application_charge.id}`
+      );
       return data.recurring_application_charge;
     } catch (error) {
       logger.error("[ShopifyBilling] Error creating recurring charge:", error);
@@ -73,14 +84,20 @@ export class ShopifyBillingService {
   /**
    * Activate a recurring charge after merchant approval
    */
-  async activateCharge(shopDomain: string, accessToken: string, chargeId: number): Promise<boolean> {
+  async activateCharge(
+    shopDomain: string,
+    accessToken: string,
+    chargeId: number
+  ): Promise<boolean> {
     if (!this.validateCredentials(shopDomain, accessToken)) {
       return false;
     }
 
     try {
-      const url = `${this.getBaseApiUrl(shopDomain)}/recurring_application_charges/${chargeId}/activate.json`;
-      
+      const url = `${this.getBaseApiUrl(
+        shopDomain
+      )}/recurring_application_charges/${chargeId}/activate.json`;
+
       const response = await fetch(url, {
         method: "POST",
         headers: {
@@ -105,8 +122,10 @@ export class ShopifyBillingService {
 
       // Update subscription to paid tier
       await subscriptionService.updateTier(shopDomain, "paid", -1);
-      
-      logger.info(`[ShopifyBilling] Activated charge ${chargeId} and upgraded subscription`);
+
+      logger.info(
+        `[ShopifyBilling] Activated charge ${chargeId} and upgraded subscription`
+      );
       return true;
     } catch (error) {
       logger.error("[ShopifyBilling] Error activating charge:", error);
@@ -117,14 +136,20 @@ export class ShopifyBillingService {
   /**
    * Get charge status
    */
-  async getCharge(shopDomain: string, accessToken: string, chargeId: number): Promise<ShopifyRecurringCharge | null> {
+  async getCharge(
+    shopDomain: string,
+    accessToken: string,
+    chargeId: number
+  ): Promise<ShopifyRecurringCharge | null> {
     if (!this.validateCredentials(shopDomain, accessToken)) {
       return null;
     }
 
     try {
-      const url = `${this.getBaseApiUrl(shopDomain)}/recurring_application_charges/${chargeId}.json`;
-      
+      const url = `${this.getBaseApiUrl(
+        shopDomain
+      )}/recurring_application_charges/${chargeId}.json`;
+
       const response = await fetch(url, {
         method: "GET",
         headers: {
@@ -148,14 +173,20 @@ export class ShopifyBillingService {
   /**
    * Cancel a recurring charge
    */
-  async cancelCharge(shopDomain: string, accessToken: string, chargeId: number): Promise<boolean> {
+  async cancelCharge(
+    shopDomain: string,
+    accessToken: string,
+    chargeId: number
+  ): Promise<boolean> {
     if (!this.validateCredentials(shopDomain, accessToken)) {
       return false;
     }
 
     try {
-      const url = `${this.getBaseApiUrl(shopDomain)}/recurring_application_charges/${chargeId}.json`;
-      
+      const url = `${this.getBaseApiUrl(
+        shopDomain
+      )}/recurring_application_charges/${chargeId}.json`;
+
       const response = await fetch(url, {
         method: "DELETE",
         headers: {
@@ -175,8 +206,10 @@ export class ShopifyBillingService {
 
       // Downgrade subscription to free tier
       await subscriptionService.cancelSubscription(shopDomain);
-      
-      logger.info(`[ShopifyBilling] Cancelled charge ${chargeId} and downgraded subscription`);
+
+      logger.info(
+        `[ShopifyBilling] Cancelled charge ${chargeId} and downgraded subscription`
+      );
       return true;
     } catch (error) {
       logger.error("[ShopifyBilling] Error cancelling charge:", error);
@@ -186,5 +219,3 @@ export class ShopifyBillingService {
 }
 
 export const shopifyBillingService = new ShopifyBillingService();
-
-

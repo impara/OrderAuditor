@@ -3,7 +3,7 @@ version: '3.8'
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: orderauditor-db-prod
+    container_name: duplicate-guard-db-prod
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -17,7 +17,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - orderauditor-network
+      - duplicate-guard-network
 
   app:
     build:
@@ -25,7 +25,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_SHOPIFY_API_KEY: ${SHOPIFY_API_KEY}
-    container_name: orderauditor-app-prod
+    container_name: duplicate-guard-app-prod
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -61,13 +61,13 @@ services:
       retries: 3
       start_period: 40s
     networks:
-      - orderauditor-network
+      - duplicate-guard-network
 
 volumes:
   postgres_data_prod:
 
 networks:
-  orderauditor-network:
+  duplicate-guard-network:
     driver: bridge
 
 

@@ -73,7 +73,7 @@ curl http://localhost:5000/api/settings | jq '.enableNotifications'
 
 ```bash
 # Manually set order count to limit
-docker-compose exec postgres psql -U orderauditor -d orderauditor -c \
+docker-compose exec postgres psql -U duplicate-guard -d duplicate-guard -c \
   "UPDATE subscriptions SET monthly_order_count = 50 WHERE shopify_shop_domain = 'yourstore.myshopify.com';"
 
 # Try to process an order (via webhook or test script)
@@ -383,7 +383,7 @@ Check that subscription table exists and has correct schema:
 
 ```sql
 -- Connect to database
-psql postgresql://orderauditor:orderauditor@localhost:5432/orderauditor
+psql postgresql://duplicate-guard:duplicate-guard@localhost:5432/duplicate-guard
 
 -- Check subscriptions table
 \d subscriptions
@@ -602,7 +602,7 @@ curl -X POST http://localhost:5000/api/orders/ORDER_ID/dismiss
 curl http://localhost:5000/api/orders/flagged
 
 # 5. Check audit logs (via database)
-# psql postgresql://orderauditor:orderauditor@localhost:5432/orderauditor
+# psql postgresql://duplicate-guard:duplicate-guard@localhost:5432/duplicate-guard
 # SELECT * FROM audit_logs WHERE action = 'dismissed' ORDER BY performed_at DESC LIMIT 1;
 ```
 

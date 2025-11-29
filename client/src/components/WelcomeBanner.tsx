@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const STORAGE_KEY = "orderAuditor_welcomeDismissed";
+const STORAGE_KEY = "duplicateGuard_welcomeDismissed";
 
 export function WelcomeBanner() {
   const [isDismissed, setIsDismissed] = useState(true);
@@ -30,7 +30,7 @@ export function WelcomeBanner() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex-1">
             <p className="text-sm font-medium text-foreground mb-1">
-              Welcome to Order Auditor!
+              Welcome to Duplicate Guard!
             </p>
             <p className="text-sm text-muted-foreground">
               Configure your detection rules below. Tap or hover over the{" "}

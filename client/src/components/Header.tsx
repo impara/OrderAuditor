@@ -29,7 +29,7 @@ export function Header() {
                         <div className="bg-primary/10 p-1.5 rounded-md">
                             <Flag className="h-5 w-5 text-primary" />
                         </div>
-                        <h1 className="text-lg font-bold tracking-tight">Order Auditor</h1>
+                        <h1 className="text-lg font-bold tracking-tight">Duplicate Guard</h1>
                     </div>
 
                     {/* Desktop Nav */}
