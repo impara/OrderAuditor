@@ -35,6 +35,7 @@ export default function Settings() {
       matchEmail: true,
       matchPhone: false,
       matchAddress: true,
+      matchAddressOnlyIfPresent: false,
       addressSensitivity: "medium",
       enableNotifications: false,
       notificationEmail: "",
@@ -50,6 +51,7 @@ export default function Settings() {
         matchEmail: settings.matchEmail,
         matchPhone: settings.matchPhone,
         matchAddress: settings.matchAddress,
+        matchAddressOnlyIfPresent: settings.matchAddressOnlyIfPresent,
         addressSensitivity: settings.addressSensitivity,
         enableNotifications: settings.enableNotifications,
         notificationEmail: settings.notificationEmail || "",
@@ -251,6 +253,36 @@ export default function Settings() {
                         </FormItem>
                       )}
                     />
+
+                    {form.watch("matchAddress") && (
+                      <FormField
+                        control={form.control}
+                        name="matchAddressOnlyIfPresent"
+                        render={({ field }) => (
+                          <FormItem className="flex items-center justify-between pl-6 border-l-2 border-muted ml-2">
+                            <div className="space-y-0.5">
+                              <FormLabel className="flex items-center gap-2 text-sm">
+                                Match only when present
+                                <InfoTooltip
+                                  content="When enabled, orders without shipping addresses (e.g., digital products, gift cards) won't be penalized. Enables duplicate detection using email/name matching alone when addresses are missing."
+                                  side="bottom"
+                                />
+                              </FormLabel>
+                              <FormDescription className="text-xs">
+                                Ignore missing addresses (e.g. digital products)
+                              </FormDescription>
+                            </div>
+                            <FormControl>
+                              <Switch
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                                data-testid="switch-match-address-only-present"
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    )}
 
                     <FormField
                       control={form.control}

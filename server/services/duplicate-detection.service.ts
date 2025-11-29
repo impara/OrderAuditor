@@ -115,14 +115,16 @@ export class DuplicateDetectionService {
 
     for (const existingOrder of existingOrders) {
       const match = this.calculateMatch(newOrder, existingOrder, settings);
+      
       logger.debug(
         `[DuplicateDetection] Match with order ${
           existingOrder.orderNumber
-        }: confidence=${match?.confidence || 0}, reason=${
-          match?.reason || "no match"
+        }: confidence=${match.confidence}, reason=${
+          match.reason || "no match"
         }`
       );
-      if (match && match.confidence >= 70) {
+      
+      if (match.confidence >= 70) {
         logger.info(
           `[DuplicateDetection] ✅ Duplicate found! Order ${existingOrder.orderNumber} matches with ${match.confidence}% confidence`
         );
@@ -154,17 +156,26 @@ export class DuplicateDetectionService {
     newOrder: InsertOrder,
     existingOrder: Order,
     settings: any
-  ): { reason: string; confidence: number } | null {
+  ): { reason: string; confidence: number } {
     let confidence = 0;
     const reasons: string[] = [];
     const matchedCriteria: string[] = [];
 
-    // Count how many criteria are enabled
-    const enabledCriteriaCount = [
-      settings.matchEmail,
-      settings.matchPhone,
-      settings.matchAddress,
-    ].filter(Boolean).length;
+    // Count how many criteria are enabled and evaluable
+    let enabledCriteriaCount = 0;
+    if (settings.matchEmail) enabledCriteriaCount++;
+    if (settings.matchPhone) enabledCriteriaCount++;
+    
+    // Address is enabled only if:
+    // 1. It's enabled in settings AND
+    // 2. Data is present OR matchAddressOnlyIfPresent is FALSE
+    // If matchAddressOnlyIfPresent is TRUE and data is missing, it doesn't count as enabled
+    const hasAddressData = !!(newOrder.shippingAddress && existingOrder.shippingAddress);
+    const addressIsEvaluable = hasAddressData || !settings.matchAddressOnlyIfPresent;
+    
+    if (settings.matchAddress && addressIsEvaluable) {
+      enabledCriteriaCount++;
+    }
 
     if (
       settings.matchEmail &&
@@ -198,8 +209,7 @@ export class DuplicateDetectionService {
 
     if (
       settings.matchAddress &&
-      newOrder.shippingAddress &&
-      existingOrder.shippingAddress
+      hasAddressData
     ) {
       const addressMatch = this.compareAddresses(
         newOrder.shippingAddress,
@@ -242,10 +252,8 @@ export class DuplicateDetectionService {
       );
     }
 
-    if (confidence < 70) {
-      return null;
-    }
-
+    // Always return the calculated confidence, even if below threshold
+    // The caller (findDuplicates) will decide whether to flag it
     return {
       reason: reasons.join(", ") || "Potential duplicate detected",
       confidence: Math.min(100, confidence),

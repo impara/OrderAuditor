@@ -71,6 +71,9 @@
       - Enable/disable email matching
       - Enable/disable phone matching
       - Enable/disable address matching
+    - If address matching is enabled, optionally enable "Match addresses only when present" toggle:
+      - This setting allows detection to work for digital products/gift orders with missing addresses
+      - When enabled, missing addresses are ignored (not counted as a mismatch)
     - Adjust address sensitivity (High/Medium/Low)
     - Save settings
 
@@ -116,21 +119,33 @@
     - Verify detection behavior matches configured sensitivity
 
 18. Test time window:
+
     - Create an order
     - Wait until just after the time window expires
     - Create a duplicate order
     - Verify it is not flagged (outside time window)
 
+19. Test missing addresses (digital products/gift orders):
+    - Enable address matching in Settings
+    - Create an order with email and name, but no shipping address
+    - Within the time window, create a second order with:
+      - Same email and name
+      - No shipping address
+    - Test with "Match addresses only when present" disabled:
+      - Verify order is NOT flagged (confidence stays at 60% - email 40 + name 20)
+    - Test with "Match addresses only when present" enabled:
+      - Verify order IS flagged (confidence boosted to 75% due to single-criterion boost)
+
 ### Testing Email Notifications (Optional)
 
-19. Configure email notifications:
+20. Configure email notifications:
 
     - In Settings, enable notifications toggle
     - Enter a test email address
     - Set notification threshold (default 80%)
     - Save settings
 
-20. Trigger notification:
+21. Trigger notification:
     - Create a duplicate order with confidence score above threshold
     - Verify email notification is sent to configured address
 
@@ -139,6 +154,7 @@
 - Default detection settings are auto-created on first webhook
 - Time window: Default 24 hours (configurable)
 - Matching criteria: Email, Phone, Address (all enabled by default)
+- Match addresses only when present: Default disabled (address matching requires addresses to be present in both orders)
 - Address sensitivity: Medium by default
 - Confidence threshold: 70% (not configurable in UI, but can be verified in detection logic)
 - Tag name: `Merge_Review_Candidate` (automatically applied to flagged orders)

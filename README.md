@@ -351,6 +351,7 @@ The system calculates a confidence score (0-100%) based on:
   - High sensitivity: Exact match required (address1, city, zip) - 40 points
   - Medium sensitivity: Two of three must match - 30 points
   - Low sensitivity: One match sufficient - 25 points
+  - **Missing addresses**: If "Match addresses only when present" is enabled, missing addresses are ignored (not counted as enabled criteria), allowing other matches to reach the threshold
 - **Name Match** (20 points): Same customer name (case-insensitive, supporting evidence only)
 
 ### Scoring Philosophy
@@ -358,6 +359,7 @@ The system calculates a confidence score (0-100%) based on:
 - **Conservative by default**: Multiple criteria should combine to reach the 70% threshold (e.g., Email 40 + Address 30 = 70%)
 - **Respect merchant choice**: If only one criterion is enabled (email OR phone) and it matches, it's sufficient to flag (boosted to 75%)
 - **Phone normalization**: Phone numbers are normalized to handle format differences (e.g., "+1234567890" vs "(123) 456-7890")
+- **Missing addresses handling**: When address matching is enabled with "Match addresses only when present" setting, missing addresses (e.g., digital products, gift orders) are ignored rather than counted as a mismatch. This allows email + name matching (60 points) to trigger the single-criterion boost (75 points) when address matching is effectively disabled due to missing data.
 
 ### Threshold
 
@@ -528,6 +530,7 @@ SMTP_FROM=your-email@gmail.com
 ## Known Limitations
 
 - **Address-only matching**: Detection requires at least email OR phone matching to be enabled. If both are disabled but address matching is enabled, duplicate detection will not function.
+- **Missing addresses with default settings**: By default, when address matching is enabled but addresses are missing (e.g., digital products), orders may not reach the 70% threshold even with email + name matches. Enable "Match addresses only when present" in Settings to handle this edge case.
 - Single detection settings profile (no multi-store support yet)
 - Average resolution time in dashboard stats is currently a placeholder value
 

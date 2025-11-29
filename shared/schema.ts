@@ -56,6 +56,9 @@ export const detectionSettings = pgTable("detection_settings", {
   matchEmail: boolean("match_email").notNull().default(true),
   matchPhone: boolean("match_phone").notNull().default(false),
   matchAddress: boolean("match_address").notNull().default(true),
+  matchAddressOnlyIfPresent: boolean("match_address_only_if_present")
+    .notNull()
+    .default(false),
   addressSensitivity: varchar("address_sensitivity", { length: 20 })
     .notNull()
     .default("medium"), // low, medium, high
