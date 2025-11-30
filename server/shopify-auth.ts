@@ -10,7 +10,6 @@ import { Request, Response, NextFunction } from "express";
 import { logger } from "./utils/logger";
 import * as jose from "jose";
 import { createSecretKey } from "crypto";
-import { shopifyService } from "./services/shopify.service";
 
 // Initialize Shopify API client
 const shopify = shopifyApi({
@@ -516,100 +515,199 @@ export async function authCallback(req: Request, res: Response) {
       }
 
       // GDPR compliance webhooks are not supported by the SDK's automatic registration
-      // Register them manually using the REST API
+      // Register them manually using GraphQL API (REST API doesn't support these webhooks)
+      // Helper function to check if a webhook result array contains a successful registration
+      const hasSuccessfulRegistration = (
+        resultArray: any[] | undefined | null
+      ): boolean => {
+        if (!resultArray || resultArray.length === 0) {
+          return false;
+        }
+        // Check if any result in the array has success: true
+        return resultArray.some((result) => result?.success === true);
+      };
+
+      // Retry via GraphQL if:
+      // 1. Result array is missing/empty, OR
+      // 2. Result array exists but contains no successful registrations (all failed or empty)
       if (
-        !customersDataRequestResult ||
-        customersDataRequestResult.length === 0 ||
-        !customersRedactResult ||
-        customersRedactResult.length === 0 ||
-        !shopRedactResult ||
-        shopRedactResult.length === 0
+        !hasSuccessfulRegistration(customersDataRequestResult) ||
+        !hasSuccessfulRegistration(customersRedactResult) ||
+        !hasSuccessfulRegistration(shopRedactResult)
       ) {
         logger.info(
-          `[AuthCallback] Registering GDPR compliance webhooks manually using REST API...`
+          `[AuthCallback] Registering GDPR compliance webhooks manually using GraphQL API...`
         );
 
         const baseUrl =
           process.env.APP_URL || "https://orderauditor.amertech.online";
-        const accessToken = session.accessToken;
-        const shop = session.shop;
 
-        // Register customers/data_request
-        if (
-          !customersDataRequestResult ||
-          customersDataRequestResult.length === 0
-        ) {
-          try {
-            const result = await shopifyService.registerWebhookWithRetry(
-              shop,
-              accessToken!,
-              "customers/data_request",
-              `${baseUrl}/api/webhooks/shopify/customers/data_request`
-            );
-            if (result.success) {
-              logger.info(
-                `[AuthCallback] ✅ Successfully registered customers/data_request webhook via REST API`
-              );
-            } else {
-              logger.warn(
-                `[AuthCallback] ⚠️ Failed to register customers/data_request webhook via REST API: ${result.error}`
-              );
+        // Use Shopify SDK's GraphQL client to register webhooks
+        const graphqlClient = new shopify.clients.Graphql({
+          session,
+        });
+
+        // Helper function to register webhook with retry logic
+        const registerWebhookWithRetry = async (
+          topic: string,
+          topicName: string,
+          callbackUrl: string,
+          maxRetries: number = 3
+        ): Promise<boolean> => {
+          const webhookMutation = `
+            mutation webhookSubscriptionCreate($topic: WebhookSubscriptionTopic!, $webhookSubscription: WebhookSubscriptionInput!) {
+              webhookSubscriptionCreate(topic: $topic, webhookSubscription: $webhookSubscription) {
+                webhookSubscription {
+                  id
+                }
+                userErrors {
+                  field
+                  message
+                }
+              }
             }
-          } catch (error: any) {
-            logger.warn(
-              `[AuthCallback] Error registering customers/data_request webhook: ${error.message}`
-            );
+          `;
+
+          let lastError: any = null;
+
+          for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            if (attempt > 0) {
+              const delayMs = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+              logger.info(
+                `[AuthCallback] Retrying ${topicName} webhook registration (attempt ${
+                  attempt + 1
+                }/${maxRetries + 1}) after ${delayMs}ms delay...`
+              );
+              await new Promise((resolve) => setTimeout(resolve, delayMs));
+            }
+
+            try {
+              const response = await graphqlClient.request(webhookMutation, {
+                variables: {
+                  topic,
+                  webhookSubscription: {
+                    callbackUrl,
+                    format: "JSON",
+                  },
+                },
+              });
+
+              const result = response?.data?.webhookSubscriptionCreate;
+
+              // Success case
+              if (result?.webhookSubscription?.id) {
+                if (attempt > 0) {
+                  logger.info(
+                    `[AuthCallback] ✅ Successfully registered ${topicName} webhook via GraphQL on retry attempt ${
+                      attempt + 1
+                    }`
+                  );
+                } else {
+                  logger.info(
+                    `[AuthCallback] ✅ Successfully registered ${topicName} webhook via GraphQL`
+                  );
+                }
+                return true;
+              }
+
+              // User errors (not retryable)
+              if (result?.userErrors?.length > 0) {
+                const errorMessage = result.userErrors[0].message;
+                logger.warn(
+                  `[AuthCallback] ⚠️ Failed to register ${topicName} webhook: ${errorMessage}`
+                );
+                // User errors are not retryable
+                return false;
+              }
+
+              // Unknown error - treat as retryable
+              lastError = new Error("Unknown error from GraphQL response");
+            } catch (error: any) {
+              lastError = error;
+
+              // Check if error is retryable
+              const errorMessage = error?.message || String(error);
+              const lowerMessage = errorMessage.toLowerCase();
+
+              // Check for non-retryable errors
+              const isNotRetryable =
+                lowerMessage.includes("unauthorized") ||
+                lowerMessage.includes("forbidden") ||
+                lowerMessage.includes("bad request") ||
+                lowerMessage.includes("not found") ||
+                lowerMessage.includes("invalid") ||
+                lowerMessage.includes("permission denied");
+
+              if (isNotRetryable) {
+                logger.warn(
+                  `[AuthCallback] ⚠️ Error is not retryable for ${topicName} webhook: ${errorMessage}`
+                );
+                return false;
+              }
+
+              // Check for retryable errors (network, timeout, rate limit)
+              const isRetryable =
+                lowerMessage.includes("network") ||
+                lowerMessage.includes("fetch failed") ||
+                lowerMessage.includes("econnrefused") ||
+                lowerMessage.includes("etimedout") ||
+                lowerMessage.includes("timeout") ||
+                lowerMessage.includes("enotfound") ||
+                lowerMessage.includes("rate limit") ||
+                lowerMessage.includes("too many requests") ||
+                error?.response?.status === 429 ||
+                error?.response?.status === 500 ||
+                error?.response?.status === 503;
+
+              // Default to retrying unknown errors (could be transient)
+              // Only stop if we explicitly know it's not retryable (already handled above)
+              // If it's retryable or unknown, continue to next attempt
+              if (attempt < maxRetries) {
+                logger.warn(
+                  `[AuthCallback] Webhook registration failed (attempt ${
+                    attempt + 1
+                  }/${maxRetries + 1}) for ${topicName}: ${errorMessage}${
+                    isRetryable ? " (retryable)" : " (unknown, will retry)"
+                  }`
+                );
+              }
+            }
           }
+
+          // All retries exhausted
+          logger.error(
+            `[AuthCallback] ❌ Failed to register ${topicName} webhook after ${
+              maxRetries + 1
+            } attempts: ${lastError?.message || "Unknown error"}`
+          );
+          return false;
+        };
+
+        // Register customers/data_request (only if not successfully registered by SDK)
+        if (!hasSuccessfulRegistration(customersDataRequestResult)) {
+          await registerWebhookWithRetry(
+            "CUSTOMERS_DATA_REQUEST",
+            "customers/data_request",
+            `${baseUrl}/api/webhooks/shopify/customers/data_request`
+          );
         }
 
-        // Register customers/redact
-        if (!customersRedactResult || customersRedactResult.length === 0) {
-          try {
-            const result = await shopifyService.registerWebhookWithRetry(
-              shop,
-              accessToken!,
-              "customers/redact",
-              `${baseUrl}/api/webhooks/shopify/customers/redact`
-            );
-            if (result.success) {
-              logger.info(
-                `[AuthCallback] ✅ Successfully registered customers/redact webhook via REST API`
-              );
-            } else {
-              logger.warn(
-                `[AuthCallback] ⚠️ Failed to register customers/redact webhook via REST API: ${result.error}`
-              );
-            }
-          } catch (error: any) {
-            logger.warn(
-              `[AuthCallback] Error registering customers/redact webhook: ${error.message}`
-            );
-          }
+        // Register customers/redact (only if not successfully registered by SDK)
+        if (!hasSuccessfulRegistration(customersRedactResult)) {
+          await registerWebhookWithRetry(
+            "CUSTOMERS_REDACT",
+            "customers/redact",
+            `${baseUrl}/api/webhooks/shopify/customers/redact`
+          );
         }
 
-        // Register shop/redact
-        if (!shopRedactResult || shopRedactResult.length === 0) {
-          try {
-            const result = await shopifyService.registerWebhookWithRetry(
-              shop,
-              accessToken!,
-              "shop/redact",
-              `${baseUrl}/api/webhooks/shopify/shop/redact`
-            );
-            if (result.success) {
-              logger.info(
-                `[AuthCallback] ✅ Successfully registered shop/redact webhook via REST API`
-              );
-            } else {
-              logger.warn(
-                `[AuthCallback] ⚠️ Failed to register shop/redact webhook via REST API: ${result.error}`
-              );
-            }
-          } catch (error: any) {
-            logger.warn(
-              `[AuthCallback] Error registering shop/redact webhook: ${error.message}`
-            );
-          }
+        // Register shop/redact (only if not successfully registered by SDK)
+        if (!hasSuccessfulRegistration(shopRedactResult)) {
+          await registerWebhookWithRetry(
+            "SHOP_REDACT",
+            "shop/redact",
+            `${baseUrl}/api/webhooks/shopify/shop/redact`
+          );
         }
       }
     } catch (error: any) {
