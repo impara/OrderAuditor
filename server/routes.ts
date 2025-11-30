@@ -266,10 +266,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const allRequiredWebhooks =
         ordersCreateWebhook &&
         ordersUpdatedWebhook &&
-        appUninstalledWebhook &&
-        customersDataRequestWebhook &&
-        customersRedactWebhook &&
-        shopRedactWebhook;
+        appUninstalledWebhook;
 
       res.json({
         registered: !!allRequiredWebhooks,
@@ -1154,12 +1151,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(401).json({ error: "Invalid webhook signature" });
         }
 
-        const shopDomain = shopHeader;
+        let shopDomain = shopHeader;
 
-        if (!shopDomain) {
-          logger.error("[Webhook] ❌ Missing shop domain header");
-          return res.status(400).json({ error: "Missing shop domain" });
-        }
+        // We'll check for shopDomain validity after parsing body if header is missing
 
         logger.info(
           `[Webhook] ✅ Signature verified successfully! Shop: ${shopDomain}, Topic: ${
@@ -1202,6 +1196,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Parse JSON after verification
         const webhookData = JSON.parse(rawBody.toString("utf8"));
+
+        // Fallback to payload shop_domain if header is missing (robust tenant routing)
+        if (!shopDomain && webhookData.shop_domain) {
+          shopDomain = webhookData.shop_domain;
+          logger.info(`[Webhook] Using shop_domain from payload: ${shopDomain}`);
+        }
+
+        if (!shopDomain) {
+          logger.error("[Webhook] ❌ Missing shop domain in header and payload");
+          return res.status(400).json({ error: "Missing shop domain" });
+        }
+
         const customerEmail = webhookData.customer?.email;
         const customerId = webhookData.customer?.id;
         const ordersRequested = webhookData.orders_requested || [];
@@ -1296,7 +1302,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(401).json({ error: "Invalid webhook signature" });
         }
 
-        const shopDomain = shopHeader;
+        let shopDomain = shopHeader;
+        
+        // Parse JSON after verification to check payload for shop_domain
+        const webhookData = JSON.parse(rawBody.toString("utf8"));
+        
+        if (!shopDomain && webhookData.shop_domain) {
+           shopDomain = webhookData.shop_domain;
+           logger.info(`[Webhook] Using shop_domain from payload: ${shopDomain}`);
+        }
 
         if (!shopDomain) {
           logger.error("[Webhook] ❌ Missing shop domain header");
@@ -1342,8 +1356,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
-        // Parse JSON after verification
-        const webhookData = JSON.parse(rawBody.toString("utf8"));
+        // JSON is already parsed above
+        // const webhookData = JSON.parse(rawBody.toString("utf8"));
         const customerEmail = webhookData.customer?.email;
         const customerId = webhookData.customer?.id;
         // Explicitly handle null/undefined - normalize to undefined (redact all) or empty array (redact none)
@@ -1430,7 +1444,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(401).json({ error: "Invalid webhook signature" });
         }
 
-        const shopDomain = shopHeader;
+        let shopDomain = shopHeader;
+        
+        // Parse JSON after verification to check payload for shop_domain
+        const webhookData = JSON.parse(rawBody.toString("utf8"));
+        
+        if (!shopDomain && webhookData.shop_domain) {
+           shopDomain = webhookData.shop_domain;
+           logger.info(`[Webhook] Using shop_domain from payload: ${shopDomain}`);
+        }
 
         if (!shopDomain) {
           logger.error("[Webhook] ❌ Missing shop domain header");
@@ -1478,8 +1500,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
-        // Parse JSON after verification
-        const webhookData = JSON.parse(rawBody.toString("utf8"));
+        // JSON is already parsed above
+        // const webhookData = JSON.parse(rawBody.toString("utf8"));
         logger.info(
           `[Webhook] Shop redaction request for shop: ${shopDomain}. Cleaning up shop data...`
         );
