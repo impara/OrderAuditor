@@ -245,17 +245,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const appUninstalledWebhook = webhooks.find(
         (wh) => wh.topic === "app/uninstalled"
       );
+      const customersDataRequestWebhook = webhooks.find(
+        (wh) => wh.topic === "customers/data_request"
+      );
+      const customersRedactWebhook = webhooks.find(
+        (wh) => wh.topic === "customers/redact"
+      );
+      const shopRedactWebhook = webhooks.find(
+        (wh) => wh.topic === "shop/redact"
+      );
+
+      const allRequiredWebhooks =
+        ordersCreateWebhook &&
+        ordersUpdatedWebhook &&
+        appUninstalledWebhook &&
+        customersDataRequestWebhook &&
+        customersRedactWebhook &&
+        shopRedactWebhook;
 
       res.json({
-        registered: !!(
-          ordersCreateWebhook &&
-          ordersUpdatedWebhook &&
-          appUninstalledWebhook
-        ),
+        registered: !!allRequiredWebhooks,
         webhooks: {
           ordersCreate: ordersCreateWebhook || null,
           ordersUpdated: ordersUpdatedWebhook || null,
           appUninstalled: appUninstalledWebhook || null,
+          customersDataRequest: customersDataRequestWebhook || null,
+          customersRedact: customersRedactWebhook || null,
+          shopRedact: shopRedactWebhook || null,
         },
         totalWebhooks: webhooks.length,
         allWebhooks: webhooks,
@@ -314,10 +330,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
           `${baseUrl}/api/webhooks/shopify/app/uninstalled`
         );
 
+      // Register mandatory GDPR compliance webhooks
+      const customersDataRequestResult =
+        await shopifyService.registerWebhookWithRetry(
+          shop,
+          accessToken,
+          "customers/data_request",
+          `${baseUrl}/api/webhooks/shopify/customers/data_request`
+        );
+
+      const customersRedactResult =
+        await shopifyService.registerWebhookWithRetry(
+          shop,
+          accessToken,
+          "customers/redact",
+          `${baseUrl}/api/webhooks/shopify/customers/redact`
+        );
+
+      const shopRedactResult = await shopifyService.registerWebhookWithRetry(
+        shop,
+        accessToken,
+        "shop/redact",
+        `${baseUrl}/api/webhooks/shopify/shop/redact`
+      );
+
       const allSuccess =
         ordersCreateResult.success &&
         ordersUpdatedResult.success &&
-        appUninstalledResult.success;
+        appUninstalledResult.success &&
+        customersDataRequestResult.success &&
+        customersRedactResult.success &&
+        shopRedactResult.success;
 
       res.json({
         success: allSuccess,
@@ -325,6 +368,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ordersCreate: ordersCreateResult,
           ordersUpdated: ordersUpdatedResult,
           appUninstalled: appUninstalledResult,
+          customersDataRequest: customersDataRequestResult,
+          customersRedact: customersRedactResult,
+          shopRedact: shopRedactResult,
         },
         message: allSuccess
           ? "All webhooks registered successfully"
@@ -1056,6 +1102,390 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         logger.error("Error processing orders/updated webhook:", error);
         res.status(500).json({ error: "Failed to process webhook" });
+      }
+    }
+  );
+
+  // GDPR Compliance Webhooks
+  app.post(
+    "/api/webhooks/shopify/customers/data_request",
+    async (req: any, res: Response) => {
+      try {
+        const rawBody: Buffer = req.body;
+
+        logger.info(
+          `[Webhook] Received customers/data_request webhook, body size: ${rawBody.length} bytes`
+        );
+
+        // Validate webhook using custom service
+        const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
+        const topicHeader = req.get("X-Shopify-Topic");
+        const shopHeader = req.get("X-Shopify-Shop-Domain");
+
+        if (!hmacHeader) {
+          logger.warn("[Webhook] ❌ Missing HMAC header");
+          return res.status(401).json({ error: "Missing HMAC header" });
+        }
+
+        const isValid = shopifyService.verifyWebhook(rawBody, hmacHeader);
+
+        if (!isValid) {
+          logger.warn(`[Webhook] ❌ Invalid webhook signature.`);
+          return res.status(401).json({ error: "Invalid webhook signature" });
+        }
+
+        const shopDomain = shopHeader;
+
+        if (!shopDomain) {
+          logger.error("[Webhook] ❌ Missing shop domain header");
+          return res.status(400).json({ error: "Missing shop domain" });
+        }
+
+        logger.info(
+          `[Webhook] ✅ Signature verified successfully! Shop: ${shopDomain}, Topic: ${
+            topicHeader || "unknown"
+          }`
+        );
+
+        // Atomically check and record webhook delivery ID to prevent TOCTOU race conditions
+        // This uses database-level atomicity: if insert succeeds, it's new; if it fails (conflict), it's duplicate
+        const deliveryIdHeader =
+          req.get("X-Shopify-Delivery-Id") ||
+          req.get("X-Shopify-Webhook-Id") ||
+          "";
+
+        if (deliveryIdHeader) {
+          try {
+            const isNew = await storage.tryRecordWebhookDelivery({
+              shopDomain,
+              deliveryId: deliveryIdHeader,
+              topic: topicHeader || "customers/data_request",
+            });
+            if (!isNew) {
+              logger.info(
+                `[Webhook] ⚠️ Duplicate customers/data_request webhook detected (ID: ${deliveryIdHeader}). Skipping processing.`
+              );
+              return res.json({
+                success: true,
+                message: "Webhook already processed",
+                duplicate: true,
+              });
+            }
+            logger.debug(
+              `[Webhook] Recorded delivery ID ${deliveryIdHeader} before processing`
+            );
+          } catch (error) {
+            logger.error("Failed to record webhook delivery ID:", error);
+            // If recording fails, we should still proceed but idempotency won't be guaranteed
+          }
+        }
+
+        // Parse JSON after verification
+        const webhookData = JSON.parse(rawBody.toString("utf8"));
+        const customerEmail = webhookData.customer?.email;
+        const customerId = webhookData.customer?.id;
+        const ordersRequested = webhookData.orders_requested || [];
+
+        if (!customerEmail) {
+          logger.warn(
+            `[Webhook] customers/data_request missing customer email for shop: ${shopDomain}`
+          );
+          // Still return 200 to acknowledge receipt
+          return res.json({
+            success: true,
+            message: "Request received, but no customer email provided",
+          });
+        }
+
+        logger.info(
+          `[Webhook] Data request for customer: ${customerEmail} (ID: ${customerId}), Orders: ${ordersRequested.length}`
+        );
+
+        // Get customer orders from our database
+        const customerOrders = await storage.getCustomerOrders(
+          shopDomain,
+          customerEmail,
+          customerId
+        );
+
+        // Filter to requested orders if specific orders were requested
+        let ordersToReturn = customerOrders;
+        if (ordersRequested.length > 0) {
+          const requestedOrderIds = ordersRequested.map((id: number) =>
+            id.toString()
+          );
+          ordersToReturn = customerOrders.filter((order) =>
+            requestedOrderIds.includes(order.shopifyOrderId)
+          );
+        }
+
+        logger.info(
+          `[Webhook] Found ${ordersToReturn.length} orders for customer ${customerEmail}`
+        );
+
+        // Note: According to Shopify docs, we should provide this data to the store owner
+        // The store owner will then provide it to the customer
+        // For now, we log it and acknowledge receipt
+        // In a production app, you might want to store this request and send the data via email/API
+        // Note: Delivery ID was already recorded by tryRecordWebhookDelivery() above
+
+        res.json({
+          success: true,
+          message: "Data request received and processed",
+          customerEmail,
+          customerId,
+          ordersFound: ordersToReturn.length,
+          dataRequestId: webhookData.data_request?.id,
+        });
+      } catch (error) {
+        logger.error("Error processing customers/data_request webhook:", error);
+        // Still return 200 to acknowledge receipt even if processing fails
+        // The action can be completed asynchronously within 30 days
+        res.status(200).json({
+          success: true,
+          message: "Request received, will be processed",
+        });
+      }
+    }
+  );
+
+  app.post(
+    "/api/webhooks/shopify/customers/redact",
+    async (req: any, res: Response) => {
+      try {
+        const rawBody: Buffer = req.body;
+
+        logger.info(
+          `[Webhook] Received customers/redact webhook, body size: ${rawBody.length} bytes`
+        );
+
+        // Validate webhook using custom service
+        const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
+        const topicHeader = req.get("X-Shopify-Topic");
+        const shopHeader = req.get("X-Shopify-Shop-Domain");
+
+        if (!hmacHeader) {
+          logger.warn("[Webhook] ❌ Missing HMAC header");
+          return res.status(401).json({ error: "Missing HMAC header" });
+        }
+
+        const isValid = shopifyService.verifyWebhook(rawBody, hmacHeader);
+
+        if (!isValid) {
+          logger.warn(`[Webhook] ❌ Invalid webhook signature.`);
+          return res.status(401).json({ error: "Invalid webhook signature" });
+        }
+
+        const shopDomain = shopHeader;
+
+        if (!shopDomain) {
+          logger.error("[Webhook] ❌ Missing shop domain header");
+          return res.status(400).json({ error: "Missing shop domain" });
+        }
+
+        logger.info(
+          `[Webhook] ✅ Signature verified successfully! Shop: ${shopDomain}, Topic: ${
+            topicHeader || "unknown"
+          }`
+        );
+
+        // Atomically check and record webhook delivery ID to prevent TOCTOU race conditions
+        // This uses database-level atomicity: if insert succeeds, it's new; if it fails (conflict), it's duplicate
+        const deliveryIdHeader =
+          req.get("X-Shopify-Delivery-Id") ||
+          req.get("X-Shopify-Webhook-Id") ||
+          "";
+
+        if (deliveryIdHeader) {
+          try {
+            const isNew = await storage.tryRecordWebhookDelivery({
+              shopDomain,
+              deliveryId: deliveryIdHeader,
+              topic: topicHeader || "customers/redact",
+            });
+            if (!isNew) {
+              logger.info(
+                `[Webhook] ⚠️ Duplicate customers/redact webhook detected (ID: ${deliveryIdHeader}). Skipping processing.`
+              );
+              return res.json({
+                success: true,
+                message: "Webhook already processed",
+                duplicate: true,
+              });
+            }
+            logger.debug(
+              `[Webhook] Recorded delivery ID ${deliveryIdHeader} before processing`
+            );
+          } catch (error) {
+            logger.error("Failed to record webhook delivery ID:", error);
+            // If recording fails, we should still proceed but idempotency won't be guaranteed
+          }
+        }
+
+        // Parse JSON after verification
+        const webhookData = JSON.parse(rawBody.toString("utf8"));
+        const customerEmail = webhookData.customer?.email;
+        const customerId = webhookData.customer?.id;
+        // Explicitly handle null/undefined - normalize to undefined (redact all) or empty array (redact none)
+        // If orders_to_redact is null or undefined, treat as undefined (redact all customer orders)
+        // If orders_to_redact is [], it means no orders to redact
+        const ordersToRedact = webhookData.orders_to_redact ?? undefined;
+
+        if (!customerEmail) {
+          logger.warn(
+            `[Webhook] customers/redact missing customer email for shop: ${shopDomain}`
+          );
+          // Still return 200 to acknowledge receipt
+          return res.json({
+            success: true,
+            message: "Request received, but no customer email provided",
+          });
+        }
+
+        logger.info(
+          `[Webhook] Redaction request for customer: ${customerEmail} (ID: ${customerId}), Orders to redact: ${
+            ordersToRedact?.length ?? 0
+          }`
+        );
+
+        // Redact customer data
+        // Pass ordersToRedact as-is (could be undefined, empty array, or array with IDs)
+        // The storage method will handle empty arrays correctly
+        await storage.redactCustomerData(
+          shopDomain,
+          customerEmail,
+          customerId,
+          ordersToRedact
+        );
+
+        logger.info(
+          `[Webhook] ✅ Successfully redacted customer data for ${customerEmail}`
+        );
+
+        // Note: Delivery ID was already recorded by tryRecordWebhookDelivery() above
+
+        res.json({
+          success: true,
+          message: "Customer data redacted successfully",
+          customerEmail,
+          customerId,
+          ordersRedacted: ordersToRedact?.length ?? 0,
+        });
+      } catch (error) {
+        logger.error("Error processing customers/redact webhook:", error);
+        // Still return 200 to acknowledge receipt even if processing fails
+        // The action can be completed asynchronously within 30 days
+        res.status(200).json({
+          success: true,
+          message: "Request received, will be processed",
+        });
+      }
+    }
+  );
+
+  app.post(
+    "/api/webhooks/shopify/shop/redact",
+    async (req: any, res: Response) => {
+      try {
+        const rawBody: Buffer = req.body;
+
+        logger.info(
+          `[Webhook] Received shop/redact webhook, body size: ${rawBody.length} bytes`
+        );
+
+        // Validate webhook using custom service
+        const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
+        const topicHeader = req.get("X-Shopify-Topic");
+        const shopHeader = req.get("X-Shopify-Shop-Domain");
+
+        if (!hmacHeader) {
+          logger.warn("[Webhook] ❌ Missing HMAC header");
+          return res.status(401).json({ error: "Missing HMAC header" });
+        }
+
+        const isValid = shopifyService.verifyWebhook(rawBody, hmacHeader);
+
+        if (!isValid) {
+          logger.warn(`[Webhook] ❌ Invalid webhook signature.`);
+          return res.status(401).json({ error: "Invalid webhook signature" });
+        }
+
+        const shopDomain = shopHeader;
+
+        if (!shopDomain) {
+          logger.error("[Webhook] ❌ Missing shop domain header");
+          return res.status(400).json({ error: "Missing shop domain" });
+        }
+
+        logger.info(
+          `[Webhook] ✅ Signature verified successfully! Shop: ${shopDomain}, Topic: ${
+            topicHeader || "unknown"
+          }`
+        );
+
+        // Atomically check and record webhook delivery ID to prevent TOCTOU race conditions
+        // This uses database-level atomicity: if insert succeeds, it's new; if it fails (conflict), it's duplicate
+        const deliveryIdHeader =
+          req.get("X-Shopify-Delivery-Id") ||
+          req.get("X-Shopify-Webhook-Id") ||
+          "";
+
+        if (deliveryIdHeader) {
+          try {
+            const isNew = await storage.tryRecordWebhookDelivery({
+              shopDomain,
+              deliveryId: deliveryIdHeader,
+              topic: topicHeader || "shop/redact",
+            });
+            if (!isNew) {
+              logger.info(
+                `[Webhook] ⚠️ Duplicate shop/redact webhook detected (ID: ${deliveryIdHeader}). Skipping processing.`
+              );
+              return res.json({
+                success: true,
+                message: "Webhook already processed",
+                duplicate: true,
+              });
+            }
+            logger.debug(
+              `[Webhook] Recorded delivery ID ${deliveryIdHeader} before cleanup`
+            );
+          } catch (error) {
+            logger.error("Failed to record webhook delivery ID:", error);
+            // If recording fails, we should still proceed with cleanup
+            // but idempotency won't be guaranteed for this delivery
+            // Note: cleanup is idempotent, so retries won't cause issues
+          }
+        }
+
+        // Parse JSON after verification
+        const webhookData = JSON.parse(rawBody.toString("utf8"));
+        logger.info(
+          `[Webhook] Shop redaction request for shop: ${shopDomain}. Cleaning up shop data...`
+        );
+
+        // Delete all shop data (same as app/uninstalled)
+        // Note: shop/redact is sent 48 hours after app uninstall
+        // This is a separate webhook for GDPR compliance
+        // Pass excludeDeliveryId to preserve idempotency
+        await storage.deleteShopData(shopDomain, deliveryIdHeader || undefined);
+        logger.info(
+          `[Webhook] ✅ Successfully cleaned up all data for shop: ${shopDomain}`
+        );
+
+        // Note: Delivery ID was already recorded by tryRecordWebhookDelivery() above
+
+        res.json({
+          success: true,
+          message: "Shop data redacted successfully",
+        });
+      } catch (error) {
+        logger.error("Error processing shop/redact webhook:", error);
+        // Still return 200 to acknowledge receipt even if processing fails
+        res.status(200).json({
+          success: true,
+          message: "Request received, will be processed",
+        });
       }
     }
   );
