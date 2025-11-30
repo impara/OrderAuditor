@@ -43,6 +43,19 @@ shopify.webhooks.addHandlers({
     deliveryMethod: DeliveryMethod.Http,
     callbackUrl: "/api/webhooks/shopify/app/uninstalled",
   },
+  // GDPR compliance webhooks
+  "customers/data_request": {
+    deliveryMethod: DeliveryMethod.Http,
+    callbackUrl: "/api/webhooks/shopify/customers/data_request",
+  },
+  "customers/redact": {
+    deliveryMethod: DeliveryMethod.Http,
+    callbackUrl: "/api/webhooks/shopify/customers/redact",
+  },
+  "shop/redact": {
+    deliveryMethod: DeliveryMethod.Http,
+    callbackUrl: "/api/webhooks/shopify/shop/redact",
+  },
 });
 
 export { shopify };
@@ -397,6 +410,109 @@ export async function authCallback(req: Request, res: Response) {
           JSON.stringify(appUninstalledResult, null, 2)
         );
       }
+
+      // Check customers/data_request webhook
+      const customersDataRequestResult =
+        response["CUSTOMERS_DATA_REQUEST"] ||
+        response["customers/data_request"];
+      if (
+        customersDataRequestResult &&
+        Array.isArray(customersDataRequestResult) &&
+        customersDataRequestResult.length > 0
+      ) {
+        const result = customersDataRequestResult[0];
+        if (result.success) {
+          logger.info(
+            `[AuthCallback] ✅ Successfully registered customers/data_request webhook`
+          );
+        } else {
+          const resultData = result.result as any;
+          const errorMessage =
+            resultData?.data?.webhookSubscriptionCreate?.userErrors?.[0]
+              ?.message ||
+            resultData?.errors?.[0]?.message ||
+            "Unknown error";
+          logger.warn(
+            `[AuthCallback] ⚠️ Failed to register customers/data_request webhook: ${errorMessage}`
+          );
+          logger.info(
+            `[AuthCallback] 💡 This is non-blocking. The app will still function, but GDPR data requests may not be processed without this webhook.`
+          );
+        }
+      } else {
+        logger.warn(
+          `[AuthCallback] ⚠️ customers/data_request webhook registration response is missing or invalid:`,
+          JSON.stringify(customersDataRequestResult, null, 2)
+        );
+      }
+
+      // Check customers/redact webhook
+      const customersRedactResult =
+        response["CUSTOMERS_REDACT"] || response["customers/redact"];
+      if (
+        customersRedactResult &&
+        Array.isArray(customersRedactResult) &&
+        customersRedactResult.length > 0
+      ) {
+        const result = customersRedactResult[0];
+        if (result.success) {
+          logger.info(
+            `[AuthCallback] ✅ Successfully registered customers/redact webhook`
+          );
+        } else {
+          const resultData = result.result as any;
+          const errorMessage =
+            resultData?.data?.webhookSubscriptionCreate?.userErrors?.[0]
+              ?.message ||
+            resultData?.errors?.[0]?.message ||
+            "Unknown error";
+          logger.warn(
+            `[AuthCallback] ⚠️ Failed to register customers/redact webhook: ${errorMessage}`
+          );
+          logger.info(
+            `[AuthCallback] 💡 This is non-blocking. The app will still function, but GDPR customer data redaction may not work without this webhook.`
+          );
+        }
+      } else {
+        logger.warn(
+          `[AuthCallback] ⚠️ customers/redact webhook registration response is missing or invalid:`,
+          JSON.stringify(customersRedactResult, null, 2)
+        );
+      }
+
+      // Check shop/redact webhook
+      const shopRedactResult =
+        response["SHOP_REDACT"] || response["shop/redact"];
+      if (
+        shopRedactResult &&
+        Array.isArray(shopRedactResult) &&
+        shopRedactResult.length > 0
+      ) {
+        const result = shopRedactResult[0];
+        if (result.success) {
+          logger.info(
+            `[AuthCallback] ✅ Successfully registered shop/redact webhook`
+          );
+        } else {
+          const resultData = result.result as any;
+          const errorMessage =
+            resultData?.data?.webhookSubscriptionCreate?.userErrors?.[0]
+              ?.message ||
+            resultData?.errors?.[0]?.message ||
+            "Unknown error";
+          logger.warn(
+            `[AuthCallback] ⚠️ Failed to register shop/redact webhook: ${errorMessage}`
+          );
+          logger.info(
+            `[AuthCallback] 💡 This is non-blocking. The app will still function, but GDPR shop data redaction may not work without this webhook.`
+          );
+        }
+      } else {
+        logger.warn(
+          `[AuthCallback] ⚠️ shop/redact webhook registration response is missing or invalid:`,
+          JSON.stringify(shopRedactResult, null, 2)
+        );
+      }
     } catch (error: any) {
       logger.warn(
         `[AuthCallback] ⚠️ Error during webhook registration:`,
@@ -432,11 +548,14 @@ export async function verifyRequest(
   try {
     // DEVELOPMENT BYPASS
     // If we are in development mode and receive a specific dev token, bypass verification
-    if (process.env.NODE_ENV !== 'production' && req.headers.authorization === 'Bearer dev-token') {
-      logger.info('[Auth] 🛡️ Using DEV BYPASS for authentication');
+    if (
+      process.env.NODE_ENV !== "production" &&
+      req.headers.authorization === "Bearer dev-token"
+    ) {
+      logger.info("[Auth] 🛡️ Using DEV BYPASS for authentication");
       res.locals.shopify = {
-        shop: 'test-shop.myshopify.com',
-        accessToken: 'shpat_dev_token_1234567890', // Dummy offline token
+        shop: "test-shop.myshopify.com",
+        accessToken: "shpat_dev_token_1234567890", // Dummy offline token
       };
       next();
       return;
