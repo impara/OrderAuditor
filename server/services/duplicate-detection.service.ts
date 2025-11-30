@@ -164,10 +164,13 @@ export class DuplicateDetectionService {
     if (settings.matchEmail) enabledCriteriaCount++;
     if (settings.matchPhone) enabledCriteriaCount++;
 
-    // Address is enabled only if:
+    // Address is enabled based on:
     // 1. It's enabled in settings AND
-    // 2. Data is present OR matchAddressOnlyIfPresent is FALSE
-    // If matchAddressOnlyIfPresent is TRUE and data is missing, it doesn't count as enabled
+    // 2. Either data is present OR matchAddressOnlyIfPresent is false
+    // When matchAddressOnlyIfPresent is false, address counts as enabled even when missing
+    // (strict mode: address is required but can't be evaluated without data)
+    // When matchAddressOnlyIfPresent is true, address only counts when data is present
+    // (lenient mode: missing addresses are ignored)
     const hasAddressData = !!(
       newOrder.shippingAddress && existingOrder.shippingAddress
     );
@@ -241,6 +244,9 @@ export class DuplicateDetectionService {
     // This allows merchants to use phone-only or email-only matching if they prefer
     // Note: matchedCriteria only contains configurable criteria (email, phone, address)
     // Name matching is excluded from matchedCriteria, so it won't interfere with this logic
+    // Note: If address is the only enabled criterion but addresses are missing, enabledCriteriaCount
+    // will be 1 but matchedCriteria.length will be 0 (address can't be evaluated without data),
+    // so the boost won't trigger. This is correct behavior - nothing can match without data.
     if (enabledCriteriaCount === 1 && matchedCriteria.length === 1) {
       // Boost confidence to 75% to exceed threshold when single enabled criterion matches
       // This respects the merchant's explicit configuration choice
