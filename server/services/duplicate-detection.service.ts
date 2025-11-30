@@ -33,7 +33,7 @@ export class DuplicateDetectionService {
     }
 
     logger.debug(
-      `[DuplicateDetection] Settings - Email: ${settings.matchEmail}, Phone: ${settings.matchPhone}, Address: ${settings.matchAddress}, TimeWindow: ${settings.timeWindowHours}h`
+      `[DuplicateDetection] Settings - Email: ${settings.matchEmail}, Phone: ${settings.matchPhone}, Address: ${settings.matchAddress}, AddressOnlyIfPresent: ${settings.matchAddressOnlyIfPresent}, TimeWindow: ${settings.timeWindowHours}h`
     );
 
     const timeThreshold = new Date();
@@ -115,15 +115,13 @@ export class DuplicateDetectionService {
 
     for (const existingOrder of existingOrders) {
       const match = this.calculateMatch(newOrder, existingOrder, settings);
-      
+
       logger.debug(
         `[DuplicateDetection] Match with order ${
           existingOrder.orderNumber
-        }: confidence=${match.confidence}, reason=${
-          match.reason || "no match"
-        }`
+        }: confidence=${match.confidence}, reason=${match.reason || "no match"}`
       );
-      
+
       if (match.confidence >= 70) {
         logger.info(
           `[DuplicateDetection] ✅ Duplicate found! Order ${existingOrder.orderNumber} matches with ${match.confidence}% confidence`
@@ -165,14 +163,17 @@ export class DuplicateDetectionService {
     let enabledCriteriaCount = 0;
     if (settings.matchEmail) enabledCriteriaCount++;
     if (settings.matchPhone) enabledCriteriaCount++;
-    
+
     // Address is enabled only if:
     // 1. It's enabled in settings AND
     // 2. Data is present OR matchAddressOnlyIfPresent is FALSE
     // If matchAddressOnlyIfPresent is TRUE and data is missing, it doesn't count as enabled
-    const hasAddressData = !!(newOrder.shippingAddress && existingOrder.shippingAddress);
-    const addressIsEvaluable = hasAddressData || !settings.matchAddressOnlyIfPresent;
-    
+    const hasAddressData = !!(
+      newOrder.shippingAddress && existingOrder.shippingAddress
+    );
+    const addressIsEvaluable =
+      hasAddressData || !settings.matchAddressOnlyIfPresent;
+
     if (settings.matchAddress && addressIsEvaluable) {
       enabledCriteriaCount++;
     }
@@ -207,10 +208,7 @@ export class DuplicateDetectionService {
       }
     }
 
-    if (
-      settings.matchAddress &&
-      hasAddressData
-    ) {
+    if (settings.matchAddress && hasAddressData) {
       const addressMatch = this.compareAddresses(
         newOrder.shippingAddress,
         existingOrder.shippingAddress,
