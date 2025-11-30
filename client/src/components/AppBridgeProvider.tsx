@@ -31,12 +31,18 @@ export function AppBridgeProvider({ children }: { children: React.ReactNode }) {
         const urlParams = new URLSearchParams(window.location.search);
         const host = urlParams.get("host");
         const shop = urlParams.get("shop");
-        const apiKey = import.meta.env.VITE_SHOPIFY_API_KEY;
+
+        // Try to get API key from environment variable first (compile-time)
+        // Fall back to reading from meta tag (runtime injection)
+        const apiKey = import.meta.env.VITE_SHOPIFY_API_KEY ||
+            document.querySelector('meta[name="shopify-api-key"]')?.getAttribute('content') ||
+            '';
 
         console.log("[AppBridge] Initializing with:", {
             host: host ? "present" : "missing",
             shop: shop || "missing",
             apiKey: apiKey ? "present" : "missing",
+            apiKeySource: import.meta.env.VITE_SHOPIFY_API_KEY ? "env" : "meta",
             isInIframe: window !== window.parent,
             location: window.location.href
         });
