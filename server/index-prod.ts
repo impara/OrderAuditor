@@ -15,9 +15,12 @@ export async function serveStatic(app: Express, _server: Server) {
     );
   }
 
-  app.use(express.static(distPath));
+  // Serve static files, but exclude index.html so it goes through the replacement logic
+  app.use(express.static(distPath, {
+    index: false, // Don't serve index.html automatically
+  }));
 
-  // fall through to index.html if the file doesn't exist
+  // Always serve index.html with API key injection for all routes
   app.use("*", async (_req, res, next) => {
     const indexPath = path.resolve(distPath, "index.html");
     
