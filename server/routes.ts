@@ -234,6 +234,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
       }
 
+      // Check if token is unusually short (offline tokens are typically 40+ characters)
+      if (accessToken.length < 40) {
+        logger.warn(
+          `[API] Access token is unusually short (${accessToken.length} chars). This may indicate an invalid or test token.`
+        );
+        // Don't fail here, but log a warning - let the API call determine if it's actually invalid
+      }
+
       const webhooks = await shopifyService.listWebhooks(shop, accessToken);
 
       const ordersCreateWebhook = webhooks.find(
@@ -284,14 +292,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         error instanceof Error ? error.message : String(error);
       const isAuthError =
         errorMessage.includes("401") ||
-        errorMessage.includes("authentication failed");
+        errorMessage.includes("authentication failed") ||
+        errorMessage.includes("Invalid API key or access token");
+
+      // If it's an auth error, provide clear guidance
+      if (isAuthError) {
+        logger.warn(
+          `[API] Authentication failed for shop ${res.locals.shopify?.shop}. The access token may be invalid, expired, or revoked.`
+        );
+        logger.info(
+          `[API] 💡 Solution: The user needs to reinstall the app or clear their session to get a fresh access token.`
+        );
+      }
 
       res.status(isAuthError ? 401 : 500).json({
         error: "Failed to check webhook status",
         details: errorMessage,
         requiresReinstall: isAuthError,
+        shop: res.locals.shopify?.shop,
         message: isAuthError
-          ? "The access token is invalid or expired. Please reinstall the app to refresh the authentication."
+          ? "The access token is invalid or expired. Please reinstall the app to refresh the authentication. You can do this by going to Shopify Admin → Apps → [Your App] → Uninstall, then reinstall."
           : "An error occurred while checking webhook status.",
       });
     }

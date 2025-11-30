@@ -10,6 +10,7 @@ import { Request, Response, NextFunction } from "express";
 import { logger } from "./utils/logger";
 import * as jose from "jose";
 import { createSecretKey } from "crypto";
+import { shopifyService } from "./services/shopify.service";
 
 // Initialize Shopify API client
 const shopify = shopifyApi({
@@ -512,6 +513,104 @@ export async function authCallback(req: Request, res: Response) {
           `[AuthCallback] ⚠️ shop/redact webhook registration response is missing or invalid:`,
           JSON.stringify(shopRedactResult, null, 2)
         );
+      }
+
+      // GDPR compliance webhooks are not supported by the SDK's automatic registration
+      // Register them manually using the REST API
+      if (
+        !customersDataRequestResult ||
+        customersDataRequestResult.length === 0 ||
+        !customersRedactResult ||
+        customersRedactResult.length === 0 ||
+        !shopRedactResult ||
+        shopRedactResult.length === 0
+      ) {
+        logger.info(
+          `[AuthCallback] Registering GDPR compliance webhooks manually using REST API...`
+        );
+
+        const baseUrl =
+          process.env.APP_URL || "https://orderauditor.amertech.online";
+        const accessToken = session.accessToken;
+        const shop = session.shop;
+
+        // Register customers/data_request
+        if (
+          !customersDataRequestResult ||
+          customersDataRequestResult.length === 0
+        ) {
+          try {
+            const result = await shopifyService.registerWebhookWithRetry(
+              shop,
+              accessToken!,
+              "customers/data_request",
+              `${baseUrl}/api/webhooks/shopify/customers/data_request`
+            );
+            if (result.success) {
+              logger.info(
+                `[AuthCallback] ✅ Successfully registered customers/data_request webhook via REST API`
+              );
+            } else {
+              logger.warn(
+                `[AuthCallback] ⚠️ Failed to register customers/data_request webhook via REST API: ${result.error}`
+              );
+            }
+          } catch (error: any) {
+            logger.warn(
+              `[AuthCallback] Error registering customers/data_request webhook: ${error.message}`
+            );
+          }
+        }
+
+        // Register customers/redact
+        if (!customersRedactResult || customersRedactResult.length === 0) {
+          try {
+            const result = await shopifyService.registerWebhookWithRetry(
+              shop,
+              accessToken!,
+              "customers/redact",
+              `${baseUrl}/api/webhooks/shopify/customers/redact`
+            );
+            if (result.success) {
+              logger.info(
+                `[AuthCallback] ✅ Successfully registered customers/redact webhook via REST API`
+              );
+            } else {
+              logger.warn(
+                `[AuthCallback] ⚠️ Failed to register customers/redact webhook via REST API: ${result.error}`
+              );
+            }
+          } catch (error: any) {
+            logger.warn(
+              `[AuthCallback] Error registering customers/redact webhook: ${error.message}`
+            );
+          }
+        }
+
+        // Register shop/redact
+        if (!shopRedactResult || shopRedactResult.length === 0) {
+          try {
+            const result = await shopifyService.registerWebhookWithRetry(
+              shop,
+              accessToken!,
+              "shop/redact",
+              `${baseUrl}/api/webhooks/shopify/shop/redact`
+            );
+            if (result.success) {
+              logger.info(
+                `[AuthCallback] ✅ Successfully registered shop/redact webhook via REST API`
+              );
+            } else {
+              logger.warn(
+                `[AuthCallback] ⚠️ Failed to register shop/redact webhook via REST API: ${result.error}`
+              );
+            }
+          } catch (error: any) {
+            logger.warn(
+              `[AuthCallback] Error registering shop/redact webhook: ${error.message}`
+            );
+          }
+        }
       }
     } catch (error: any) {
       logger.warn(
