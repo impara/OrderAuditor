@@ -1,10 +1,22 @@
-# Shopify App Configuration
-# This file configures your Shopify app, including GDPR webhooks
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "9b67701568004c909358688610f8a208"
+name = "Duplicate Guard"
+application_url = "https://orderauditor.amertech.online/"
+embedded = true
 
 [webhooks]
-api_version = "2024-07"
+api_version = "2025-10"
 
-[[webhooks.subscriptions]]
-compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
-uri = "https://orderauditor.amertech.online/api/webhooks/shopify"
+  [[webhooks.subscriptions]]
+  uri = "/api/webhooks/shopify"
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
 
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_customers,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders,read_orders,write_orders"
+optional_scopes = [ ]
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = [ "https://orderauditor.amertech.online/api/auth/callback" ]
