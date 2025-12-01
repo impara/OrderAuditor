@@ -30,6 +30,9 @@ const shopify = shopifyApi({
 });
 
 // Register webhook handlers
+// Note: GDPR compliance webhooks (customers/data_request, customers/redact, shop/redact)
+// are now configured via shopify.app.toml file and will use the unified endpoint
+// /api/webhooks/shopify. They should NOT be registered here to avoid conflicts.
 shopify.webhooks.addHandlers({
   "orders/create": {
     deliveryMethod: DeliveryMethod.Http,
@@ -43,19 +46,9 @@ shopify.webhooks.addHandlers({
     deliveryMethod: DeliveryMethod.Http,
     callbackUrl: "/api/webhooks/shopify/app/uninstalled",
   },
-  // GDPR compliance webhooks
-  "customers/data_request": {
-    deliveryMethod: DeliveryMethod.Http,
-    callbackUrl: "/api/webhooks/shopify/customers/data_request",
-  },
-  "customers/redact": {
-    deliveryMethod: DeliveryMethod.Http,
-    callbackUrl: "/api/webhooks/shopify/customers/redact",
-  },
-  "shop/redact": {
-    deliveryMethod: DeliveryMethod.Http,
-    callbackUrl: "/api/webhooks/shopify/shop/redact",
-  },
+  // GDPR compliance webhooks are configured via shopify.app.toml
+  // They use the unified endpoint: /api/webhooks/shopify
+  // Do not register them here to avoid conflicts with TOML configuration
 });
 
 export { shopify };
@@ -513,7 +506,6 @@ export async function authCallback(req: Request, res: Response) {
           JSON.stringify(shopRedactResult, null, 2)
         );
       }
-
     } catch (error: any) {
       logger.warn(
         `[AuthCallback] ⚠️ Error during webhook registration:`,

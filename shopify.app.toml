@@ -1,0 +1,10 @@
+# Shopify App Configuration
+# This file configures your Shopify app, including GDPR webhooks
+
+[webhooks]
+api_version = "2024-07"
+
+[[webhooks.subscriptions]]
+compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+uri = "https://orderauditor.amertech.online/api/webhooks/shopify"
+
