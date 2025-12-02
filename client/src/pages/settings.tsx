@@ -9,6 +9,7 @@ import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { Flag, Bell, Save } from "lucide-react";
 import { useForm } from "react-hook-form";
@@ -35,8 +36,6 @@ export default function Settings() {
       matchEmail: true,
       matchPhone: false,
       matchAddress: true,
-      matchAddressOnlyIfPresent: false,
-      addressSensitivity: "medium",
       enableNotifications: false,
       notificationEmail: "",
       slackWebhookUrl: "",
@@ -51,8 +50,6 @@ export default function Settings() {
         matchEmail: settings.matchEmail,
         matchPhone: settings.matchPhone,
         matchAddress: settings.matchAddress,
-        matchAddressOnlyIfPresent: settings.matchAddressOnlyIfPresent,
-        addressSensitivity: settings.addressSensitivity,
         enableNotifications: settings.enableNotifications,
         notificationEmail: settings.notificationEmail || "",
         slackWebhookUrl: settings.slackWebhookUrl || "",
@@ -104,7 +101,7 @@ export default function Settings() {
         <div className="mb-6">
           <h2 className="text-page-title mb-2">Settings</h2>
           <p className="text-sm text-muted-foreground">
-            Configure duplicate detection rules and notification preferences.
+            Configure which customer details to check for duplicates. Missing data (like addresses for digital products) is handled automatically.
           </p>
         </div>
 
@@ -139,7 +136,7 @@ export default function Settings() {
                           <FormLabel className="flex items-center gap-2">
                             Hours: {field.value}
                             <InfoTooltip
-                              content="Orders within this window are compared. Shorter = fewer false positives, longer = catches more duplicates"
+                              content="Only orders placed within this time window are compared. Recommended: 24-72 hours for most stores."
                               side="bottom"
                             />
                           </FormLabel>
@@ -166,7 +163,7 @@ export default function Settings() {
                   <CardHeader>
                     <CardTitle className="text-section-header">Matching Criteria</CardTitle>
                     <CardDescription>
-                      Select which customer details to compare when detecting duplicates.
+                      Check the boxes for customer information you want to compare. We'll only check data that's present in the order.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -179,12 +176,12 @@ export default function Settings() {
                             <FormLabel className="flex items-center gap-2">
                               Email Address
                               <InfoTooltip
-                                content="Email is a strong identifier. Enabling this will flag orders with the same email address"
+                                content="Strong identifier worth 50 points. Checked only when email data exists in both orders."
                                 side="bottom"
                               />
                             </FormLabel>
                             <FormDescription>
-                              Match orders with the same email address
+                              Flag orders with matching email addresses (50 points)
                             </FormDescription>
                           </div>
                           <FormControl>
@@ -207,12 +204,12 @@ export default function Settings() {
                             <FormLabel className="flex items-center gap-2">
                               Phone Number
                               <InfoTooltip
-                                content="Phone numbers are normalized for format differences. Enables detection even if formats differ (e.g., +1234567890 vs (123) 456-7890)"
+                                content="Strong identifier worth 50 points. Phone numbers are normalized to match different formats (+1234567890 vs (123) 456-7890). Checked only when phone data exists in both orders."
                                 side="bottom"
                               />
                             </FormLabel>
                             <FormDescription>
-                              Match orders with the same phone number
+                              Flag orders with matching phone numbers (50 points)
                             </FormDescription>
                           </div>
                           <FormControl>
@@ -235,12 +232,12 @@ export default function Settings() {
                             <FormLabel className="flex items-center gap-2">
                               Shipping Address
                               <InfoTooltip
-                                content="Useful for detecting duplicates when customers use different emails. Less reliable than email/phone alone"
+                                content="Worth up to 45 points for full match (street + city + zip), or 25 points for partial match. Automatically skipped for orders without shipping addresses (digital products, gift cards)."
                                 side="bottom"
                               />
                             </FormLabel>
                             <FormDescription>
-                              Match orders with similar shipping addresses
+                              Flag orders shipping to the same address (45 points for full match, 25 for partial)
                             </FormDescription>
                           </div>
                           <FormControl>
@@ -254,69 +251,33 @@ export default function Settings() {
                       )}
                     />
 
-                    {form.watch("matchAddress") && (
-                      <FormField
-                        control={form.control}
-                        name="matchAddressOnlyIfPresent"
-                        render={({ field }) => (
-                          <FormItem className="flex items-center justify-between pl-6 border-l-2 border-muted ml-2">
-                            <div className="space-y-0.5">
-                              <FormLabel className="flex items-center gap-2 text-sm">
-                                Match only when present
-                                <InfoTooltip
-                                  content="When enabled, orders without shipping addresses (e.g., digital products, gift cards) won't be penalized. Enables duplicate detection using email/name matching alone when addresses are missing."
-                                  side="bottom"
-                                />
-                              </FormLabel>
-                              <FormDescription className="text-xs">
-                                Ignore missing addresses (e.g. digital products)
-                              </FormDescription>
-                            </div>
-                            <FormControl>
-                              <Switch
-                                checked={field.value}
-                                onCheckedChange={field.onChange}
-                                data-testid="switch-match-address-only-present"
-                              />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                    )}
-
-                    <FormField
-                      control={form.control}
-                      name="addressSensitivity"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="flex items-center gap-2">
-                            Address Matching Sensitivity
-                            <InfoTooltip
-                              content="Low: Matches if address OR (city + zip) match. Medium: Matches if (address + city) OR (address + zip) match. High: Requires exact match of address, city, and zip."
-                              side="bottom"
-                            />
-                          </FormLabel>
-                          <Select
-                            onValueChange={field.onChange}
-                            defaultValue={field.value}
-                          >
-                            <FormControl>
-                              <SelectTrigger data-testid="select-address-sensitivity">
-                                <SelectValue placeholder="Select sensitivity" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="low">Low - Allow minor differences</SelectItem>
-                              <SelectItem value="medium">Medium - Balanced matching</SelectItem>
-                              <SelectItem value="high">High - Exact match required</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormDescription>
-                            How strictly should addresses match to be considered duplicates?
-                          </FormDescription>
-                        </FormItem>
+                    {/* Warning for address-only mode */}
+                    {form.watch("matchAddress") &&
+                      !form.watch("matchEmail") &&
+                      !form.watch("matchPhone") && (
+                        <Alert variant="default" className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950">
+                          <AlertDescription className="text-sm">
+                            ⚠️ <strong>Address-only matching may miss duplicates.</strong> Address alone (45 pts) + Name (20 pts) = 65 points, which is below the 70-point threshold. Consider enabling email or phone matching for better detection.
+                          </AlertDescription>
+                        </Alert>
                       )}
-                    />
+
+                    <div className="mt-6 p-4 bg-muted rounded-lg">
+                      <p className="text-sm font-medium mb-2">How Scoring Works</p>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Orders need <strong>70+ points</strong> to be flagged as duplicates. Each match adds points:
+                      </p>
+                      <ul className="text-xs text-muted-foreground space-y-1 ml-4">
+                        <li>• Email match: <strong>50 points</strong></li>
+                        <li>• Phone match: <strong>50 points</strong></li>
+                        <li>• Full address match (street + city + zip): <strong>45 points</strong></li>
+                        <li>• Partial address match: <strong>25 points</strong></li>
+                        <li>• Name match: <strong>20 points</strong> (supporting evidence)</li>
+                      </ul>
+                      <p className="text-xs text-muted-foreground mt-3">
+                        <strong>Example:</strong> Email + Name = 50 + 20 = 70 points → Flagged as duplicate ✓
+                      </p>
+                    </div>
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -414,7 +375,7 @@ export default function Settings() {
                           <FormLabel className="flex items-center gap-2">
                             Confidence Threshold: {field.value}%
                             <InfoTooltip
-                              content="Orders need 70%+ confidence to be flagged. Multiple matching criteria increase confidence"
+                              content="Notification threshold - only get alerted for high-confidence matches. Note: Orders are flagged at 70+ points, but you can set a higher threshold for notifications to reduce noise."
                               side="bottom"
                             />
                           </FormLabel>

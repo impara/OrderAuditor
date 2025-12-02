@@ -33,7 +33,7 @@ export class DuplicateDetectionService {
     }
 
     logger.debug(
-      `[DuplicateDetection] Settings - Email: ${settings.matchEmail}, Phone: ${settings.matchPhone}, Address: ${settings.matchAddress}, AddressOnlyIfPresent: ${settings.matchAddressOnlyIfPresent}, TimeWindow: ${settings.timeWindowHours}h`
+      `[DuplicateDetection] Settings - Email: ${settings.matchEmail}, Phone: ${settings.matchPhone}, Address: ${settings.matchAddress}, TimeWindow: ${settings.timeWindowHours}h`
     );
 
     const timeThreshold = new Date();
@@ -143,12 +143,16 @@ export class DuplicateDetectionService {
   /**
    * Calculate match confidence and reason between two orders
    *
-   * Scoring philosophy:
-   * - Conservative by default: Multiple criteria should combine to reach 70% threshold
-   * - Respect merchant choice: If only one criterion is enabled and it matches, it's sufficient
-   * - Phone and Email are equally reliable identifiers (40 points each)
-   * - Address matching varies by sensitivity (25-40 points)
-   * - Name matching is less reliable (20 points, supporting evidence only)
+   * Scoring:
+   * - Email match: 50 points (strong identifier)
+   * - Phone match: 50 points (strong identifier, normalized for format differences)
+   * - Full address match (street + city + zip): 45 points
+   * - Partial address match (street + city OR street + zip): 25 points
+   * - Name match: 20 points (supporting evidence)
+   * - Threshold: 70 points to flag as duplicate
+   *
+   * All criteria are checked "only if present" - missing data is automatically skipped.
+   * This ensures digital products (no shipping address) can still be detected via email/phone.
    */
   private calculateMatch(
     newOrder: InsertOrder,
@@ -159,37 +163,23 @@ export class DuplicateDetectionService {
     const reasons: string[] = [];
     const matchedCriteria: string[] = [];
 
-    // Count how many criteria are enabled and evaluable
-    let enabledCriteriaCount = 0;
-    if (settings.matchEmail) enabledCriteriaCount++;
-    if (settings.matchPhone) enabledCriteriaCount++;
+    // Count how many primary criteria are enabled
+    let enabledCount = 0;
+    if (settings.matchEmail) enabledCount++;
+    if (settings.matchPhone) enabledCount++;
+    if (settings.matchAddress) enabledCount++;
 
-    // Address is enabled based on:
-    // 1. It's enabled in settings AND
-    // 2. Either data is present OR matchAddressOnlyIfPresent is false
-    // When matchAddressOnlyIfPresent is false, address counts as enabled even when missing
-    // (strict mode: address is required but can't be evaluated without data)
-    // When matchAddressOnlyIfPresent is true, address only counts when data is present
-    // (lenient mode: missing addresses are ignored)
-    const hasAddressData = !!(
-      newOrder.shippingAddress && existingOrder.shippingAddress
-    );
-    const addressIsEvaluable =
-      hasAddressData || !settings.matchAddressOnlyIfPresent;
-
-    if (settings.matchAddress && addressIsEvaluable) {
-      enabledCriteriaCount++;
-    }
-
+    // Email - check only if enabled AND data exists
     if (
       settings.matchEmail &&
       newOrder.customerEmail === existingOrder.customerEmail
     ) {
-      confidence += 40;
+      confidence += 50;
       reasons.push("Same email");
       matchedCriteria.push("email");
     }
 
+    // Phone - check only if enabled AND data exists
     if (
       settings.matchPhone &&
       newOrder.customerPhone &&
@@ -205,28 +195,32 @@ export class DuplicateDetectionService {
       );
 
       if (normalizedNew === normalizedExisting) {
-        confidence += 40; // Same reliability as email
+        confidence += 50;
         reasons.push("Same phone");
         matchedCriteria.push("phone");
       }
     }
 
-    if (settings.matchAddress && hasAddressData) {
-      const addressMatch = this.compareAddresses(
+    // Address - check only if enabled AND data exists
+    if (
+      settings.matchAddress &&
+      newOrder.shippingAddress &&
+      existingOrder.shippingAddress
+    ) {
+      const addressScore = this.compareAddresses(
         newOrder.shippingAddress,
-        existingOrder.shippingAddress,
-        settings.addressSensitivity
+        existingOrder.shippingAddress
       );
-      if (addressMatch > 0) {
-        confidence += addressMatch;
-        reasons.push("Similar address");
+      if (addressScore > 0) {
+        confidence += addressScore;
+        reasons.push(
+          addressScore >= 45 ? "Same address" : "Similar address"
+        );
         matchedCriteria.push("address");
       }
     }
 
-    // Name matching is supporting evidence only (not a primary criterion)
-    // IMPORTANT: Name matching does NOT add to matchedCriteria - it's always applied
-    // as supporting evidence but should not affect the single-criterion boost logic
+    // Name - always check if data exists (supporting evidence)
     if (newOrder.customerName && existingOrder.customerName) {
       if (
         newOrder.customerName.toLowerCase() ===
@@ -234,32 +228,23 @@ export class DuplicateDetectionService {
       ) {
         confidence += 20;
         reasons.push("Same name");
-        // Note: We intentionally do NOT add "name" to matchedCriteria
-        // because name matching is not a configurable criterion and should not
-        // interfere with the single-criterion boost logic below
       }
     }
 
-    // Special case: If merchant enabled only ONE criterion and it matched, respect their choice
-    // This allows merchants to use phone-only or email-only matching if they prefer
-    // Note: matchedCriteria only contains configurable criteria (email, phone, address)
-    // Name matching is excluded from matchedCriteria, so it won't interfere with this logic
-    // Note: If address is the only enabled criterion but addresses are missing, enabledCriteriaCount
-    // will be 1 but matchedCriteria.length will be 0 (address can't be evaluated without data),
-    // so the boost won't trigger. This is correct behavior - nothing can match without data.
-    if (enabledCriteriaCount === 1 && matchedCriteria.length === 1) {
-      // Boost confidence to 75% to exceed threshold when single enabled criterion matches
-      // This respects the merchant's explicit configuration choice
-      confidence = Math.max(confidence, 75);
-      logger.debug(
-        `[DuplicateDetection] Single criterion match detected (${matchedCriteria[0]}), boosting confidence to respect merchant configuration`
-      );
+    // Backward compatibility: If only ONE primary criterion is enabled and it matched,
+    // ensure we reach the 70-point threshold to maintain previous behavior
+    // This prevents breaking existing merchants who use email-only or phone-only detection
+    if (enabledCount === 1 && matchedCriteria.length === 1) {
+      if (confidence < 70) {
+        logger.debug(
+          `[DuplicateDetection] Single criterion (${matchedCriteria[0]}) matched with ${confidence} points, boosting to 70 for backward compatibility`
+        );
+        confidence = 70;
+      }
     }
 
-    // Always return the calculated confidence, even if below threshold
-    // The caller (findDuplicates) will decide whether to flag it
     return {
-      reason: reasons.join(", ") || "Potential duplicate detected",
+      reason: reasons.join(", ") || "No significant match",
       confidence: Math.min(100, confidence),
     };
   }
@@ -291,16 +276,12 @@ export class DuplicateDetectionService {
   }
 
   /**
-   * Compare shipping addresses based on sensitivity setting
+   * Compare shipping addresses
+   * Returns 45 points for full match (street + city + zip)
+   * Returns 25 points for partial match (street + city OR street + zip)
    */
-  private compareAddresses(
-    addr1: any,
-    addr2: any,
-    sensitivity: string
-  ): number {
+  private compareAddresses(addr1: any, addr2: any): number {
     if (!addr1 || !addr2) return 0;
-
-    let score = 0;
 
     const normalizeString = (str: string | undefined) =>
       (str || "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -311,21 +292,17 @@ export class DuplicateDetectionService {
       normalizeString(addr1.city) === normalizeString(addr2.city);
     const zipMatch = normalizeString(addr1.zip) === normalizeString(addr2.zip);
 
-    if (sensitivity === "high") {
-      if (address1Match && cityMatch && zipMatch) {
-        score = 40;
-      }
-    } else if (sensitivity === "medium") {
-      if ((address1Match && cityMatch) || (address1Match && zipMatch)) {
-        score = 30;
-      }
-    } else if (sensitivity === "low") {
-      if (address1Match || (cityMatch && zipMatch)) {
-        score = 25;
-      }
+    // Full match: all three components match
+    if (address1Match && cityMatch && zipMatch) {
+      return 45;
     }
 
-    return score;
+    // Partial match: street + (city OR zip)
+    if ((address1Match && cityMatch) || (address1Match && zipMatch)) {
+      return 25;
+    }
+
+    return 0;
   }
 
   /**

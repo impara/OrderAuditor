@@ -247,7 +247,6 @@ export class DatabaseStorage implements IStorage {
         matchEmail: true,
         matchPhone: false,
         matchAddress: true,
-        addressSensitivity: "medium",
         enableNotifications: false,
         notificationThreshold: 80,
       })
