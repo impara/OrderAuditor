@@ -120,4 +120,81 @@ node scripts/create-test-order.js \
 - Check application logs: `docker-compose logs -f app`
 - Verify the webhook endpoint is receiving events
 
+## Billing & Subscription Testing
 
+### Test Billing System (`test-billing.ts`)
+
+Comprehensive test suite for billing and subscription functionality:
+
+```bash
+# Run all billing tests
+npm run test:billing
+
+# Or directly with tsx
+tsx scripts/test-billing.ts [shop-domain]
+
+# With custom shop domain
+tsx scripts/test-billing.ts my-test-shop.myshopify.com
+```
+
+**What it tests:**
+
+1. ✅ Free tier initialization (auto-creates subscription with 50 order limit)
+2. ✅ Quota limits (within limit, at limit, over limit)
+3. ✅ Subscription upgrade (free → paid, unlimited orders)
+4. ✅ Subscription downgrade (paid → free, back to 50 limit)
+5. ✅ Billing service (test mode configuration, charge listing)
+6. ✅ Limit hit scenario (end-to-end: 49 → 50 → upgrade → unlimited)
+
+**Requirements:**
+
+- `BILLING_TEST_MODE=true` in `.env` (for billing service tests)
+- Database connection configured
+- Test shop domain (defaults to `test-shop.myshopify.com`)
+
+**Example output:**
+
+```
+╔════════════════════════════════════════════════════════════╗
+║     Billing & Subscription Test Suite                    ║
+╚════════════════════════════════════════════════════════════╝
+
+Test Shop: test-shop.myshopify.com
+Test Mode: true
+
+============================================================
+1. Free Tier Initialization
+============================================================
+
+✅ Auto-initialize free tier
+   Tier: free, Limit: 50, Count: 0
+✅ Quota check on fresh subscription
+   Allowed: true, Count: 0/50
+...
+```
+
+### Test Billing Webhooks (`test-billing-webhook.sh`)
+
+Test the `app_subscriptions/update` webhook with different subscription statuses:
+
+```bash
+# Test billing webhooks
+./test-billing-webhook.sh [ngrok-url] [webhook-secret]
+
+# Example
+./test-billing-webhook.sh http://localhost:5000
+```
+
+**Tests:**
+
+- `CANCELLED` - Subscription cancelled (downgrades to free tier)
+- `ACTIVE` - Subscription active (upgrades to paid tier)
+- `FROZEN` - Subscription frozen (downgrades to free tier)
+- `DECLINED` - Subscription declined (downgrades to free tier)
+
+**Test payloads:**
+
+- `test-payloads/app-subscription-update.json` (CANCELLED)
+- `test-payloads/app-subscription-update-active.json` (ACTIVE)
+- `test-payloads/app-subscription-update-frozen.json` (FROZEN)
+- `test-payloads/app-subscription-update-declined.json` (DECLINED)

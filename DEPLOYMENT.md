@@ -61,6 +61,24 @@ Example `.env` entry:
 LOG_LEVEL=info
 ```
 
+#### Billing Configuration
+
+**CRITICAL**: For production and App Store submission, you MUST set `BILLING_TEST_MODE=false` or omit it entirely. Test mode charges will not work for real merchants.
+
+```env
+# Billing Configuration
+# Set to true ONLY for development/testing (creates test charges)
+# Set to false or omit for production (real charges)
+# MUST be false for App Store submission
+BILLING_TEST_MODE=false
+```
+
+**Important Notes:**
+- Test charges (`BILLING_TEST_MODE=true`) are only for development and testing
+- Real merchants will NOT be charged when test mode is enabled
+- For App Store submission, test mode must be disabled
+- The app automatically handles charge acceptance/decline/approval on reinstall per Shopify requirements
+
 #### SMTP Configuration for Email Notifications
 
 To enable email notifications for duplicate order alerts, configure SMTP settings in your `.env` file:

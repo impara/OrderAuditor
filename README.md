@@ -75,6 +75,12 @@ PORT=5000
 APP_URL=http://localhost:5000
 LOG_LEVEL=debug
 
+# Billing Configuration
+# Set BILLING_TEST_MODE=true to create test charges (no real payment)
+# Set BILLING_TEST_MODE=false or omit for production (real charges)
+# IMPORTANT: Must be false in production for App Store submission
+BILLING_TEST_MODE=true
+
 # Client-side Configuration (optional)
 VITE_SHOPIFY_SHOP_DOMAIN=yourstore.myshopify.com
 ```

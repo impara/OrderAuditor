@@ -1,0 +1,11 @@
+{
+  "app_subscription": {
+    "admin_graphql_api_id": "gid://shopify/AppSubscription/1029266914",
+    "name": "Duplicate Guard - Unlimited Plan",
+    "status": "DECLINED",
+    "api_client_id": 5800013,
+    "created_at": "2021-01-01T00:00:00-00:00",
+    "updated_at": "2021-01-01T00:00:00-00:00"
+  }
+}
+

@@ -10,6 +10,7 @@ import { Request, Response, NextFunction } from "express";
 import { logger } from "./utils/logger";
 import * as jose from "jose";
 import { createSecretKey } from "crypto";
+import { shopifyBillingService } from "./services/shopify-billing.service";
 
 // Initialize Shopify API client
 const shopify = shopifyApi({
@@ -45,6 +46,10 @@ shopify.webhooks.addHandlers({
   "app/uninstalled": {
     deliveryMethod: DeliveryMethod.Http,
     callbackUrl: "/api/webhooks/shopify/app/uninstalled",
+  },
+  "app_subscriptions/update": {
+    deliveryMethod: DeliveryMethod.Http,
+    callbackUrl: "/api/webhooks/shopify/app_subscriptions/update",
   },
   // GDPR compliance webhooks are configured via shopify.app.toml
   // They use the unified endpoint: /api/webhooks/shopify
@@ -404,6 +409,46 @@ export async function authCallback(req: Request, res: Response) {
         );
       }
 
+      // Check app_subscriptions/update webhook (try both formats)
+      const appSubscriptionsUpdateResult =
+        response["APP_SUBSCRIPTIONS_UPDATE"] ||
+        response["app_subscriptions/update"];
+      if (
+        appSubscriptionsUpdateResult &&
+        Array.isArray(appSubscriptionsUpdateResult) &&
+        appSubscriptionsUpdateResult.length > 0
+      ) {
+        const result = appSubscriptionsUpdateResult[0];
+        if (result.success) {
+          logger.info(
+            `[AuthCallback] ✅ Successfully registered app_subscriptions/update webhook`
+          );
+        } else {
+          // Extract error message from GraphQL response
+          const resultData = result.result as any;
+          const errorMessage =
+            resultData?.data?.webhookSubscriptionCreate?.userErrors?.[0]
+              ?.message ||
+            resultData?.errors?.[0]?.message ||
+            "Unknown error";
+          logger.warn(
+            `[AuthCallback] ⚠️ Failed to register app_subscriptions/update webhook: ${errorMessage}`
+          );
+          logger.info(
+            `[AuthCallback] 💡 This is non-blocking. The app will still function, but billing sync may not work without this webhook.`
+          );
+          logger.debug(
+            `[AuthCallback] Full error details:`,
+            JSON.stringify(result, null, 2)
+          );
+        }
+      } else {
+        logger.warn(
+          `[AuthCallback] ⚠️ app_subscriptions/update webhook registration response is missing or invalid:`,
+          JSON.stringify(appSubscriptionsUpdateResult, null, 2)
+        );
+      }
+
       // Check customers/data_request webhook
       const customersDataRequestResult =
         response["CUSTOMERS_DATA_REQUEST"] ||
@@ -516,6 +561,49 @@ export async function authCallback(req: Request, res: Response) {
         `[AuthCallback] 💡 OAuth completed successfully. Webhook registration can be done manually later via the Settings page once Protected Customer Data access is approved.`
       );
       // Don't fail the OAuth flow if webhook registration fails - user can register manually later
+    }
+
+    // Handle existing charges on reinstall (Shopify Billing API requirement)
+    // Apps must check for existing pending charges and handle charge acceptance/decline/approval
+    try {
+      logger.info(
+        `[AuthCallback] Checking for existing charges for shop: ${session.shop}`
+      );
+
+      const appUrl = process.env.APP_URL || "http://localhost:5000";
+      const returnUrl = `${appUrl}/subscription?upgrade=success`;
+
+      const chargeStatus = await shopifyBillingService.handleExistingCharges(
+        session.shop,
+        session.accessToken || "",
+        returnUrl
+      );
+
+      if (chargeStatus.hasActiveCharge && chargeStatus.activeCharge) {
+        logger.info(
+          `[AuthCallback] ✅ Found active charge ${chargeStatus.activeCharge.id}. Subscription synced to paid tier.`
+        );
+      }
+
+      if (chargeStatus.hasPendingCharge && chargeStatus.pendingCharge) {
+        logger.info(
+          `[AuthCallback] ⚠️ Found pending charge ${chargeStatus.pendingCharge.id}. Merchant needs to approve this charge.`
+        );
+        logger.info(
+          `[AuthCallback] 💡 Pending charge confirmation URL: ${chargeStatus.pendingCharge.confirmation_url}`
+        );
+        // Note: The merchant will need to visit the subscription page to approve the pending charge
+        // The app_subscriptions/update webhook will handle activation when approved
+      }
+    } catch (error: any) {
+      logger.warn(
+        `[AuthCallback] ⚠️ Error checking existing charges (non-blocking):`,
+        error
+      );
+      logger.info(
+        `[AuthCallback] 💡 OAuth completed successfully. Charge handling can be done later via the Subscription page.`
+      );
+      // Don't fail the OAuth flow if charge checking fails
     }
 
     // Redirect to app with host param

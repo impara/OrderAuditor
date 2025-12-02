@@ -29,6 +29,16 @@ export class ShopifyBillingService {
   }
 
   /**
+   * Get test mode setting from environment variable
+   * Defaults to false (production mode) unless explicitly set to "true"
+   * Per Shopify requirements: test charges should only be used during development
+   */
+  private isTestMode(): boolean {
+    const testMode = process.env.BILLING_TEST_MODE?.toLowerCase();
+    return testMode === "true" || testMode === "1";
+  }
+
+  /**
    * Create a recurring charge for $7.99/month
    */
   async createRecurringCharge(
@@ -56,7 +66,7 @@ export class ShopifyBillingService {
             name: "Duplicate Guard - Unlimited Plan",
             price: 7.99,
             return_url: returnUrl,
-            test: process.env.NODE_ENV !== "production", // Test mode in development
+            test: this.isTestMode(), // Configurable test mode via BILLING_TEST_MODE env var
           },
         }),
       });
@@ -168,6 +178,94 @@ export class ShopifyBillingService {
       logger.error("[ShopifyBilling] Error getting charge:", error);
       return null;
     }
+  }
+
+  /**
+   * List all recurring charges for a shop
+   * Used to check for existing pending charges on reinstall
+   */
+  async listCharges(
+    shopDomain: string,
+    accessToken: string
+  ): Promise<ShopifyRecurringCharge[]> {
+    if (!this.validateCredentials(shopDomain, accessToken)) {
+      return [];
+    }
+
+    try {
+      const url = `${this.getBaseApiUrl(
+        shopDomain
+      )}/recurring_application_charges.json`;
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "X-Shopify-Access-Token": accessToken,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        logger.error(
+          `[ShopifyBilling] Failed to list charges: ${response.status}`,
+          errorText
+        );
+        return [];
+      }
+
+      const data = await response.json();
+      return data.recurring_application_charges || [];
+    } catch (error) {
+      logger.error("[ShopifyBilling] Error listing charges:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Check for existing pending charges and handle them appropriately
+   * This is required by Shopify: apps must handle charge acceptance/decline/approval on reinstall
+   */
+  async handleExistingCharges(
+    shopDomain: string,
+    accessToken: string,
+    returnUrl: string
+  ): Promise<{
+    hasPendingCharge: boolean;
+    pendingCharge: ShopifyRecurringCharge | null;
+    hasActiveCharge: boolean;
+    activeCharge: ShopifyRecurringCharge | null;
+  }> {
+    const charges = await this.listCharges(shopDomain, accessToken);
+
+    // Shopify API returns statuses in uppercase (PENDING, ACTIVE, etc.)
+    const pendingCharge =
+      charges.find((charge) => charge.status === "PENDING") || null;
+
+    const activeCharge =
+      charges.find((charge) => charge.status === "ACTIVE") || null;
+
+    // If there's an active charge, ensure subscription is synced
+    if (activeCharge) {
+      logger.info(
+        `[ShopifyBilling] Found active charge ${activeCharge.id} for ${shopDomain}. Syncing subscription.`
+      );
+      await subscriptionService.updateTier(shopDomain, "paid", -1);
+    }
+
+    // If there's a pending charge, log it (merchant needs to approve it)
+    if (pendingCharge) {
+      logger.info(
+        `[ShopifyBilling] Found pending charge ${pendingCharge.id} for ${shopDomain}. Merchant approval required.`
+      );
+    }
+
+    return {
+      hasPendingCharge: !!pendingCharge,
+      pendingCharge,
+      hasActiveCharge: !!activeCharge,
+      activeCharge,
+    };
   }
 
   /**

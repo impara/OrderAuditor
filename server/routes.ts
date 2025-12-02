@@ -345,6 +345,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           `${baseUrl}/api/webhooks/shopify/app/uninstalled`
         );
 
+      const appSubscriptionsUpdateResult =
+        await shopifyService.registerWebhookWithRetry(
+          shop,
+          accessToken,
+          "app_subscriptions/update",
+          `${baseUrl}/api/webhooks/shopify/app_subscriptions/update`
+        );
+
       // Note: GDPR compliance webhooks (customers/data_request, customers/redact, shop/redact)
       // are now configured via shopify.app.toml and use the unified endpoint /api/webhooks/shopify
       // They should NOT be registered here to avoid conflicts with TOML configuration
@@ -352,7 +360,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const allSuccess =
         ordersCreateResult.success &&
         ordersUpdatedResult.success &&
-        appUninstalledResult.success;
+        appUninstalledResult.success &&
+        appSubscriptionsUpdateResult.success;
 
       res.json({
         success: allSuccess,
@@ -360,6 +369,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ordersCreate: ordersCreateResult,
           ordersUpdated: ordersUpdatedResult,
           appUninstalled: appUninstalledResult,
+          appSubscriptionsUpdate: appSubscriptionsUpdateResult,
         },
         message: allSuccess
           ? "All webhooks registered successfully"
@@ -404,6 +414,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
       },
     });
   });
+
+  app.post(
+    "/api/webhooks/shopify/app_subscriptions/update",
+    async (req: any, res: Response) => {
+      try {
+        const rawBody: Buffer = req.body;
+        const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
+        const shopHeader = req.get("X-Shopify-Shop-Domain");
+        const deliveryIdHeader =
+          req.get("X-Shopify-Delivery-Id") ||
+          req.get("X-Shopify-Webhook-Id") ||
+          "";
+
+        if (!hmacHeader) {
+          logger.warn(
+            "[Webhook] ❌ Missing HMAC header for app_subscriptions/update"
+          );
+          return res.status(401).json({ error: "Missing HMAC header" });
+        }
+
+        const isValid = shopifyService.verifyWebhook(rawBody, hmacHeader);
+
+        if (!isValid) {
+          logger.warn(
+            `[Webhook] ❌ Invalid webhook signature for app_subscriptions/update`
+          );
+          return res.status(401).json({ error: "Invalid webhook signature" });
+        }
+
+        const shopDomain = shopHeader;
+        if (!shopDomain) {
+          logger.error("[Webhook] ❌ Missing shop domain header");
+          return res.status(400).json({ error: "Missing shop domain" });
+        }
+
+        // Record delivery ID for idempotency
+        if (deliveryIdHeader) {
+          try {
+            const isNew = await storage.tryRecordWebhookDelivery({
+              shopDomain,
+              deliveryId: deliveryIdHeader,
+              topic: "app_subscriptions/update",
+            });
+            if (!isNew) {
+              logger.info(
+                `[Webhook] ⚠️ Duplicate app_subscriptions/update delivery detected (ID: ${deliveryIdHeader}). Skipping.`
+              );
+              return res.json({ success: true, duplicate: true });
+            }
+          } catch (error) {
+            logger.error("Failed to record webhook delivery ID:", error);
+          }
+        }
+
+        const payload = JSON.parse(rawBody.toString("utf8"));
+        const subscription = payload.app_subscription;
+
+        logger.info(
+          `[Webhook] Received app_subscriptions/update for ${shopDomain}. Status: ${subscription.status}`
+        );
+
+        // Sync local subscription state
+        if (
+          ["CANCELLED", "FROZEN", "DECLINED", "EXPIRED"].includes(
+            subscription.status
+          )
+        ) {
+          logger.info(
+            `[Webhook] Subscription ${subscription.status} for ${shopDomain}. Downgrading to free tier.`
+          );
+          await subscriptionService.updateTier(shopDomain, "free", 50);
+        } else if (subscription.status === "ACTIVE") {
+          logger.info(
+            `[Webhook] Subscription ACTIVE for ${shopDomain}. Ensuring paid tier.`
+          );
+          await subscriptionService.updateTier(shopDomain, "paid", -1);
+        }
+
+        res.json({ success: true });
+      } catch (error) {
+        logger.error(
+          "[Webhook] Error processing app_subscriptions/update:",
+          error
+        );
+        res.status(500).json({ error: "Internal server error" });
+      }
+    }
+  );
 
   app.post(
     "/api/webhooks/shopify/orders/create",
