@@ -20,11 +20,8 @@ services:
       - duplicate-guard-network
 
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        VITE_SHOPIFY_API_KEY: ${SHOPIFY_API_KEY}
+    # Example: ghcr.io/myusername/orderauditor:latest
+    image: ghcr.io/impara/orderauditor:latest
     container_name: duplicate-guard-app-prod
     restart: unless-stopped
     environment:
@@ -45,6 +42,7 @@ services:
       SMTP_USER: ${SMTP_USER}
       SMTP_PASS: ${SMTP_PASS}
       SMTP_FROM: ${SMTP_FROM:-${SMTP_USER}}
+      BILLING_TEST_MODE: ${BILLING_TEST_MODE:-false}
       TZ: ${TZ:-UTC}
     volumes:
       - /etc/localtime:/etc/localtime:ro
