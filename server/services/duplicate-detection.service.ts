@@ -234,12 +234,18 @@ export class DuplicateDetectionService {
     // Backward compatibility: If only ONE primary criterion is enabled and it matched,
     // ensure we reach the 70-point threshold to maintain previous behavior
     // This prevents breaking existing merchants who use email-only or phone-only detection
+    // IMPORTANT: We exclude address-only scenarios because address matching alone is intentionally
+    // designed to require an additional identifier (email/phone) to reach the threshold
     if (enabledCount === 1 && matchedCriteria.length === 1) {
-      if (confidence < 70) {
-        logger.debug(
-          `[DuplicateDetection] Single criterion (${matchedCriteria[0]}) matched with ${confidence} points, boosting to 70 for backward compatibility`
-        );
-        confidence = 70;
+      const matchedCriterion = matchedCriteria[0];
+      // Only boost for email-only or phone-only, NOT address-only
+      if (matchedCriterion === "email" || matchedCriterion === "phone") {
+        if (confidence < 70) {
+          logger.debug(
+            `[DuplicateDetection] Single criterion (${matchedCriterion}) matched with ${confidence} points, boosting to 70 for backward compatibility`
+          );
+          confidence = 70;
+        }
       }
     }
 
