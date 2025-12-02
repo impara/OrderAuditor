@@ -161,13 +161,6 @@ export class DuplicateDetectionService {
   ): { reason: string; confidence: number } {
     let confidence = 0;
     const reasons: string[] = [];
-    const matchedCriteria: string[] = [];
-
-    // Count how many primary criteria are enabled
-    let enabledCount = 0;
-    if (settings.matchEmail) enabledCount++;
-    if (settings.matchPhone) enabledCount++;
-    if (settings.matchAddress) enabledCount++;
 
     // Email - check only if enabled AND data exists
     if (
@@ -178,7 +171,6 @@ export class DuplicateDetectionService {
     ) {
       confidence += 50;
       reasons.push("Same email");
-      matchedCriteria.push("email");
     }
 
     // Phone - check only if enabled AND data exists
@@ -199,7 +191,6 @@ export class DuplicateDetectionService {
       if (normalizedNew === normalizedExisting) {
         confidence += 50;
         reasons.push("Same phone");
-        matchedCriteria.push("phone");
       }
     }
 
@@ -215,10 +206,7 @@ export class DuplicateDetectionService {
       );
       if (addressScore > 0) {
         confidence += addressScore;
-        reasons.push(
-          addressScore >= 45 ? "Same address" : "Similar address"
-        );
-        matchedCriteria.push("address");
+        reasons.push(addressScore >= 45 ? "Same address" : "Similar address");
       }
     }
 
@@ -230,24 +218,6 @@ export class DuplicateDetectionService {
       ) {
         confidence += 20;
         reasons.push("Same name");
-      }
-    }
-
-    // Backward compatibility: If only ONE primary criterion is enabled and it matched,
-    // ensure we reach the 70-point threshold to maintain previous behavior
-    // This prevents breaking existing merchants who use email-only or phone-only detection
-    // IMPORTANT: We exclude address-only scenarios because address matching alone is intentionally
-    // designed to require an additional identifier (email/phone) to reach the threshold
-    if (enabledCount === 1 && matchedCriteria.length === 1) {
-      const matchedCriterion = matchedCriteria[0];
-      // Only boost for email-only or phone-only, NOT address-only
-      if (matchedCriterion === "email" || matchedCriterion === "phone") {
-        if (confidence < 70) {
-          logger.debug(
-            `[DuplicateDetection] Single criterion (${matchedCriterion}) matched with ${confidence} points, boosting to 70 for backward compatibility`
-          );
-          confidence = 70;
-        }
       }
     }
 

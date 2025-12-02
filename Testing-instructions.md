@@ -68,13 +68,10 @@
 
     - Adjust time window (e.g., 12 hours, 24 hours, 48 hours)
     - Toggle matching criteria:
-      - Enable/disable email matching
-      - Enable/disable phone matching
-      - Enable/disable address matching
-    - If address matching is enabled, optionally enable "Match addresses only when present" toggle:
-      - This setting allows detection to work for digital products/gift orders with missing addresses
-      - When enabled, missing addresses are ignored (not counted as a mismatch)
-    - Adjust address sensitivity (High/Medium/Low)
+      - Enable/disable email matching (50 points)
+      - Enable/disable phone matching (50 points)
+      - Enable/disable address matching (45 points for full match, 25 for partial)
+    - Note: Missing addresses are automatically skipped (no penalty for digital products)
     - Save settings
 
 13. Test with updated settings:
@@ -111,12 +108,13 @@
       - `123-456-7890`
     - Verify orders with same phone (different formats) are detected as duplicates
 
-17. Test address matching sensitivity:
+17. Test address matching:
 
     - Create orders with:
-      - Exact same address (should match at all sensitivity levels)
-      - Same address with minor variations (test different sensitivity levels)
-    - Verify detection behavior matches configured sensitivity
+      - Exact same address (street + city + zip) - should score 45 points
+      - Same street + city but different zip - should score 25 points (partial match)
+      - Same street + zip but different city - should score 25 points (partial match)
+    - Verify detection behavior matches scoring rules
 
 18. Test time window:
 
@@ -131,10 +129,8 @@
     - Within the time window, create a second order with:
       - Same email and name
       - No shipping address
-    - Test with "Match addresses only when present" disabled:
-      - Verify order is NOT flagged (confidence stays at 60% - email 40 + name 20)
-    - Test with "Match addresses only when present" enabled:
-      - Verify order IS flagged (confidence boosted to 75% due to single-criterion boost)
+    - Verify order IS flagged (Email 50 + Name 20 = 70 points)
+    - Note: Missing addresses are automatically skipped, so email + name matching works for digital products
 
 ### Testing Email Notifications (Optional)
 
@@ -154,14 +150,15 @@
 - Default detection settings are auto-created on first webhook
 - Time window: Default 24 hours (configurable)
 - Matching criteria: Email, Phone, Address (all enabled by default)
-- Match addresses only when present: Default disabled (address matching requires addresses to be present in both orders)
-- Address sensitivity: Medium by default
-- Confidence threshold: 70% (not configurable in UI, but can be verified in detection logic)
+- Scoring: Email 50pts, Phone 50pts, Address 45pts (full) or 25pts (partial), Name 20pts
+- Confidence threshold: 70 points (not configurable in UI, but can be verified in detection logic)
 - Tag name: `Merge_Review_Candidate` (automatically applied to flagged orders)
 
 ### Expected Behaviors
 
-- Orders are flagged when confidence score >= 70%
+- Orders are flagged when confidence score >= 70 points
+- Missing data (addresses, phone numbers) is automatically skipped
+- Scoring is transparent: Email 50, Phone 50, Address 45/25, Name 20
 - Dashboard auto-refreshes every 30 seconds
 - Settings are persisted and applied to all new orders
 - Both manual and automatic resolution methods work correctly

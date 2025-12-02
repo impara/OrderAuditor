@@ -343,27 +343,31 @@ The app will be available at `http://localhost:5000`
 
 ### Matching Criteria
 
-The system calculates a confidence score (0-100%) based on:
+The system calculates a confidence score (0-100 points) based on:
 
-- **Email Match** (40 points): Same customer email
-- **Phone Match** (40 points): Same customer phone number (normalized for format differences)
-- **Address Match** (25-40 points): Similar shipping address based on sensitivity setting
-  - High sensitivity: Exact match required (address1, city, zip) - 40 points
-  - Medium sensitivity: Two of three must match - 30 points
-  - Low sensitivity: One match sufficient - 25 points
-  - **Missing addresses**: If "Match addresses only when present" is enabled, missing addresses are ignored (not counted as enabled criteria), allowing other matches to reach the threshold
+- **Email Match** (50 points): Same customer email
+- **Phone Match** (50 points): Same customer phone number (normalized for format differences)
+- **Address Match** (45 or 25 points): Similar shipping address
+  - Full match (street + city + zip): 45 points
+  - Partial match (street + city OR street + zip): 25 points
+  - Missing addresses are automatically skipped (no penalty for digital products)
 - **Name Match** (20 points): Same customer name (case-insensitive, supporting evidence only)
 
 ### Scoring Philosophy
 
-- **Conservative by default**: Multiple criteria should combine to reach the 70% threshold (e.g., Email 40 + Address 30 = 70%)
-- **Respect merchant choice**: If only one criterion is enabled (email OR phone) and it matches, it's sufficient to flag (boosted to 75%)
+- **Transparent scoring**: Fixed point values for each match type - no hidden boosts or special cases
+- **70-point threshold**: Orders need 70+ points to be flagged as duplicates
+- **Automatic handling**: Missing data (e.g., addresses for digital products) is automatically skipped
 - **Phone normalization**: Phone numbers are normalized to handle format differences (e.g., "+1234567890" vs "(123) 456-7890")
-- **Missing addresses handling**: When address matching is enabled with "Match addresses only when present" setting, missing addresses (e.g., digital products, gift orders) are ignored rather than counted as a mismatch. This allows email + name matching (60 points) to trigger the single-criterion boost (75 points) when address matching is effectively disabled due to missing data.
+- **Examples**:
+  - Email + Name: 50 + 20 = 70 points → Flagged ✓
+  - Phone + Name: 50 + 20 = 70 points → Flagged ✓
+  - Address + Name: 45 + 20 = 65 points → NOT flagged (below threshold)
+  - Email only: 50 points → NOT flagged (needs name match to reach 70)
 
 ### Threshold
 
-Orders are flagged as duplicates if confidence >= 70%
+Orders are flagged as duplicates if confidence >= 70 points
 
 ## Order Resolution & Dismissal
 
@@ -529,8 +533,8 @@ SMTP_FROM=your-email@gmail.com
 
 ## Known Limitations
 
-- **Address-only matching**: Detection requires at least email OR phone matching to be enabled. If both are disabled but address matching is enabled, duplicate detection will not function.
-- **Missing addresses with default settings**: By default, when address matching is enabled but addresses are missing (e.g., digital products), orders may not reach the 70% threshold even with email + name matches. Enable "Match addresses only when present" in Settings to handle this edge case.
+- **Address-only matching**: Address matching alone (45 points) + Name (20 points) = 65 points, which is below the 70-point threshold. Email or phone matching must be enabled for duplicate detection to work.
+- **Email/Phone-only matching**: Email or phone alone (50 points) requires a name match (20 points) to reach the 70-point threshold. Orders with only email/phone matches (no name) will not be flagged.
 - Single detection settings profile (no multi-store support yet)
 - Average resolution time in dashboard stats is currently a placeholder value
 

@@ -257,7 +257,7 @@ export default function Settings() {
                       !form.watch("matchPhone") && (
                         <Alert variant="default" className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950">
                           <AlertDescription className="text-sm">
-                            ⚠️ <strong>Address-only matching may miss duplicates.</strong> Address alone (45 pts) + Name (20 pts) = 65 points, which is below the 70-point threshold. Consider enabling email or phone matching for better detection.
+                            ⚠️ <strong>Address-only matching won't flag duplicates.</strong> Address alone (45 pts) + Name (20 pts) = 65 points, which is below the 70-point threshold. Enable email or phone matching for duplicate detection to work.
                           </AlertDescription>
                         </Alert>
                       )}
