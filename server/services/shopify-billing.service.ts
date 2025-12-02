@@ -53,6 +53,19 @@ export class ShopifyBillingService {
       return null;
     }
 
+    // Check if access token looks like a custom app token (too short)
+    // OAuth Partner App tokens are typically 40+ characters
+    // Custom app tokens are shorter and don't have billing API access
+    if (accessToken.length < 40) {
+      logger.error(
+        `[ShopifyBilling] Access token is too short (${accessToken.length} chars) - likely from custom app installation. Custom apps don't have billing API access.`
+      );
+      logger.error(
+        `[ShopifyBilling] SOLUTION: Reinstall the app through OAuth flow at: ${process.env.APP_URL || "your-app-url"}/api/auth?shop=${shopDomain}`
+      );
+      return null;
+    }
+
     try {
       const testMode = this.isTestMode();
       const url = `${this.getBaseApiUrl(
