@@ -84,16 +84,51 @@ export class ShopifyBillingService {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
+        let errorText = "";
+        let errorJson: any = null;
+
+        try {
+          errorText = await response.text();
+          // Try to parse as JSON for better error details
+          if (errorText) {
+            try {
+              errorJson = JSON.parse(errorText);
+            } catch {
+              // Not JSON, keep as text
+            }
+          }
+        } catch (e) {
+          errorText = `Failed to read error response: ${e}`;
+        }
+
+        const errorDetails = {
+          shopDomain,
+          testMode,
+          status: response.status,
+          statusText: response.statusText,
+          errorResponse: errorText,
+          errorJson: errorJson,
+          requestBody: chargeData,
+          responseHeaders: Object.fromEntries(response.headers.entries()),
+        };
+
         logger.error(
           `[ShopifyBilling] Failed to create charge: ${response.status} ${response.statusText}`,
-          {
-            shopDomain,
-            testMode,
-            errorResponse: errorText,
-            requestBody: chargeData,
-          }
+          errorDetails
         );
+
+        // Log specific guidance for 403 errors
+        if (response.status === 403) {
+          logger.error(
+            `[ShopifyBilling] 403 Forbidden - Possible causes:
+            1. App not installed via OAuth flow (CRITICAL): Partner Apps MUST be installed through OAuth, not as custom apps
+            2. Store is not a development store (required for test charges with test: true)
+            3. Access token from custom app installation (custom apps don't have billing API access)
+            4. App not properly configured in Shopify Partner Dashboard
+            SOLUTION: Reinstall the app through the OAuth flow (/api/auth) to get proper billing permissions`
+          );
+        }
+
         return null;
       }
 
