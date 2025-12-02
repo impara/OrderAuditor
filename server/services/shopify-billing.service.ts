@@ -31,7 +31,10 @@ export class ShopifyBillingService {
   /**
    * Get test mode setting from environment variable
    * Defaults to false (production mode) unless explicitly set to "true"
-   * Per Shopify requirements: test charges should only be used during development
+   *
+   * IMPORTANT: Test charges (test: true) can ONLY be created in Shopify development stores.
+   * Attempting to create a test charge in a production store will result in a 403 Forbidden error.
+   * Set BILLING_TEST_MODE=true only when testing with development stores.
    */
   private isTestMode(): boolean {
     const testMode = process.env.BILLING_TEST_MODE?.toLowerCase();
@@ -51,9 +54,25 @@ export class ShopifyBillingService {
     }
 
     try {
+      const testMode = this.isTestMode();
       const url = `${this.getBaseApiUrl(
         shopDomain
       )}/recurring_application_charges.json`;
+
+      const chargeData = {
+        recurring_application_charge: {
+          name: "Duplicate Guard - Unlimited Plan",
+          price: 7.99,
+          return_url: returnUrl,
+          test: testMode, // Configurable test mode via BILLING_TEST_MODE env var
+        },
+      };
+
+      logger.info(
+        `[ShopifyBilling] Creating recurring charge for ${shopDomain} - Test mode: ${testMode}, BILLING_TEST_MODE: ${
+          process.env.BILLING_TEST_MODE || "not set"
+        }`
+      );
 
       const response = await fetch(url, {
         method: "POST",
@@ -61,21 +80,19 @@ export class ShopifyBillingService {
           "X-Shopify-Access-Token": accessToken,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          recurring_application_charge: {
-            name: "Duplicate Guard - Unlimited Plan",
-            price: 7.99,
-            return_url: returnUrl,
-            test: this.isTestMode(), // Configurable test mode via BILLING_TEST_MODE env var
-          },
-        }),
+        body: JSON.stringify(chargeData),
       });
 
       if (!response.ok) {
         const errorText = await response.text();
         logger.error(
-          `[ShopifyBilling] Failed to create charge: ${response.status}`,
-          errorText
+          `[ShopifyBilling] Failed to create charge: ${response.status} ${response.statusText}`,
+          {
+            shopDomain,
+            testMode,
+            errorResponse: errorText,
+            requestBody: chargeData,
+          }
         );
         return null;
       }
