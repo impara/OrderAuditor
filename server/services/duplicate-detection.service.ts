@@ -172,6 +172,8 @@ export class DuplicateDetectionService {
     // Email - check only if enabled AND data exists
     if (
       settings.matchEmail &&
+      newOrder.customerEmail &&
+      existingOrder.customerEmail &&
       newOrder.customerEmail === existingOrder.customerEmail
     ) {
       confidence += 50;
