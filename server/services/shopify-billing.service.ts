@@ -129,11 +129,14 @@ export class ShopifyBillingService {
         if (response.status === 403) {
           logger.error(
             `[ShopifyBilling] 403 Forbidden - Possible causes:
-            1. App not installed via OAuth flow (CRITICAL): Partner Apps MUST be installed through OAuth, not as custom apps
-            2. Store is not a development store (required for test charges with test: true)
-            3. Access token from custom app installation (custom apps don't have billing API access)
+            1. Test/Development Store Limitation (MOST COMMON): Test stores created in Partner Dashboard CANNOT accept billing charges, even test charges. These stores are restricted to free apps only.
+            2. App not installed via OAuth flow: Partner Apps MUST be installed through OAuth, not as custom apps
+            3. Access token from custom app installation: Custom apps don't have billing API access
             4. App not properly configured in Shopify Partner Dashboard
-            SOLUTION: Reinstall the app through the OAuth flow (/api/auth) to get proper billing permissions`
+            SOLUTIONS:
+            - For testing: Create a non-test development store (can be transferred/upgraded) OR install on a real store outside partner account
+            - For production: Ensure app is installed via OAuth on a real store (not a test store)
+            - Reinstall app through OAuth: ${process.env.APP_URL || "your-app-url"}/api/auth?shop=${shopDomain}`
           );
         }
 
