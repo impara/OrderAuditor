@@ -234,10 +234,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
       }
 
-      // Check if token is unusually short (offline tokens are typically 40+ characters)
-      if (accessToken.length < 40) {
+      // Shopify offline tokens are 38 characters (shpat_ prefix + 32 random chars)
+      // Only warn if significantly shorter, which would indicate truncation or corruption
+      if (accessToken.length < 30) {
         logger.warn(
-          `[API] Access token is unusually short (${accessToken.length} chars). This may indicate an invalid or test token.`
+          `[API] Access token is unusually short (${accessToken.length} chars). This may indicate truncation or corruption.`
         );
         // Don't fail here, but log a warning - let the API call determine if it's actually invalid
       }
@@ -290,23 +291,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
         errorMessage.includes("authentication failed") ||
         errorMessage.includes("Invalid API key or access token");
 
-      // If it's an auth error, provide clear guidance
+      // If it's an auth error, auto-clear the invalid session and trigger re-auth
       if (isAuthError) {
+        const shop = res.locals.shopify?.shop;
         logger.warn(
-          `[API] Authentication failed for shop ${res.locals.shopify?.shop}. The access token may be invalid, expired, or revoked.`
+          `[API] Authentication failed for shop ${shop}. Clearing invalid session.`
         );
-        logger.info(
-          `[API] 💡 Solution: The user needs to reinstall the app or clear their session to get a fresh access token.`
-        );
+
+        // Auto-clear the invalid session (only if shop is defined)
+        if (shop) {
+          try {
+            const { shopify } = await import("./shopify-auth.js");
+            const offlineSessionId = shopify.session.getOfflineId(shop);
+            await shopify.config.sessionStorage.deleteSession(offlineSessionId);
+            logger.info(
+              `[API] Deleted invalid session ${offlineSessionId}. Triggering re-authentication...`
+            );
+          } catch (err) {
+            logger.error(`[API] Failed to delete invalid session:`, err);
+            logger.info(
+              `[API] Session deletion failed, but still triggering re-authentication...`
+            );
+          }
+        } else {
+          logger.error(`[API] Cannot clear session: shop domain is undefined`);
+        }
       }
 
       res.status(isAuthError ? 401 : 500).json({
         error: "Failed to check webhook status",
         details: errorMessage,
-        requiresReinstall: isAuthError,
+        retryAuth: isAuthError, // Client checks for this flag to trigger re-auth
+        requiresReinstall: isAuthError, // Keep for backwards compatibility
         shop: res.locals.shopify?.shop,
         message: isAuthError
-          ? "The access token is invalid or expired. Please reinstall the app to refresh the authentication. You can do this by going to Shopify Admin → Apps → [Your App] → Uninstall, then reinstall."
+          ? "The access token is invalid. Redirecting to re-authenticate..."
           : "An error occurred while checking webhook status.",
       });
     }

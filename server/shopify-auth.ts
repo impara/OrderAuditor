@@ -705,8 +705,8 @@ export async function verifyRequest(
       `[Auth] Session token info - prefix: ${tokenPrefix}, length: ${tokenLength}, isOnline: ${session.isOnline}`
     );
 
-    // Offline tokens typically start with 'shpat_' and are much longer (usually 40+ chars)
-    // User tokens start with 'shpua_' and are shorter
+    // Shopify offline tokens are 38 characters (shpat_ prefix + 32 random chars as of April 2020)
+    // User tokens start with 'shpua_' and should not be used for API calls
     if (tokenPrefix === "shpua_") {
       logger.error(
         `[Auth] Session has USER ACCESS TOKEN (shpua_) instead of OFFLINE TOKEN (shpat_) for shop ${shop}. This is invalid for API calls.`
@@ -722,9 +722,10 @@ export async function verifyRequest(
       return;
     }
 
-    if (tokenLength < 40) {
+    // Warn only if token is significantly shorter than expected (38 chars), which would indicate truncation
+    if (tokenLength < 30) {
       logger.warn(
-        `[Auth] Access token is unusually short (${tokenLength} chars) for shop ${shop}. Expected 40+ characters for offline tokens.`
+        `[Auth] Access token is unusually short (${tokenLength} chars) for shop ${shop}. Expected 38 characters for offline tokens (shpat_ + 32 chars).`
       );
     }
 
