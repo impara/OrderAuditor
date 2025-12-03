@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useAppBridge } from "@shopify/app-bridge-react";
-import { Redirect } from "@shopify/app-bridge/actions";
+// import { useAppBridge } from "@shopify/app-bridge-react"; // Removed v3
+// import { Redirect } from "@shopify/app-bridge/actions"; // Removed v3
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +33,7 @@ function SubscriptionPage() {
     queryKey: ["/api/subscription"],
   });
 
-  const app = useAppBridge();
+  // const app = useAppBridge(); // Removed v3 hook
   const upgradeMutation = useMutation({
     mutationFn: async () => {
       setUpgradeLoading(true);
@@ -44,13 +44,57 @@ function SubscriptionPage() {
     },
     onSuccess: (data) => {
       if (data.confirmationUrl) {
-        // Redirect to Shopify billing confirmation using App Bridge
-        if (app) {
-          const redirect = Redirect.create(app);
-          redirect.dispatch(Redirect.Action.REMOTE, data.confirmationUrl);
+        // Redirect to Shopify billing confirmation
+        // In App Bridge v4, we can use window.open to navigate to the confirmation URL
+        // We target "_top" to ensure we break out of the iframe if needed for the billing flow
+        // although Shopify might handle it within the iframe if it's an admin link, 
+        // billing confirmation usually requires a full page redirect.
+
+        if (window.shopify && window.shopify.open) {
+          // Use App Bridge open if available (safest for embedded apps)
+          try {
+            window.shopify.open(data.confirmationUrl, "_top");
+          } catch (err) {
+            // If App Bridge open fails, fall back to direct navigation
+            console.error(
+              "[Subscription] Failed to use App Bridge open, falling back to window.location",
+              err
+            );
+            try {
+              // Check if window.top is accessible (may be null in cross-origin iframes)
+              if (window.top && window.top !== window) {
+                window.top.location.href = data.confirmationUrl;
+              } else {
+                // Fallback to current window if top is not accessible
+                window.location.href = data.confirmationUrl;
+              }
+            } catch (securityErr) {
+              // SecurityError can occur when accessing window.top.location in cross-origin iframes
+              console.error(
+                "[Subscription] SecurityError accessing window.top.location, using current window",
+                securityErr
+              );
+              window.location.href = data.confirmationUrl;
+            }
+          }
         } else {
-          // Fallback to window.location if App Bridge is not available
-          window.location.href = data.confirmationUrl;
+          // Fallback
+          try {
+            // Check if window.top is accessible (may be null in cross-origin iframes)
+            if (window.top && window.top !== window) {
+              window.top.location.href = data.confirmationUrl;
+            } else {
+              // Fallback to current window if top is not accessible
+              window.location.href = data.confirmationUrl;
+            }
+          } catch (securityErr) {
+            // SecurityError can occur when accessing window.top.location in cross-origin iframes
+            console.error(
+              "[Subscription] SecurityError accessing window.top.location, using current window",
+              securityErr
+            );
+            window.location.href = data.confirmationUrl;
+          }
         }
       } else {
         toast({
@@ -75,11 +119,18 @@ function SubscriptionPage() {
       const res = await apiRequest("POST", "/api/subscription/cancel");
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["subscription"] });
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/subscription"] });
+
+      // Check if subscription entered grace period or was downgraded immediately
+      const subscription = data.subscription;
+      const isGracePeriod = subscription?.status === "cancelled" && subscription?.tier === "paid";
+
       toast({
         title: "Subscription cancelled",
-        description: "You've been downgraded to the free tier.",
+        description: isGracePeriod
+          ? `Your subscription will remain active until ${subscription.currentBillingPeriodEnd ? new Date(subscription.currentBillingPeriodEnd).toLocaleDateString() : "the end of your billing period"}.`
+          : "You've been downgraded to the free tier.",
       });
     },
     onError: (error: Error) => {
@@ -95,7 +146,7 @@ function SubscriptionPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("upgrade") === "success") {
-      queryClient.invalidateQueries({ queryKey: ["subscription"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/subscription"] });
       toast({
         title: "Upgrade successful!",
         description: "Your subscription has been activated.",
@@ -205,7 +256,7 @@ function SubscriptionPage() {
               {periodEnd && (
                 <div className="pt-4 border-t">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Billing Period</span>
+                    <span className="text-muted-foreground">{isPaid ? "Billing Period" : "Usage Cycle"}</span>
                     <span className="font-medium">
                       {daysRemaining !== null ? `${daysRemaining} days remaining` : "Active"}
                     </span>
@@ -216,13 +267,24 @@ function SubscriptionPage() {
                 </div>
               )}
 
-              {usagePercentage >= 90 && !isPaid && (
-                <Alert className="mt-4">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    You're approaching your monthly limit. Upgrade to continue processing orders.
-                  </AlertDescription>
-                </Alert>
+              {!isPaid && (
+                <>
+                  {usagePercentage >= 100 ? (
+                    <Alert className="mt-4 border-destructive/50 bg-destructive/10 text-destructive dark:border-destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        You have reached your monthly limit. Upgrade to continue processing orders.
+                      </AlertDescription>
+                    </Alert>
+                  ) : usagePercentage >= 90 ? (
+                    <Alert className="mt-4">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        You're approaching your monthly limit. Upgrade to continue processing orders.
+                      </AlertDescription>
+                    </Alert>
+                  ) : null}
+                </>
               )}
             </CardContent>
           </Card>
@@ -288,14 +350,20 @@ function SubscriptionPage() {
                   </ul>
                   <div className="mt-4">
                     {isPaid ? (
-                      <Button
-                        variant="outline"
-                        onClick={() => cancelMutation.mutate()}
-                        disabled={cancelMutation.isPending}
-                        className="w-full"
-                      >
-                        {cancelMutation.isPending ? "Cancelling..." : "Cancel Subscription"}
-                      </Button>
+                      subscription.status === "cancelled" ? (
+                        <div className="w-full text-center p-2 border border-yellow-500/50 bg-yellow-500/10 rounded text-sm text-yellow-600 dark:text-yellow-400">
+                          Cancels on {periodEnd?.toLocaleDateString()}
+                        </div>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          onClick={() => cancelMutation.mutate()}
+                          disabled={cancelMutation.isPending}
+                          className="w-full"
+                        >
+                          {cancelMutation.isPending ? "Cancelling..." : "Cancel Subscription"}
+                        </Button>
+                      )
                     ) : (
                       <Button
                         onClick={() => upgradeMutation.mutate()}

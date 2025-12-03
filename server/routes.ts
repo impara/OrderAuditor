@@ -482,9 +482,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           )
         ) {
           logger.info(
-            `[Webhook] Subscription ${subscription.status} for ${shopDomain}. Downgrading to free tier.`
+            `[Webhook] Subscription ${subscription.status} for ${shopDomain}. Processing cancellation.`
           );
-          await subscriptionService.updateTier(shopDomain, "free", 50);
+          await subscriptionService.cancelSubscription(shopDomain);
         } else if (subscription.status === "ACTIVE") {
           logger.info(
             `[Webhook] Subscription ACTIVE for ${shopDomain}. Ensuring paid tier.`
@@ -1613,13 +1613,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (subscription.shopifyChargeId) {
         const chargeId = parseInt(subscription.shopifyChargeId);
-        await shopifyBillingService.cancelCharge(shop, accessToken, chargeId);
+        const chargeCancelled = await shopifyBillingService.cancelCharge(
+          shop,
+          accessToken,
+          chargeId
+        );
+
+        // Update local subscription state immediately after cancelling charge
+        // This ensures grace period logic executes and clients see updated state
+        // without waiting for the webhook (which may be delayed or fail)
+        if (chargeCancelled) {
+          await subscriptionService.cancelSubscription(shop);
+        } else {
+          // If charge cancellation failed, throw error to prevent inconsistent state
+          throw new Error("Failed to cancel charge in Shopify");
+        }
       } else {
         // Just downgrade if no charge ID
         await subscriptionService.cancelSubscription(shop);
       }
 
-      res.json({ success: true });
+      // Return the updated subscription so client can determine if grace period or immediate downgrade
+      const updatedSubscription = await subscriptionService.getSubscription(
+        shop
+      );
+      res.json({ success: true, subscription: updatedSubscription });
     } catch (error) {
       logger.error("Error cancelling subscription:", error);
       res.status(500).json({ error: "Failed to cancel subscription" });

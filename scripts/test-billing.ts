@@ -212,6 +212,13 @@ async function testSubscriptionDowngrade() {
     await subscriptionService.recordOrder(TEST_SHOP);
     await subscriptionService.recordOrder(TEST_SHOP);
 
+    // Set a billing period end date in the future (e.g., 30 days from now)
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 30);
+    await storage.updateSubscription(TEST_SHOP, {
+      currentBillingPeriodEnd: futureDate,
+    });
+
     const beforeDowngrade = await storage.getSubscription(TEST_SHOP);
     logTest(
       "Before downgrade: Paid tier",
@@ -221,20 +228,39 @@ async function testSubscriptionDowngrade() {
       }`
     );
 
-    // Test 1: Downgrade to free tier
-    const downgraded = await subscriptionService.cancelSubscription(TEST_SHOP);
+    // Test 1: Cancel subscription (should enter grace period)
+    const cancelled = await subscriptionService.cancelSubscription(TEST_SHOP);
     logTest(
-      "Downgrade to free tier",
-      downgraded.tier === "free" && downgraded.orderLimit === 50,
-      `Tier: ${downgraded.tier}, Limit: ${downgraded.orderLimit}, Count: ${downgraded.monthlyOrderCount}`
+      "Cancel subscription (Grace Period)",
+      cancelled.tier === "paid" &&
+        cancelled.status === "cancelled" &&
+        cancelled.orderLimit === -1,
+      `Tier: ${cancelled.tier}, Status: ${cancelled.status}, Limit: ${cancelled.orderLimit}`
     );
 
-    // Test 2: Quota check after downgrade
-    const quotaCheck = await subscriptionService.checkQuota(TEST_SHOP);
+    // Test 2: Quota check during grace period (should still allow unlimited)
+    const quotaCheckGrace = await subscriptionService.checkQuota(TEST_SHOP);
     logTest(
-      "Quota check after downgrade",
-      quotaCheck.allowed === true && quotaCheck.subscription.orderLimit === 50,
-      `Allowed: ${quotaCheck.allowed}, Limit: ${quotaCheck.subscription.orderLimit}, Count: ${quotaCheck.subscription.monthlyOrderCount}`
+      "Quota check during grace period",
+      quotaCheckGrace.allowed === true &&
+        quotaCheckGrace.subscription.orderLimit === -1,
+      `Allowed: ${quotaCheckGrace.allowed}, Limit: Unlimited`
+    );
+
+    // Test 3: Simulate billing period expiry
+    const pastDate = new Date();
+    pastDate.setDate(pastDate.getDate() - 1); // Yesterday
+    await storage.updateSubscription(TEST_SHOP, {
+      currentBillingPeriodEnd: pastDate,
+    });
+
+    // Trigger quota check to process the expiry
+    const quotaCheckExpired = await subscriptionService.checkQuota(TEST_SHOP);
+    logTest(
+      "Downgrade after grace period expiry",
+      quotaCheckExpired.subscription.tier === "free" &&
+        quotaCheckExpired.subscription.orderLimit === 50,
+      `Tier: ${quotaCheckExpired.subscription.tier}, Limit: ${quotaCheckExpired.subscription.orderLimit}`
     );
 
     return true;
