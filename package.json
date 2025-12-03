@@ -11,6 +11,7 @@
     "db:push": "drizzle-kit push",
     "test:order": "node scripts/create-test-order.js",
     "test:duplicate": "node scripts/create-test-order.js --duplicate",
+    "test:duplicate-logic": "tsx scripts/verify-duplicate-logic.ts",
     "test:validation": "bash scripts/test-validation-plan.sh",
     "test:billing": "tsx scripts/test-billing.ts"
   },

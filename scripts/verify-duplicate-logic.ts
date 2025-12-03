@@ -1,13 +1,18 @@
-import { duplicateDetectionService } from "../server/services/duplicate-detection.service";
-import { logger } from "../server/utils/logger";
+// Set dummy DATABASE_URL before any imports to prevent database connection requirement
+if (!process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = "postgresql://mock:mock@localhost:5432/mock";
+}
 
-// Mock logger to avoid cluttering output
-logger.debug = () => {};
-logger.info = (msg) => console.log(`[INFO] ${msg}`);
-logger.warn = (msg) => console.log(`[WARN] ${msg}`);
-logger.error = (msg) => console.error(`[ERROR] ${msg}`);
-
+// Use dynamic imports to ensure env var is set before modules load
 async function runVerification() {
+  const { duplicateDetectionService } = await import("../server/services/duplicate-detection.service");
+  const { logger } = await import("../server/utils/logger");
+
+  // Mock logger to avoid cluttering output
+  logger.debug = () => {};
+  logger.info = (msg) => console.log(`[INFO] ${msg}`);
+  logger.warn = (msg) => console.log(`[WARN] ${msg}`);
+  logger.error = (msg) => console.error(`[ERROR] ${msg}`);
   console.log("Starting verification of duplicate detection logic...");
 
   // Mock data
