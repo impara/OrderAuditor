@@ -71,74 +71,33 @@ async function throwIfResNotOk(res: Response) {
           isRedirectingToAuth = true;
           console.log(`[Auth] Redirecting to auth for shop: ${data.shop}`);
 
-          // Use App Bridge v4 to redirect
-          // We can use window.open or just let the backend handle the redirect flow if we navigate top level
-          // But since we are in an iframe, we need to break out.
-          // App Bridge v4 handles standard links automatically if they target the admin.
-          // For OAuth, we usually want to redirect the main window.
-
           // Construct the auth URL
           const authUrl = `${window.location.origin}/api/auth?shop=${data.shop}`;
 
-          // In v4, we can use open to navigate
-          if (window.shopify && window.shopify.open) {
-            // Use remote target to break out of iframe if needed, or just navigate
-            // For OAuth, we typically want to redirect the top frame.
-            // window.shopify.open(authUrl, '_top') might be the way, currently 'open' is generic.
-            // But actually, for OAuth, we often just set window.location.href and let App Bridge intercept if it's a same-origin navigation,
-            // or use the 'open' action.
-
-            // Let's try standard window.top.location if allowed, or use the API.
-            // The safest bet for v4 is using the `open` API if available, or just logging it.
-            // However, for a full OAuth redirect, we often need to break out.
-
-            // Let's try to use the 'open' command from the global object if it exists
-            try {
-              window.shopify.open(authUrl, "_top");
-              return new Promise(() => {});
-            } catch (err) {
-              // If App Bridge open fails, fall back to direct navigation
-              console.error(
-                "[Auth] Failed to use App Bridge open, falling back to window.location",
-                err
-              );
-              try {
-                // Check if window.top is accessible (may be null in cross-origin iframes)
-                if (window.top && window.top !== window) {
-                  window.top.location.href = authUrl;
-                } else {
-                  // Fallback to current window if top is not accessible
-                  window.location.href = authUrl;
-                }
-              } catch (securityErr) {
-                // SecurityError can occur when accessing window.top.location in cross-origin iframes
-                console.error(
-                  "[Auth] SecurityError accessing window.top.location, using current window",
-                  securityErr
-                );
-                window.location.href = authUrl;
-              }
-              return new Promise(() => {});
-            }
-          } else {
-            // Fallback
-            try {
-              // Check if window.top is accessible (may be null in cross-origin iframes)
-              if (window.top && window.top !== window) {
-                window.top.location.href = authUrl;
-              } else {
-                // Fallback to current window if top is not accessible
-                window.location.href = authUrl;
-              }
-            } catch (securityErr) {
-              // SecurityError can occur when accessing window.top.location in cross-origin iframes
-              console.error(
-                "[Auth] SecurityError accessing window.top.location, using current window",
-                securityErr
-              );
+          // For OAuth, we MUST break out of the iframe completely
+          // window.shopify.open() doesn't work reliably for OAuth redirects
+          // Use direct window.parent or window.top navigation
+          try {
+            // Try to navigate the parent window (breaks out of iframe)
+            if (window.parent && window.parent !== window) {
+              console.log("[Auth] Using window.parent for OAuth redirect");
+              window.parent.location.href = authUrl;
+            } else if (window.top && window.top !== window) {
+              console.log("[Auth] Using window.top for OAuth redirect");
+              window.top.location.href = authUrl;
+            } else {
+              console.log("[Auth] Using current window for OAuth redirect");
               window.location.href = authUrl;
             }
-            return new Promise(() => {});
+            return new Promise(() => {}); // Pause execution while redirecting
+          } catch (securityErr) {
+            // SecurityError can occur in cross-origin iframes
+            console.error(
+              "[Auth] SecurityError accessing parent/top window, using current window",
+              securityErr
+            );
+            window.location.href = authUrl;
+            return new Promise(() => {}); // Pause execution while redirecting
           }
         }
         errorText = data.message || data.error || JSON.stringify(data);
