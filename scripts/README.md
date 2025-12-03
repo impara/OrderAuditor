@@ -143,12 +143,11 @@ tsx scripts/test-billing.ts my-test-shop.myshopify.com
 2. ✅ Quota limits (within limit, at limit, over limit)
 3. ✅ Subscription upgrade (free → paid, unlimited orders)
 4. ✅ Subscription downgrade (paid → free, back to 50 limit)
-5. ✅ Billing service (test mode configuration, charge listing)
+5. ✅ Billing service (charge listing)
 6. ✅ Limit hit scenario (end-to-end: 49 → 50 → upgrade → unlimited)
 
 **Requirements:**
 
-- `BILLING_TEST_MODE=true` in `.env` (for billing service tests)
 - Database connection configured
 - Test shop domain (defaults to `test-shop.myshopify.com`)
 
@@ -160,7 +159,6 @@ tsx scripts/test-billing.ts my-test-shop.myshopify.com
 ╚════════════════════════════════════════════════════════════╝
 
 Test Shop: test-shop.myshopify.com
-Test Mode: true
 
 ============================================================
 1. Free Tier Initialization

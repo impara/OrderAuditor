@@ -8,7 +8,7 @@
  * 2. Quota limits (within limit, at limit, over limit)
  * 3. Subscription upgrade/downgrade
  * 4. Billing webhook scenarios
- * 5. Charge creation (test mode)
+ * 5. Charge creation
  *
  * Usage: tsx scripts/test-billing.ts [shop-domain]
  */
@@ -245,21 +245,9 @@ async function testSubscriptionDowngrade() {
 }
 
 async function testBillingService() {
-  logSection("5. Billing Service Testing (Test Mode)");
+  logSection("5. Billing Service Testing");
 
   try {
-    // Check test mode configuration
-    const testMode =
-      process.env.BILLING_TEST_MODE?.toLowerCase() === "true" ||
-      process.env.BILLING_TEST_MODE === "1";
-    logTest(
-      "Test mode configuration",
-      testMode === true,
-      `BILLING_TEST_MODE=${
-        process.env.BILLING_TEST_MODE || "not set"
-      } (should be "true" for testing)`
-    );
-
     // Test 1: List charges (should work even if empty)
     const charges = await shopifyBillingService.listCharges(
       TEST_SHOP,
@@ -366,12 +354,7 @@ async function runAllTests() {
   console.log(
     `${colors.blue}╚════════════════════════════════════════════════════════════╝${colors.reset}`
   );
-  console.log(`\nTest Shop: ${colors.cyan}${TEST_SHOP}${colors.reset}`);
-  console.log(
-    `Test Mode: ${colors.yellow}${process.env.BILLING_TEST_MODE || "not set"}${
-      colors.reset
-    }\n`
-  );
+  console.log(`\nTest Shop: ${colors.cyan}${TEST_SHOP}${colors.reset}\n`);
 
   const results: { name: string; passed: boolean }[] = [];
 

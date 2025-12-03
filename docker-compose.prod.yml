@@ -42,7 +42,6 @@ services:
       SMTP_USER: ${SMTP_USER}
       SMTP_PASS: ${SMTP_PASS}
       SMTP_FROM: ${SMTP_FROM:-${SMTP_USER}}
-      BILLING_TEST_MODE: ${BILLING_TEST_MODE:-false}
       TZ: ${TZ:-UTC}
     volumes:
       - /etc/localtime:/etc/localtime:ro

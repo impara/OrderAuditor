@@ -29,19 +29,6 @@ export class ShopifyBillingService {
   }
 
   /**
-   * Get test mode setting from environment variable
-   * Defaults to false (production mode) unless explicitly set to "true"
-   *
-   * IMPORTANT: Test charges (test: true) can ONLY be created in Shopify development stores.
-   * Attempting to create a test charge in a production store will result in a 403 Forbidden error.
-   * Set BILLING_TEST_MODE=true only when testing with development stores.
-   */
-  private isTestMode(): boolean {
-    const testMode = process.env.BILLING_TEST_MODE?.toLowerCase();
-    return testMode === "true" || testMode === "1";
-  }
-
-  /**
    * Create a recurring charge for $7.99/month
    */
   async createRecurringCharge(
@@ -62,7 +49,6 @@ export class ShopifyBillingService {
     }
 
     try {
-      const testMode = this.isTestMode();
       const url = `${this.getBaseApiUrl(
         shopDomain
       )}/recurring_application_charges.json`;
@@ -72,14 +58,11 @@ export class ShopifyBillingService {
           name: "Duplicate Guard - Unlimited Plan",
           price: 7.99,
           return_url: returnUrl,
-          test: testMode, // Configurable test mode via BILLING_TEST_MODE env var
         },
       };
 
       logger.info(
-        `[ShopifyBilling] Creating recurring charge for ${shopDomain} - Test mode: ${testMode}, BILLING_TEST_MODE: ${
-          process.env.BILLING_TEST_MODE || "not set"
-        }`
+        `[ShopifyBilling] Creating recurring charge for ${shopDomain}`
       );
 
       const response = await fetch(url, {
@@ -111,7 +94,6 @@ export class ShopifyBillingService {
 
         const errorDetails = {
           shopDomain,
-          testMode,
           status: response.status,
           statusText: response.statusText,
           errorResponse: errorText,
@@ -136,7 +118,9 @@ export class ShopifyBillingService {
             SOLUTIONS:
             - For testing: Create a non-test development store (can be transferred/upgraded) OR install on a real store outside partner account
             - For production: Ensure app is installed via OAuth on a real store (not a test store)
-            - Reinstall app through OAuth: ${process.env.APP_URL || "your-app-url"}/api/auth?shop=${shopDomain}`
+            - Reinstall app through OAuth: ${
+              process.env.APP_URL || "your-app-url"
+            }/api/auth?shop=${shopDomain}`
           );
         }
 
