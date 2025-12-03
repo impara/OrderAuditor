@@ -7,6 +7,9 @@ declare global {
   }
 }
 
+// Flag to prevent multiple simultaneous OAuth redirects
+let isRedirectingToAuth = false;
+
 // Helper to get fresh session token using App Bridge v4
 async function getAuthToken(): Promise<string> {
   // DEVELOPMENT BYPASS
@@ -59,6 +62,13 @@ async function throwIfResNotOk(res: Response) {
       try {
         const data = await clonedRes.json();
         if (data.retryAuth && data.shop) {
+          // Prevent multiple simultaneous OAuth redirects
+          if (isRedirectingToAuth) {
+            console.log(`[Auth] OAuth redirect already in progress, skipping...`);
+            return new Promise(() => {}); // Pause execution indefinitely
+          }
+          
+          isRedirectingToAuth = true;
           console.log(`[Auth] Redirecting to auth for shop: ${data.shop}`);
 
           // Use App Bridge v4 to redirect
