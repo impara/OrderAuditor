@@ -139,12 +139,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ... (webhooks are registered below)
 
   // Protected API Routes
-  // Apply middleware to all /api routes EXCEPT auth and webhooks
+  // Apply middleware to all /api routes EXCEPT auth, webhooks, internal, and health
   app.use("/api", (req, res, next) => {
     const path = req.path;
     if (
       path.startsWith("/auth") ||
       path.startsWith("/webhooks/shopify") ||
+      path.startsWith("/internal") ||
       path === "/health"
     ) {
       next();
