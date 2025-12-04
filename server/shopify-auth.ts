@@ -672,11 +672,15 @@ export async function verifyRequest(
 
     if (!session || !session.accessToken) {
       logger.error(`[Auth] No offline session found for shop ${shop}`);
-      // Return JSON with shop so frontend can redirect
+      
+      // No offline session = app not installed or was uninstalled
+      // This requires FULL OAuth re-authentication (not just token refresh)
+      // We CANNOT auto-redirect from iframe - need user gesture
       res.status(401).json({
-        message: "Unauthorized: No valid session found",
+        message: "Unauthorized: No valid session found. App needs to be reinstalled.",
         shop: shop,
-        retryAuth: true,
+        requiresInstall: true, // Frontend shows clickable "Install App" button
+        installUrl: `/api/auth?shop=${shop}`, // URL for the install button
       });
       return;
     }

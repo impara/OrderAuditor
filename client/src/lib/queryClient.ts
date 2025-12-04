@@ -55,12 +55,36 @@ async function throwIfResNotOk(res: Response) {
     const clonedRes = res.clone();
     let errorText = res.statusText;
 
-    if (res.status === 401) {
+      if (res.status === 401) {
       console.warn(
         "[Auth] 401 Unauthorized received. Attempting to handle re-auth..."
       );
       try {
         const data = await clonedRes.json();
+        
+        // Case 1: App not installed or offline session missing
+        // Requires FULL OAuth with user gesture (cannot auto-redirect from iframe)
+        if (data.requiresInstall && data.installUrl) {
+          console.error("[Auth] App not installed. User must click to reinstall.");
+          
+          // Show alert to get user gesture, then redirect
+          // Alert interaction counts as user gesture for navigation
+          const userConfirmed = confirm(
+            "Your session has expired or the app was uninstalled. Click OK to reinstall the app."
+          );
+          
+          if (userConfirmed) {
+            // User clicked OK - this provides the gesture needed for navigation
+            window.top!.location.href = data.installUrl;
+            return new Promise(() => {}); // Pause execution
+          } else {
+            // User clicked Cancel
+            throw new Error("App installation required. Please refresh and try again.");
+          }
+        }
+        
+        // Case 2: Session token expired but offline session exists
+        // App Bridge can handle this automatically with the header
         if (data.retryAuth && data.shop) {
           // Prevent multiple simultaneous OAuth redirects
           if (isRedirectingToAuth) {
@@ -91,6 +115,7 @@ async function throwIfResNotOk(res: Response) {
           
           return new Promise(() => {}); // Pause execution while redirecting
         }
+        
         errorText = data.message || data.error || JSON.stringify(data);
       } catch (e) {
         console.error("[Auth] Failed to parse 401 response", e);
