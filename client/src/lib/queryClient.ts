@@ -71,34 +71,25 @@ async function throwIfResNotOk(res: Response) {
           isRedirectingToAuth = true;
           console.log(`[Auth] Redirecting to auth for shop: ${data.shop}`);
 
-          // Construct the auth URL
+          // Construct the auth URL with exitiframe parameter
+          // The exitiframe=1 parameter tells App Bridge to break out of the iframe
+          // This is the Shopify-recommended way to handle OAuth redirects in embedded apps
           const authUrl = `${window.location.origin}/api/auth?shop=${data.shop}`;
+          const exitiframeUrl = `/exitiframe?exitIframe=${encodeURIComponent(authUrl)}`;
 
-          // For OAuth, we MUST break out of the iframe completely
-          // window.shopify.open() doesn't work reliably for OAuth redirects
-          // Use direct window.parent or window.top navigation
-          try {
-            // Try to navigate the parent window (breaks out of iframe)
-            if (window.parent && window.parent !== window) {
-              console.log("[Auth] Using window.parent for OAuth redirect");
-              window.parent.location.href = authUrl;
-            } else if (window.top && window.top !== window) {
-              console.log("[Auth] Using window.top for OAuth redirect");
-              window.top.location.href = authUrl;
-            } else {
-              console.log("[Auth] Using current window for OAuth redirect");
-              window.location.href = authUrl;
-            }
-            return new Promise(() => {}); // Pause execution while redirecting
-          } catch (securityErr) {
-            // SecurityError can occur in cross-origin iframes
-            console.error(
-              "[Auth] SecurityError accessing parent/top window, using current window",
-              securityErr
-            );
+          // For embedded apps (App Bridge v4), use exitiframe redirect pattern
+          // This automatically breaks out of the iframe and redirects to OAuth
+          // The App Bridge script in index.html handles this automatically
+          if (window.shopify && window.shopify.environment?.embedded) {
+            console.log("[Auth] Using exitiframe pattern for OAuth redirect in embedded app");
+            window.location.href = exitiframeUrl;
+          } else {
+            // Not embedded - direct navigation to auth URL
+            console.log("[Auth] Using direct navigation for non-embedded context");
             window.location.href = authUrl;
-            return new Promise(() => {}); // Pause execution while redirecting
           }
+          
+          return new Promise(() => {}); // Pause execution while redirecting
         }
         errorText = data.message || data.error || JSON.stringify(data);
       } catch (e) {

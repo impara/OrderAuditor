@@ -64,6 +64,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/auth", auth);
   app.get("/api/auth/callback", authCallback);
 
+  // Exitiframe route for OAuth redirects in embedded apps
+  // This route is used to break out of the Shopify admin iframe when re-authentication is needed
+  app.get("/exitiframe", (req: Request, res: Response) => {
+    const { exitIframe } = req.query;
+    
+    if (!exitIframe || typeof exitIframe !== 'string') {
+      return res.status(400).send("Missing exitIframe parameter");
+    }
+
+    // Validate exitIframe URL to prevent open redirects
+    const appUrl = process.env.APP_URL || "http://localhost:5000";
+    try {
+      const url = new URL(exitIframe);
+      const appUrlObj = new URL(appUrl);
+      
+      // Only allow URLs from the same origin
+      if (url.protocol !== appUrlObj.protocol || url.hostname !== appUrlObj.hostname) {
+        logger.warn(`[Security] Invalid exitiframe URL rejected: ${exitIframe}`);
+        return res.status(400).send("Invalid redirect URL");
+      }
+    } catch (error) {
+      logger.warn(`[Security] Invalid exitiframe URL format: ${exitIframe}`);
+      return res.status(400).send("Invalid URL format");
+    }
+
+    // Return HTML that uses App Bridge to break out of iframe and redirect
+    const apiKey = process.env.SHOPIFY_API_KEY || "";
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Redirecting...</title>
+          <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
+        </head>
+        <body>
+          <p>Redirecting...</p>
+          <script>
+            // Break out of iframe and redirect to OAuth URL
+            if (window.top && window.top !== window) {
+              window.top.location.href = ${JSON.stringify(exitIframe)};
+            } else {
+              window.location.href = ${JSON.stringify(exitIframe)};
+            }
+          </script>
+        </body>
+      </html>
+    `);
+  });
+
   // Health Check
   app.get("/api/health", (_req, res) => {
     res.status(200).json({ status: "ok" });
