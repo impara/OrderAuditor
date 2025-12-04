@@ -33,49 +33,100 @@ function getLogLevel(): LogLevel {
 
 const currentLogLevel = getLogLevel();
 const currentLevelValue = LOG_LEVELS[currentLogLevel];
+const isProduction = process.env.NODE_ENV === 'production';
 
 function formatTime(): string {
-  return new Date().toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
+  return new Date().toISOString();
 }
 
 function shouldLog(level: LogLevel): boolean {
   return LOG_LEVELS[level] <= currentLevelValue;
 }
 
+function logJson(level: LogLevel, message: string, ...args: any[]) {
+  const logEntry = {
+    timestamp: formatTime(),
+    level,
+    message,
+    context: args.length > 0 ? args : undefined,
+  };
+  console.log(JSON.stringify(logEntry));
+}
+
+function logText(level: LogLevel, message: string, ...args: any[]) {
+  const time = new Date().toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
+  
+  const prefix = `[${time}] [${level.toUpperCase()}]`;
+  
+  if (level === 'error') {
+    console.error(prefix, message, ...args);
+  } else if (level === 'warn') {
+    console.warn(prefix, message, ...args);
+  } else {
+    console.log(prefix, message, ...args);
+  }
+}
+
 export const logger = {
-  error: (...args: any[]) => {
+  error: (message: string, ...args: any[]) => {
     if (shouldLog('error')) {
-      console.error(`[${formatTime()}] [ERROR]`, ...args);
+      if (isProduction) {
+        logJson('error', message, ...args);
+      } else {
+        logText('error', message, ...args);
+      }
     }
   },
 
-  warn: (...args: any[]) => {
+  warn: (message: string, ...args: any[]) => {
     if (shouldLog('warn')) {
-      console.warn(`[${formatTime()}] [WARN]`, ...args);
+      if (isProduction) {
+        logJson('warn', message, ...args);
+      } else {
+        logText('warn', message, ...args);
+      }
     }
   },
 
-  info: (...args: any[]) => {
+  info: (message: string, ...args: any[]) => {
     if (shouldLog('info')) {
-      console.log(`[${formatTime()}] [INFO]`, ...args);
+      if (isProduction) {
+        logJson('info', message, ...args);
+      } else {
+        logText('info', message, ...args);
+      }
     }
   },
 
-  debug: (...args: any[]) => {
+  debug: (message: string, ...args: any[]) => {
     if (shouldLog('debug')) {
-      console.log(`[${formatTime()}] [DEBUG]`, ...args);
+      if (isProduction) {
+        logJson('debug', message, ...args);
+      } else {
+        logText('debug', message, ...args);
+      }
     }
   },
 
   // Convenience method for express-style logging (always info level)
   log: (message: string, source = "express") => {
     if (shouldLog('info')) {
-      console.log(`${formatTime()} [${source}] ${message}`);
+      if (isProduction) {
+        logJson('info', `[${source}] ${message}`);
+      } else {
+        const time = new Date().toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: true,
+        });
+        console.log(`${time} [${source}] ${message}`);
+      }
     }
   },
 };

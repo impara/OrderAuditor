@@ -125,7 +125,7 @@ docker-compose -f docker-compose.prod.yml ps
 
 ```bash
 # Run database migrations
-docker-compose -f docker-compose.prod.yml exec app npm run db:push
+docker-compose -f docker-compose.prod.yml exec app npm run db:migrate
 ```
 
 ### 3. Register Shopify Webhook
@@ -163,7 +163,7 @@ git pull
 docker-compose -f docker-compose.prod.yml up -d --build
 
 # Run database migrations if needed
-docker-compose -f docker-compose.prod.yml exec app npm run db:push
+docker-compose -f docker-compose.prod.yml exec app npm run db:migrate
 ```
 
 ### Backup Database
@@ -277,7 +277,7 @@ docker-compose --version
 - [ ] Repository cloned
 - [ ] `.env` file configured with production values
 - [ ] Strong passwords set for database
-- [ ] Database schema initialized (`npm run db:push`)
+- [ ] Database schema initialized (`npm run db:migrate`)
 - [ ] Application accessible via public URL
 - [ ] Shopify webhook registered
 - [ ] Health checks passing

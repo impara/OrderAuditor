@@ -6,6 +6,8 @@ import express, {
   Response,
   NextFunction,
 } from "express";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 
 import { registerRoutes } from "./routes";
 import { logger } from "./utils/logger";
@@ -21,6 +23,29 @@ declare module 'http' {
     rawBody: Buffer;
   }
 }
+
+// Security middleware
+app.use(helmet({
+  contentSecurityPolicy: false, // Disable CSP for now as it might conflict with Shopify embedded app requirements
+}));
+
+// Rate limiting
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 1000, // Limit each IP to 1000 requests per windowMs
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  message: "Too many requests from this IP, please try again later.",
+  skip: (req) => {
+    // Skip rate limiting for webhooks as they come from Shopify servers
+    // Also skip in development environment
+    return req.path.startsWith('/api/webhooks') || process.env.NODE_ENV === 'development';
+  }
+});
+
+// Apply rate limiting to API routes only
+app.use('/api', limiter);
 
 // Use express.raw for Shopify webhooks to preserve byte-for-byte body for HMAC verification
 app.use('/api/webhooks/shopify', express.raw({ type: 'application/json' }));

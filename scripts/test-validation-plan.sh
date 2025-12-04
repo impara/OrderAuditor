@@ -155,7 +155,7 @@ if docker-compose exec -T postgres psql -U duplicate-guard -d duplicate-guard -c
     echo -e "${GREEN}✓ PASSED${NC}"
     ((PASSED++))
 else
-    echo -e "${RED}✗ FAILED - Run 'npm run db:push' first${NC}"
+    echo -e "${RED}✗ FAILED - Run 'npm run db:migrate' first${NC}"
     ((FAILED++))
 fi
 

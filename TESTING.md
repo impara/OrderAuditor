@@ -130,7 +130,7 @@ Or manually:
 
 ## Prerequisites
 
-1. Database schema is pushed: `npm run db:push`
+1. Database schema is pushed: `npm run db:migrate`
 2. Database is running: `docker-compose ps` shows postgres as healthy
 3. Environment variables are configured in `.env`
 4. Development server can be started: `npm run dev`
