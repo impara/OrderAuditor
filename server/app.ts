@@ -27,6 +27,7 @@ declare module 'http' {
 // Security middleware
 app.use(helmet({
   contentSecurityPolicy: false, // Disable CSP for now as it might conflict with Shopify embedded app requirements
+  frameguard: false, // Disable X-Frame-Options to allow embedding in Shopify admin
 }));
 
 // Rate limiting
