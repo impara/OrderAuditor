@@ -12,7 +12,7 @@ services:
     volumes:
       - postgres_data_prod:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -52,7 +52,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      test: [ "CMD", "node", "-e", "require('http').get('http://localhost:5000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -60,11 +60,30 @@ services:
     networks:
       - duplicate-guard-network
 
+  # Ofelia - Cron-like job scheduler for Docker
+  # Runs periodic maintenance tasks (webhook cleanup, etc.)
+  ofelia:
+    image: mcuadros/ofelia:latest
+    container_name: duplicate-guard-scheduler
+    restart: unless-stopped
+    depends_on:
+      - app
+    command: daemon --docker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels:
+      # Run cleanup job daily at 3 AM
+      ofelia.job-exec.cleanup-webhooks.schedule: "0 0 3 * * *"
+      ofelia.job-exec.cleanup-webhooks.container: "duplicate-guard-app-prod"
+      ofelia.job-exec.cleanup-webhooks.command: >
+        node -e "fetch('http://localhost:5000/api/internal/cleanup', {method: 'POST'}) .then(r => r.json()) .then(d => console.log('Cleanup result:', d)) .catch(e => console.error('Cleanup failed:', e))"
+    networks:
+      - duplicate-guard-network
+
 volumes:
   postgres_data_prod:
+
 
 networks:
   duplicate-guard-network:
     driver: bridge
-
-

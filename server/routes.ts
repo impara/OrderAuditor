@@ -114,9 +114,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     `);
   });
 
-  // Health Check
-  app.get("/api/health", (_req, res) => {
-    res.status(200).json({ status: "ok" });
+  // Health Check - verifies database connectivity
+  app.get("/api/health", async (_req, res) => {
+    try {
+      // Verify database connectivity with a simple query
+      await storage.getSettings("health-check-probe");
+      res.status(200).json({
+        status: "healthy",
+        timestamp: new Date().toISOString(),
+        database: "connected",
+      });
+    } catch (error) {
+      logger.error("[Health] Database health check failed:", error);
+      res.status(503).json({
+        status: "unhealthy",
+        timestamp: new Date().toISOString(),
+        database: "disconnected",
+        error: "Database connection failed",
+      });
+    }
   });
 
   // Webhook routes (bypass auth middleware)
@@ -451,6 +467,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: false,
         error: error instanceof Error ? error.message : String(error),
         message: "Failed to register webhooks",
+      });
+    }
+  });
+
+  // Internal cleanup endpoint (for scheduled jobs like Ofelia)
+  app.post("/api/internal/cleanup", async (_req: Request, res: Response) => {
+    try {
+      const { cleanupService } = await import("./services/cleanup.service.js");
+      const deletedCount = await cleanupService.cleanupOldWebhookDeliveries();
+      
+      res.json({
+        success: true,
+        deletedCount,
+        message: `Cleaned up ${deletedCount} old webhook delivery records`,
+      });
+    } catch (error) {
+      logger.error("[Cleanup] Error running cleanup:", error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   });

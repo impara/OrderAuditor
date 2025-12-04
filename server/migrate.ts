@@ -5,12 +5,27 @@ import * as schema from "@shared/schema";
 import { logger } from "./utils/logger";
 
 async function runMigrations() {
-  if (!process.env.DATABASE_URL) {
-    throw new Error("DATABASE_URL must be set");
+  // Support both DATABASE_URL and POSTGRES_* environment variables
+  // Priority: DATABASE_URL > construct from POSTGRES_*
+  let databaseUrl = process.env.DATABASE_URL;
+
+  if (!databaseUrl) {
+    const { POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB } = process.env;
+    const host = process.env.POSTGRES_HOST || 'postgres';
+    const port = process.env.POSTGRES_PORT || '5432';
+    
+    if (POSTGRES_USER && POSTGRES_PASSWORD && POSTGRES_DB) {
+      databaseUrl = `postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${host}:${port}/${POSTGRES_DB}`;
+      logger.info('[Migration] Constructed DATABASE_URL from POSTGRES_* environment variables');
+    } else {
+      throw new Error(
+        "Database connection not configured. Set DATABASE_URL or POSTGRES_USER/POSTGRES_PASSWORD/POSTGRES_DB environment variables.",
+      );
+    }
   }
 
   const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: databaseUrl,
   });
 
   const db = drizzle(pool, { schema });
