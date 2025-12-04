@@ -10,6 +10,9 @@ declare global {
 // Flag to prevent multiple simultaneous OAuth redirects
 let isRedirectingToAuth = false;
 
+// Flag to prevent multiple simultaneous reinstall confirmation dialogs
+let isShowingReinstallPrompt = false;
+
 // Helper to get fresh session token using App Bridge v4
 async function getAuthToken(): Promise<string> {
   // DEVELOPMENT BYPASS
@@ -67,6 +70,14 @@ async function throwIfResNotOk(res: Response) {
         if (data.requiresInstall && data.installUrl) {
           console.error("[Auth] App not installed. User must click to reinstall.");
           
+          // Prevent multiple simultaneous reinstall prompts
+          if (isShowingReinstallPrompt) {
+            console.log("[Auth] Reinstall prompt already showing, skipping...");
+            return new Promise(() => {}); // Pause execution indefinitely
+          }
+          
+          isShowingReinstallPrompt = true;
+          
           // Show alert to get user gesture, then redirect
           // Alert interaction counts as user gesture for navigation
           const userConfirmed = confirm(
@@ -78,7 +89,8 @@ async function throwIfResNotOk(res: Response) {
             window.top!.location.href = data.installUrl;
             return new Promise(() => {}); // Pause execution
           } else {
-            // User clicked Cancel
+            // User clicked Cancel - reset flag so they can try again later
+            isShowingReinstallPrompt = false;
             throw new Error("App installation required. Please refresh and try again.");
           }
         }
