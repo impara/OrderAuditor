@@ -151,7 +151,7 @@ export default function Settings() {
                             />
                           </FormControl>
                           <FormDescription>
-                            Orders within the last {field.value} hours will be checked for duplicates.
+                            Orders within the last {field.value} hours will be checked for duplicates. Changes apply to new orders only.
                           </FormDescription>
                         </FormItem>
                       )}
