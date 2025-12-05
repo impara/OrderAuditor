@@ -163,11 +163,8 @@ export const webhookDeliveries = pgTable(
 // Insert schemas for validation
 export const insertOrderSchema = createInsertSchema(orders).omit({
   id: true,
-  isFlagged: true,
-  flaggedAt: true,
-  duplicateOfOrderId: true,
-  matchReason: true,
-  matchConfidence: true,
+  resolvedAt: true,
+  resolvedBy: true,
 });
 
 export const insertDetectionSettingsSchema = createInsertSchema(

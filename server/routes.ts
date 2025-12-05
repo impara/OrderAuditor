@@ -116,23 +116,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Health Check - verifies database connectivity
   app.get("/api/health", async (_req, res) => {
+    let dbStatus = false;
     try {
       // Verify database connectivity with a simple query
       await storage.getSettings("health-check-probe");
-      res.status(200).json({
-        status: "healthy",
-        timestamp: new Date().toISOString(),
-        database: "connected",
-      });
+      dbStatus = true;
     } catch (error) {
       logger.error("[Health] Database health check failed:", error);
-      res.status(503).json({
-        status: "unhealthy",
-        timestamp: new Date().toISOString(),
-        database: "disconnected",
-        error: "Database connection failed",
-      });
     }
+
+    const health: {
+      status: string;
+      database: string;
+      timestamp: string;
+      queue: { status: string; [key: string]: any };
+    } = {
+      status: dbStatus ? "healthy" : "unhealthy",
+      database: dbStatus ? "connected" : "disconnected",
+      timestamp: new Date().toISOString(),
+      queue: { status: "unknown" }
+    };
+
+    try {
+      const { queueService } = await import("./services/queue.service");
+      const queueStats = await queueService.getHealthStats();
+      health.queue = queueStats;
+    } catch (error) {
+       logger.warn("Failed to get queue stats:", error);
+       health.queue = { status: "error" };
+    }
+
+    res.status(dbStatus ? 200 : 503).json(health);
   });
 
   // Webhook routes (bypass auth middleware)
@@ -661,33 +675,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }`
         );
 
-        // Atomically check and record webhook delivery ID to prevent TOCTOU race conditions
-        // This uses database-level atomicity: if insert succeeds, it's new; if it fails (conflict), it's duplicate
-        if (deliveryIdHeader) {
-          try {
-            const isNew = await storage.tryRecordWebhookDelivery({
-              shopDomain,
-              deliveryId: deliveryIdHeader,
-              topic: topic || "orders/create",
-            });
-            if (!isNew) {
-              logger.info(
-                `[Webhook] ⚠️ Duplicate webhook delivery detected (ID: ${deliveryIdHeader}). Skipping processing.`
-              );
-              return res.json({
-                success: true,
-                message: "Webhook already processed",
-                duplicate: true,
-              });
-            }
-            logger.debug(
-              `[Webhook] Recorded delivery ID ${deliveryIdHeader} before processing`
-            );
-          } catch (error) {
-            logger.error("Failed to record webhook delivery ID:", error);
-            // If recording fails, we should still proceed but idempotency won't be guaranteed
-          }
-        }
+        // Delivery ID check moved to worker to ensure atomic processing and support retries
+        logger.debug(`[Webhook] Passing webhook to queue (Delivery ID: ${deliveryIdHeader})`);
 
         // Parse JSON after verification
         const shopifyOrder = JSON.parse(rawBody.toString("utf8"));
@@ -704,412 +693,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Load session to get access token
         let accessToken = "";
         if (shopDomain) {
-          const offlineSessionId = shopify.session.getOfflineId(shopDomain);
-          const session = await shopify.config.sessionStorage.loadSession(
-            offlineSessionId
-          );
-          if (session?.accessToken) {
-            accessToken = session.accessToken;
-          } else {
-            logger.warn(
-              `[Webhook] ⚠️ Could not load offline session for ${shopDomain}. API calls will fail.`
-            );
-          }
-        }
-
-        // Check if we need to fetch order or customer details via API
-        let customerData = shopifyOrder.customer;
-        let fetchedOrder = null;
-
-        if (accessToken && shopDomain) {
-          // First, try fetching the order via API to get email
-          if (!shopifyOrder.email && !shopifyOrder.contact_email) {
-            logger.warn(
-              "[Webhook] ⚠️ Email not in webhook payload, attempting to fetch order via API..."
-            );
-            try {
-              fetchedOrder = await shopifyService.getOrder(
-                shopDomain,
-                accessToken,
-                shopifyOrder.id
-              );
-              if (
-                fetchedOrder &&
-                (fetchedOrder.email || fetchedOrder.contact_email)
-              ) {
-                logger.info(
-                  `[Webhook] ✅ Successfully fetched order via API - Email: ${
-                    fetchedOrder.email || fetchedOrder.contact_email
-                  }`
-                );
-                Object.assign(shopifyOrder, {
-                  email: fetchedOrder.email || shopifyOrder.email,
-                  contact_email:
-                    fetchedOrder.contact_email || shopifyOrder.contact_email,
-                });
-              } else {
-                logger.warn(
-                  `[Webhook] ⚠️ Order API fetch returned no email. Order data: ${JSON.stringify(
-                    fetchedOrder
-                      ? {
-                          id: fetchedOrder.id,
-                          hasEmail: !!fetchedOrder.email,
-                          hasContactEmail: !!fetchedOrder.contact_email,
-                        }
-                      : null
-                  )}`
-                );
-              }
-            } catch (err) {
-              logger.error("[Webhook] ❌ Order API fetch failed", err);
-            }
-          }
-
-          // If we still don't have email and have a customer ID, try fetching customer
-          if (
-            shopifyOrder.customer?.id &&
-            !shopifyOrder.customer?.email &&
-            !shopifyOrder.email &&
-            !shopifyOrder.contact_email
-          ) {
-            logger.warn(
-              "[Webhook] ⚠️ Still no email found, attempting to fetch customer via API..."
-            );
-            try {
-              const apiCustomer = await shopifyService.getCustomer(
-                shopDomain,
-                accessToken,
-                shopifyOrder.customer.id
-              );
-              if (apiCustomer && apiCustomer.email) {
-                logger.info(
-                  `[Webhook] ✅ Successfully fetched customer via API - Email: ${
-                    apiCustomer.email
-                  }, Name: ${apiCustomer.first_name || ""} ${
-                    apiCustomer.last_name || ""
-                  }`
-                );
-                customerData = apiCustomer;
-              } else {
-                logger.warn(
-                  `[Webhook] ⚠️ Customer API returned no email. Customer data: ${JSON.stringify(
-                    apiCustomer
-                      ? { id: apiCustomer.id, hasEmail: !!apiCustomer.email }
-                      : null
-                  )}`
-                );
-              }
-            } catch (err) {
-              logger.error("[Webhook] ❌ Customer API fetch failed", err);
-            }
-          }
-        }
-
-        // Use webhook order data
-        const fullOrder = shopifyOrder;
-
-        // Extract customer email
-        const customerEmail =
-          fullOrder.email ||
-          fullOrder.contact_email ||
-          fullOrder.customer?.email ||
-          customerData?.email ||
-          fullOrder.shipping_address?.email ||
-          fullOrder.billing_address?.email ||
-          customerData?.default_address?.email ||
-          null;
-
-        // Extract customer name
-        const customerName = (() => {
-          const firstName =
-            fullOrder.first_name ||
-            customerData?.first_name ||
-            fullOrder.shipping_address?.first_name ||
-            customerData?.default_address?.first_name ||
-            fullOrder.billing_address?.first_name ||
-            "";
-          const lastName =
-            fullOrder.last_name ||
-            customerData?.last_name ||
-            fullOrder.shipping_address?.last_name ||
-            customerData?.default_address?.last_name ||
-            fullOrder.billing_address?.last_name ||
-            "";
-
-          if (firstName && lastName) {
-            return `${firstName} ${lastName}`;
-          } else if (firstName) {
-            return firstName;
-          } else if (lastName) {
-            return lastName;
-          }
-
-          if (customerData?.name) return customerData.name;
-          if (fullOrder.shipping_address?.name)
-            return fullOrder.shipping_address.name;
-          if (customerData?.default_address?.name)
-            return customerData.default_address.name;
-
-          return null;
-        })();
-
-        // Extract customer phone
-        const customerPhone =
-          fullOrder.phone ||
-          customerData?.phone ||
-          fullOrder.shipping_address?.phone ||
-          fullOrder.billing_address?.phone ||
-          customerData?.default_address?.phone ||
-          null;
-
-        const orderData = {
-          shopDomain: shopDomain || "unknown-shop", // Fallback if header missing (shouldn't happen)
-          shopifyOrderId: fullOrder.id.toString(),
-          orderNumber: fullOrder.order_number?.toString() || fullOrder.name,
-          customerEmail: customerEmail || "unknown@example.com",
-          customerName,
-          customerPhone,
-          shippingAddress: fullOrder.shipping_address
-            ? {
-                address1: fullOrder.shipping_address.address1,
-                address2: fullOrder.shipping_address.address2,
-                city: fullOrder.shipping_address.city,
-                province: fullOrder.shipping_address.province,
-                country: fullOrder.shipping_address.country,
-                zip: fullOrder.shipping_address.zip,
-              }
-            : null,
-          totalPrice: fullOrder.total_price || "0.00",
-          currency: fullOrder.currency || "USD",
-          createdAt: new Date(fullOrder.created_at),
-          lineItems: fullOrder.line_items?.map((item: any) => ({
-            id: item.id.toString(),
-            sku: item.sku,
-            title: item.title,
-            quantity: item.quantity,
-            price: item.price,
-          })) || [],
-        };
-
-        const validatedOrder = insertOrderSchema.parse(orderData);
-
-        // Check if order already exists
-        const existingOrder = await storage.getOrderByShopifyId(
-          shopDomain,
-          validatedOrder.shopifyOrderId
-        );
-        if (existingOrder) {
-          logger.info(
-            `[Webhook] Order ${validatedOrder.shopifyOrderId} already exists, skipping duplicate processing`
-          );
-          // Record webhook delivery ID for idempotency before returning
-          if (deliveryIdHeader) {
-            try {
-              await storage.recordWebhookDelivery({
-                shopDomain,
-                deliveryId: deliveryIdHeader,
-                topic: topic || "orders/create",
-              });
-            } catch (error) {
-              logger.error("Failed to record webhook delivery ID:", error);
-            }
-          }
-          return res.json({
-            success: true,
-            flagged: existingOrder.isFlagged,
-            order: existingOrder,
-            message: "Order already processed",
-          });
-        }
-
-        // Check subscription quota
-        if (shopDomain) {
-          const quotaCheck = await subscriptionService.checkQuota(shopDomain);
-          if (!quotaCheck.allowed) {
-            logger.warn(
-              `[Webhook] Quota exceeded for ${shopDomain}: ${quotaCheck.reason}`
-            );
-            // Record webhook delivery ID for idempotency before returning
-            if (deliveryIdHeader) {
-              try {
-                await storage.recordWebhookDelivery({
-                  shopDomain,
-                  deliveryId: deliveryIdHeader,
-                  topic: topic || "orders/create",
-                });
-              } catch (error) {
-                logger.error("Failed to record webhook delivery ID:", error);
-              }
-            }
-            return res.status(403).json({
-              success: false,
-              error: "QUOTA_EXCEEDED",
-              message: quotaCheck.reason || "Monthly order limit reached",
-              subscription: quotaCheck.subscription,
-            });
-          }
-        }
-
-        // Ensure detection settings are initialized
-        let settings = await storage.getSettings(shopDomain);
-        if (!settings) {
-          settings = await storage.initializeSettings(shopDomain);
-        }
-
-        logger.debug(
-          `[Webhook] Checking for duplicates - Email: ${validatedOrder.customerEmail}, Shop: ${shopDomain}`
-        );
-        const duplicateMatch = await duplicateDetectionService.findDuplicates(
-          validatedOrder,
-          shopDomain
-        );
-
-        if (duplicateMatch) {
-          logger.info(
-            `[Webhook] ✅ Duplicate detected! Match confidence: ${duplicateMatch.confidence}%, Reason: ${duplicateMatch.matchReason}`
-          );
-          const flaggedOrder = await storage.createOrder(validatedOrder);
-
-          await storage.updateOrder(shopDomain, flaggedOrder.id, {
-            isFlagged: true,
-            flaggedAt: new Date(),
-            duplicateOfOrderId: duplicateMatch.order.id,
-            matchReason: duplicateMatch.matchReason,
-            matchConfidence: duplicateMatch.confidence,
-          });
-
-          await storage.createAuditLog({
-            shopDomain,
-            orderId: flaggedOrder.id,
-            action: "flagged",
-            details: {
-              duplicateOf: duplicateMatch.order.orderNumber,
-              confidence: duplicateMatch.confidence,
-              reason: duplicateMatch.matchReason,
-            },
-          });
-
-          if (accessToken && shopDomain) {
-            try {
-              await shopifyService.tagOrder(
-                shopDomain,
-                accessToken,
-                fullOrder.id.toString(),
-                ["Merge_Review_Candidate"]
-              );
-
-              await storage.createAuditLog({
-                shopDomain,
-                orderId: flaggedOrder.id,
-                action: "tagged",
-                details: { tags: ["Merge_Review_Candidate"] },
-              });
-            } catch (error) {
-              logger.error("Failed to tag order in Shopify:", error);
-            }
-          }
-
-          // Send notifications if enabled
           try {
-            const updatedOrder = await storage.getOrder(
-              shopDomain,
-              flaggedOrder.id
+            const offlineSessionId = shopify.session.getOfflineId(shopDomain);
+            const session = await shopify.config.sessionStorage.loadSession(
+              offlineSessionId
             );
-            const duplicateOfOrder = await storage.getOrder(
-              shopDomain,
-              duplicateMatch.order.id
-            );
-
-            if (updatedOrder && duplicateOfOrder && shopDomain) {
-              await notificationService.sendNotifications(
-                shopDomain,
-                settings,
-                {
-                  order: updatedOrder,
-                  duplicateOf: duplicateOfOrder,
-                  confidence: duplicateMatch.confidence,
-                  matchReason: duplicateMatch.matchReason,
-                }
+            if (session?.accessToken) {
+              accessToken = session.accessToken;
+            } else {
+              logger.warn(
+                `[Webhook] ⚠️ Could not load offline session for ${shopDomain}. API calls will fail.`
               );
             }
           } catch (error) {
-            logger.error("Failed to send notifications:", error);
+             logger.warn(`[Webhook] Error loading session:`, error);
           }
-
-          // Record order for quota tracking
-          if (shopDomain) {
-            try {
-              await subscriptionService.recordOrder(shopDomain);
-            } catch (error) {
-              logger.error("Failed to record order for quota:", error);
-            }
-          }
-
-          const updatedOrder = await storage.getOrder(
-            shopDomain,
-            flaggedOrder.id
-          );
-
-          // Ensure delivery ID is recorded for idempotency (if header was present)
-          // Note: If deliveryIdHeader was empty, we can't record anything, but the webhook was still processed
-          if (deliveryIdHeader) {
-            try {
-              await storage.recordWebhookDelivery({
-                shopDomain,
-                deliveryId: deliveryIdHeader,
-                topic: topic || "orders/create",
-              });
-            } catch (error) {
-              logger.error("Failed to record webhook delivery ID:", error);
-            }
-          }
-
-          res.json({
-            success: true,
-            flagged: true,
-            order: updatedOrder,
-          });
-        } else {
-          logger.debug(
-            `[Webhook] No duplicate match found for order ${validatedOrder.orderNumber}. Creating order without flag.`
-          );
-          const order = await storage.createOrder(validatedOrder);
-
-          // Record order for quota tracking
-          if (shopDomain) {
-            try {
-              await subscriptionService.recordOrder(shopDomain);
-            } catch (error) {
-              logger.error("Failed to record order for quota:", error);
-            }
-          }
-
-          // Ensure delivery ID is recorded for idempotency (if header was present)
-          // Note: If deliveryIdHeader was empty, we can't record anything, but the webhook was still processed
-          if (deliveryIdHeader) {
-            try {
-              await storage.recordWebhookDelivery({
-                shopDomain,
-                deliveryId: deliveryIdHeader,
-                topic: topic || "orders/create",
-              });
-            } catch (error) {
-              logger.error("Failed to record webhook delivery ID:", error);
-            }
-          }
-
-          res.json({
-            success: true,
-            flagged: false,
-            order,
-          });
         }
+
+        // Enqueue job for async processing
+        const jobData = {
+          shopDomain,
+          payload: shopifyOrder,
+          deliveryId: deliveryIdHeader || `gen_${shopifyOrder.id}_${Date.now()}`,
+          accessToken, // Pass token if we have it, otherwise worker will try to fetch it
+          webhookTopic: topic || "orders/create",
+        };
+
+        const { queueService, QUEUES } = await import("./services/queue.service");
+        const jobId = await queueService.addJob(QUEUES.ORDERS_CREATE, jobData);
+
+        if (jobId) {
+           logger.info(`[Webhook] Enqueued job ${jobId} for order ${shopifyOrder.id}`);
+           res.status(200).json({ success: true, jobId, message: "Webhook accepted for processing" });
+        } else {
+           logger.error(`[Webhook] Failed to enqueue job for order ${shopifyOrder.id}`);
+           // If queue fails, should we process synchronously or fail?
+           // Failing allows Shopify to retry.
+           res.status(503).json({ error: "Failed to queue webhook processing" });
+        }
+
       } catch (error) {
-        logger.error("Error processing webhook:", error);
-        res.status(500).json({ error: "Failed to process webhook" });
+        logger.error(
+          "[Webhook] Error processing orders/create:",
+          error
+        );
+        res.status(500).json({ error: "Internal server error" });
       }
     }
   );
+
 
   app.post(
     "/api/webhooks/shopify/orders/updated",

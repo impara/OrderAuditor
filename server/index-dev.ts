@@ -64,6 +64,19 @@ export async function setupVite(app: Express, server: Server) {
   });
 }
 
+import { queueService } from "./services/queue.service";
+import { webhookWorker } from "./workers/webhook-worker";
+
 (async () => {
+    // Initialize queue system
+  try {
+    await queueService.initialize();
+    await webhookWorker.start();
+  } catch (error) {
+    console.error("[Startup] Failed to initialize queue system:", error);
+    // Depending on criticality, we might want to exit or continue with reduced functionality
+    // process.exit(1); 
+  }
+  
   await runApp(setupVite);
 })();

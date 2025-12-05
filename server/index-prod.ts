@@ -57,8 +57,22 @@ export async function serveStatic(app: Express, _server: Server) {
   });
 }
 
+import { queueService } from "./services/queue.service";
+import { webhookWorker } from "./workers/webhook-worker";
+
 (async () => {
   // Push database schema before starting the app
   await pushDatabaseSchema();
+  
+  // Initialize queue system
+  try {
+    await queueService.initialize();
+    await webhookWorker.start();
+  } catch (error) {
+    console.error("[Startup] Failed to initialize queue system:", error);
+    // Depending on criticality, we might want to exit or continue with reduced functionality
+    // process.exit(1); 
+  }
+
   await runApp(serveStatic);
 })();
