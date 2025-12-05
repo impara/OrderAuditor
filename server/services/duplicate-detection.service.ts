@@ -33,7 +33,7 @@ export class DuplicateDetectionService {
     }
 
     logger.debug(
-      `[DuplicateDetection] Settings - Email: ${settings.matchEmail}, Phone: ${settings.matchPhone}, Address: ${settings.matchAddress}, TimeWindow: ${settings.timeWindowHours}h`
+      `[DuplicateDetection] Settings - Email: ${settings.matchEmail}, Phone: ${settings.matchPhone}, Address: ${settings.matchAddress}, SKU: ${settings.matchSku}, TimeWindow: ${settings.timeWindowHours}h`
     );
 
     const timeThreshold = new Date();
@@ -222,27 +222,41 @@ export class DuplicateDetectionService {
     }
 
     // SKU Match - check only if enabled AND data exists
-    if (
-      settings.matchSku &&
-      newOrder.lineItems &&
-      existingOrder.lineItems &&
-      Array.isArray(newOrder.lineItems) &&
-      Array.isArray(existingOrder.lineItems)
-    ) {
-      const newSkus = newOrder.lineItems
-        .map((item: any) => item.sku)
-        .filter((sku: any) => sku);
-      const existingSkus = existingOrder.lineItems
-        .map((item: any) => item.sku)
-        .filter((sku: any) => sku);
-
-      const hasCommonSku = newSkus.some((sku: string) =>
-        existingSkus.includes(sku)
+    if (settings.matchSku) {
+      logger.debug(
+        `[DuplicateDetection] SKU match enabled. New order has lineItems: ${!!newOrder.lineItems}, Existing order has lineItems: ${!!existingOrder.lineItems}`
       );
 
-      if (hasCommonSku) {
-        confidence += 50;
-        reasons.push("Same SKU purchased");
+      if (
+        newOrder.lineItems &&
+        existingOrder.lineItems &&
+        Array.isArray(newOrder.lineItems) &&
+        Array.isArray(existingOrder.lineItems)
+      ) {
+        const newSkus = newOrder.lineItems
+          .map((item: any) => item.sku)
+          .filter((sku: any) => sku);
+        const existingSkus = existingOrder.lineItems
+          .map((item: any) => item.sku)
+          .filter((sku: any) => sku);
+
+        logger.debug(
+          `[DuplicateDetection] New order SKUs: [${newSkus.join(", ")}], Existing order SKUs: [${existingSkus.join(", ")}]`
+        );
+
+        const hasCommonSku = newSkus.some((sku: string) =>
+          existingSkus.includes(sku)
+        );
+
+        if (hasCommonSku) {
+          confidence += 50;
+          reasons.push("Same SKU purchased");
+          logger.debug(`[DuplicateDetection] SKU match found!`);
+        } else {
+          logger.debug(`[DuplicateDetection] No SKU match found`);
+        }
+      } else {
+        logger.debug(`[DuplicateDetection] SKU match skipped - lineItems missing or not arrays`);
       }
     }
 
