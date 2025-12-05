@@ -265,7 +265,7 @@ docker-compose --version
 7. **Backups** - regularly backup your database
 8. **Monitoring** - set up monitoring for application health
 
-⚠️ **See `SECURITY.md` for important information about git history and credential management.**
+
 
 ## Production Checklist
 

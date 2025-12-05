@@ -104,6 +104,8 @@ Or manually:
 ./scripts/test-validation-plan.sh
 ```
 
+(Run from project root)
+
 ### What's Working
 
 ✅ Subscription table created  
@@ -143,7 +145,7 @@ Or manually:
 
 **Steps**:
 
-1. Create a duplicate order (see scripts/README.md)
+1. Create a duplicate order (see [`scripts/README.md`](../../scripts/README.md))
 2. Check Shopify admin to verify the order has tag "Merge_Review_Candidate"
 3. Check audit logs in database to verify tag name
 

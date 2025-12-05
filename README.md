@@ -445,7 +445,7 @@ SMTP_FROM=your-email@gmail.com
 - `SMTP_PASS=your-mailgun-password`
 - `SMTP_FROM=noreply@your-domain.com`
 
-**Note**: For production deployments, see [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed SMTP configuration instructions.
+**Note**: For production deployments, see [Production Deployment Guide](./docs/deployment/production.md) for detailed SMTP configuration instructions.
 
 ## Environment Variables Reference
 
@@ -550,7 +550,7 @@ SMTP_FROM=your-email@gmail.com
 
 ## Production Deployment
 
-For production deployment using Docker, see the detailed [DEPLOYMENT.md](./DEPLOYMENT.md) guide for complete instructions including:
+For production deployment using Docker, see the detailed [Production Deployment Guide](./docs/deployment/production.md) guide for complete instructions including:
 
 - Server setup and Docker installation
 - Environment configuration
