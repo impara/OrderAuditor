@@ -128,10 +128,30 @@ export class WebhookProcessorService {
       }
 
 
+
+      // 2.5 Map Shopify payload to Internal Order Model
+      // Critical for DuplicateDetectionService which expects 'customerEmail' not 'email'
+      const mappedOrder: any = {
+        shopDomain,
+        shopifyOrderId: orderId.toString(),
+        orderNumber: shopifyOrder.order_number?.toString() || shopifyOrder.name || shopifyOrder.id.toString(),
+        customerEmail: shopifyOrder.email || shopifyOrder.contact_email,
+        customerName: shopifyOrder.customer
+          ? `${shopifyOrder.customer.first_name || ""} ${shopifyOrder.customer.last_name || ""}`.trim()
+          : "Unknown",
+        customerPhone: shopifyOrder.phone || shopifyOrder.customer?.phone,
+        shippingAddress: shopifyOrder.shipping_address,
+        lineItems: shopifyOrder.line_items,
+        totalPrice: shopifyOrder.total_price || "0.00",
+        currency: shopifyOrder.currency || "USD",
+        createdAt: new Date(shopifyOrder.created_at || new Date()),
+        isFlagged: false
+      };
+
       // 3. Duplicate Detection
       logger.info(`[WebhookProcessor] checking for duplicates for order ${orderId}`);
       const detectionResult = await duplicateDetectionService.findDuplicates(
-        shopifyOrder,
+        mappedOrder,
         shopDomain
       );
 
@@ -167,12 +187,10 @@ export class WebhookProcessorService {
                         createdAt: new Date(shopifyOrder.created_at),
                         currency: shopifyOrder.currency,
                         totalPrice: shopifyOrder.total_price,
-                        customerName: shopifyOrder.customer
-                        ? `${shopifyOrder.customer.first_name || ""} ${shopifyOrder.customer.last_name || ""}`.trim()
-                        : "Unknown",
-                        customerEmail: shopifyOrder.email || shopifyOrder.contact_email || "",
+                        customerName: mappedOrder.customerName,
+                        customerEmail: mappedOrder.customerEmail || "",
                         shopifyOrderId: shopifyOrder.id.toString()
-                    } as any, // Cast to any because Order type from schema might differ slightly from shopify payload
+                    } as any, 
                     duplicateOf: detectionResult.order,
                     confidence: detectionResult.confidence,
                     matchReason: detectionResult.matchReason
@@ -187,26 +205,16 @@ export class WebhookProcessorService {
       // 5. Save Order to Database
       // We save it regardless of duplicate status so future orders can be checked against it
       try {
-        await storage.createOrder({
-            shopDomain,
-            shopifyOrderId: orderId.toString(),
-            orderNumber: shopifyOrder.order_number?.toString() || shopifyOrder.name || shopifyOrder.id.toString(),
-            customerEmail: shopifyOrder.email || shopifyOrder.contact_email,
-            customerName: shopifyOrder.customer
-              ? `${shopifyOrder.customer.first_name || ""} ${
-                  shopifyOrder.customer.last_name || ""
-                }`.trim()
-              : "Unknown",
-            totalPrice: shopifyOrder.total_price || "0.00",
-            currency: shopifyOrder.currency || "USD",
-            createdAt: new Date(shopifyOrder.created_at || new Date()),
+        const orderToSave = {
+            ...mappedOrder,
             isFlagged: !!detectionResult,
             matchConfidence: detectionResult ? Math.round(detectionResult.confidence) : 0,
             matchReason: detectionResult?.matchReason,
             duplicateOfOrderId: detectionResult?.order?.id,
             flaggedAt: detectionResult ? new Date() : null,
-            shippingAddress: shopifyOrder.shipping_address, 
-          });
+        };
+
+        await storage.createOrder(orderToSave);
          logger.info(`[WebhookProcessor] Saved order ${orderId} to database`);
       } catch (error) {
         logger.error(`[WebhookProcessor] Failed to save order ${orderId} to database:`, error);
