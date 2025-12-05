@@ -174,39 +174,64 @@ export class DuplicateDetectionService {
     }
 
     // Phone - check only if enabled AND data exists
-    if (
-      settings.matchPhone &&
-      newOrder.customerPhone &&
-      existingOrder.customerPhone
-    ) {
-      const normalizedNew = this.normalizePhoneNumber(newOrder.customerPhone);
-      const normalizedExisting = this.normalizePhoneNumber(
-        existingOrder.customerPhone
-      );
-
+    if (settings.matchPhone) {
       logger.debug(
-        `[DuplicateDetection] Phone comparison - New: "${newOrder.customerPhone}" (normalized: "${normalizedNew}") vs Existing: "${existingOrder.customerPhone}" (normalized: "${normalizedExisting}")`
+        `[DuplicateDetection] Phone match enabled. New order has phone: ${!!newOrder.customerPhone}, Existing order has phone: ${!!existingOrder.customerPhone}`
       );
 
-      if (normalizedNew === normalizedExisting) {
-        confidence += 50;
-        reasons.push("Same phone");
+      if (newOrder.customerPhone && existingOrder.customerPhone) {
+        const normalizedNew = this.normalizePhoneNumber(newOrder.customerPhone);
+        const normalizedExisting = this.normalizePhoneNumber(
+          existingOrder.customerPhone
+        );
+
+        logger.debug(
+          `[DuplicateDetection] Phone comparison - New: "${newOrder.customerPhone}" (normalized: "${normalizedNew}") vs Existing: "${existingOrder.customerPhone}" (normalized: "${normalizedExisting}")`
+        );
+
+        if (normalizedNew === normalizedExisting) {
+          confidence += 50;
+          reasons.push("Same phone");
+          logger.debug(`[DuplicateDetection] Phone match found!`);
+        } else {
+          logger.debug(`[DuplicateDetection] Phone numbers don't match after normalization`);
+        }
+      } else {
+        logger.debug(
+          `[DuplicateDetection] Phone match skipped - phone missing on ${!newOrder.customerPhone ? 'new' : 'existing'} order`
+        );
       }
     }
 
     // Address - check only if enabled AND data exists
-    if (
-      settings.matchAddress &&
-      newOrder.shippingAddress &&
-      existingOrder.shippingAddress
-    ) {
-      const addressScore = this.compareAddresses(
-        newOrder.shippingAddress,
-        existingOrder.shippingAddress
+    if (settings.matchAddress) {
+      logger.debug(
+        `[DuplicateDetection] Address match enabled. New order has address: ${!!newOrder.shippingAddress}, Existing order has address: ${!!existingOrder.shippingAddress}`
       );
-      if (addressScore > 0) {
-        confidence += addressScore;
-        reasons.push(addressScore >= 45 ? "Same address" : "Similar address");
+
+      if (newOrder.shippingAddress && existingOrder.shippingAddress) {
+        const addressScore = this.compareAddresses(
+          newOrder.shippingAddress,
+          existingOrder.shippingAddress
+        );
+        
+        logger.debug(
+          `[DuplicateDetection] Address comparison score: ${addressScore} (45=full match, 25=partial match, 0=no match)`
+        );
+
+        if (addressScore > 0) {
+          confidence += addressScore;
+          reasons.push(addressScore >= 45 ? "Same address" : "Similar address");
+          logger.debug(
+            `[DuplicateDetection] Address match! New: "${newOrder.shippingAddress?.address1}, ${newOrder.shippingAddress?.city}, ${newOrder.shippingAddress?.zip}" vs Existing: "${existingOrder.shippingAddress?.address1}, ${existingOrder.shippingAddress?.city}, ${existingOrder.shippingAddress?.zip}"`
+          );
+        } else {
+          logger.debug(`[DuplicateDetection] Addresses don't match`);
+        }
+      } else {
+        logger.debug(
+          `[DuplicateDetection] Address match skipped - address missing on ${!newOrder.shippingAddress ? 'new' : 'existing'} order`
+        );
       }
     }
 
