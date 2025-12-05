@@ -221,6 +221,31 @@ export class DuplicateDetectionService {
       }
     }
 
+    // SKU Match - check only if enabled AND data exists
+    if (
+      settings.matchSku &&
+      newOrder.lineItems &&
+      existingOrder.lineItems &&
+      Array.isArray(newOrder.lineItems) &&
+      Array.isArray(existingOrder.lineItems)
+    ) {
+      const newSkus = newOrder.lineItems
+        .map((item: any) => item.sku)
+        .filter((sku: any) => sku);
+      const existingSkus = existingOrder.lineItems
+        .map((item: any) => item.sku)
+        .filter((sku: any) => sku);
+
+      const hasCommonSku = newSkus.some((sku: string) =>
+        existingSkus.includes(sku)
+      );
+
+      if (hasCommonSku) {
+        confidence += 50;
+        reasons.push("Same SKU purchased");
+      }
+    }
+
     return {
       reason: reasons.join(", ") || "No significant match",
       confidence: Math.min(100, confidence),

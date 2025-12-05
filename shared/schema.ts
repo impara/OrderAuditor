@@ -44,6 +44,15 @@ export const orders = pgTable("orders", {
   matchConfidence: integer("match_confidence"), // 0-100 percentage
   resolvedAt: timestamp("resolved_at"),
   resolvedBy: varchar("resolved_by", { length: 50 }), // 'manual_dashboard', 'shopify_tag_removed', 'auto_merged'
+  lineItems: jsonb("line_items").$type<
+    Array<{
+      id: string;
+      sku: string | null;
+      title: string;
+      quantity: number;
+      price: string;
+    }>
+  >(),
 });
 
 // Detection settings table - stores configuration for duplicate detection
@@ -56,6 +65,7 @@ export const detectionSettings = pgTable("detection_settings", {
   matchEmail: boolean("match_email").notNull().default(true),
   matchPhone: boolean("match_phone").notNull().default(false),
   matchAddress: boolean("match_address").notNull().default(true),
+  matchSku: boolean("match_sku").notNull().default(false), // New setting for SKU matching
   enableNotifications: boolean("enable_notifications").notNull().default(false),
   notificationEmail: text("notification_email"),
   slackWebhookUrl: text("slack_webhook_url"),

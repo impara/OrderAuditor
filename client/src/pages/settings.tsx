@@ -34,8 +34,9 @@ export default function Settings() {
     defaultValues: {
       timeWindowHours: 24,
       matchEmail: true,
-      matchPhone: false,
+
       matchAddress: true,
+      matchSku: false,
       enableNotifications: false,
       notificationEmail: "",
       slackWebhookUrl: "",
@@ -50,6 +51,7 @@ export default function Settings() {
         matchEmail: settings.matchEmail,
         matchPhone: settings.matchPhone,
         matchAddress: settings.matchAddress,
+        matchSku: settings.matchSku,
         enableNotifications: settings.enableNotifications,
         notificationEmail: settings.notificationEmail || "",
         slackWebhookUrl: settings.slackWebhookUrl || "",
@@ -251,6 +253,35 @@ export default function Settings() {
                       )}
                     />
 
+                    {/* SKU Match */}
+                    <FormField
+                      control={form.control}
+                      name="matchSku"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <FormLabel className="flex items-center gap-2">
+                              Product SKU
+                              <InfoTooltip
+                                content="Worth 50 points. Checks if the new order contains any SKU that was previously purchased by the same customer within the time window."
+                                side="bottom"
+                              />
+                            </FormLabel>
+                            <FormDescription>
+                              Flag orders containing duplicate SKUs (50 points)
+                            </FormDescription>
+                          </div>
+                          <FormControl>
+                            <Switch
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                              data-testid="switch-match-sku"
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+
                     {/* Warning for address-only mode */}
                     {form.watch("matchAddress") &&
                       !form.watch("matchEmail") &&
@@ -265,18 +296,23 @@ export default function Settings() {
                     <div className="mt-6 p-4 bg-muted rounded-lg">
                       <p className="text-sm font-medium mb-2">How Scoring Works</p>
                       <p className="text-xs text-muted-foreground mb-3">
-                        Orders need <strong>70+ points</strong> to be flagged as duplicates. Each match adds points:
+                        Orders need <strong>70+ points</strong> to be flagged as duplicates. Each enabled criterion that matches adds points:
                       </p>
                       <ul className="text-xs text-muted-foreground space-y-1 ml-4">
                         <li>• Email match: <strong>50 points</strong></li>
                         <li>• Phone match: <strong>50 points</strong></li>
                         <li>• Full address match (street + city + zip): <strong>45 points</strong></li>
                         <li>• Partial address match: <strong>25 points</strong></li>
+                        <li>• SKU match: <strong>50 points</strong></li>
                         <li>• Name match: <strong>20 points</strong> (supporting evidence)</li>
                       </ul>
-                      <p className="text-xs text-muted-foreground mt-3">
-                        <strong>Example:</strong> Email + Name = 50 + 20 = 70 points → Flagged as duplicate ✓
-                      </p>
+                      <div className="mt-4 space-y-2 text-xs text-muted-foreground border-t border-border pt-3">
+                        <p><strong>Example - Fraud Detection:</strong></p>
+                        <p>Same customer (Email 50 + Name 20) orders different products → <strong>70 pts → Flagged ✓</strong></p>
+                        <p className="mt-2"><strong>Example - Limit Purchase by SKU:</strong></p>
+                        <p>Enable <em>only</em> SKU matching. Same customer re-orders same SKU → <strong>70 pts (SKU 50 + Name 20) → Flagged ✓</strong></p>
+                        <p className="italic mt-2">💡 Tip: Name is always checked as supporting evidence. Combine Email + SKU for strongest fraud detection.</p>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>

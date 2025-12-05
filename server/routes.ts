@@ -882,6 +882,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           totalPrice: fullOrder.total_price || "0.00",
           currency: fullOrder.currency || "USD",
           createdAt: new Date(fullOrder.created_at),
+          lineItems: fullOrder.line_items?.map((item: any) => ({
+            id: item.id.toString(),
+            sku: item.sku,
+            title: item.title,
+            quantity: item.quantity,
+            price: item.price,
+          })) || [],
         };
 
         const validatedOrder = insertOrderSchema.parse(orderData);
