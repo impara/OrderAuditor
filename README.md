@@ -162,7 +162,7 @@ VITE_SHOPIFY_SHOP_DOMAIN=yourstore.myshopify.com
 3. **Push Database Schema**:
 
    ```bash
-   npm run db:migrate
+   npm run db:push
    ```
 
    This will create the necessary tables:
@@ -211,7 +211,7 @@ VITE_SHOPIFY_SHOP_DOMAIN=yourstore.myshopify.com
 4. **Push Database Schema**:
 
    ```bash
-   npm run db:migrate
+   npm run db:push
    ```
 
 ### Step 4: Set Up Webhook Testing (Local Development)
@@ -513,7 +513,8 @@ SMTP_FROM=your-email@gmail.com
 - `npm run build` - Build for production
 - `npm start` - Start production server
 - `npm run check` - Type check TypeScript
-- `npm run db:migrate` - Push database schema changes
+- `npm run db:push` - Push database schema changes (development)
+- `npm run db:generate` - Generate migration files (optional, for version control)
 
 ## Design System
 

@@ -31,16 +31,14 @@ COPY package.json package-lock.json ./
 # Install production dependencies
 RUN npm ci --only=production && npm cache clean --force
 
-# Install drizzle-kit, TypeScript, and tsx for database migrations (needed in production)
-RUN npm install drizzle-kit@^0.31.7 typescript@^5.6.3 tsx@^4.20.6 --no-save && npm cache clean --force
+# Install drizzle-kit and TypeScript for database schema push (needed in production)
+RUN npm install drizzle-kit@^0.31.7 typescript@^5.6.3 --no-save && npm cache clean --force
 
 # Copy built files from builder stage
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/shared ./shared
 COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
 COPY --from=builder /app/tsconfig.json ./tsconfig.json
-COPY --from=builder /app/server/migrate.ts ./server/migrate.ts
-COPY --from=builder /app/migrations ./migrations
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \

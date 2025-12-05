@@ -121,12 +121,9 @@ docker-compose -f docker-compose.prod.yml logs -f
 docker-compose -f docker-compose.prod.yml ps
 ```
 
-### 2. Initialize Database Schema
+### 2. Database Schema
 
-```bash
-# Run database migrations
-docker-compose -f docker-compose.prod.yml exec app npm run db:migrate
-```
+The database schema is automatically pushed on container startup using `drizzle-kit push`. No manual migration steps are required.
 
 ### 3. Register Shopify Webhook
 
@@ -162,8 +159,7 @@ git pull
 # Rebuild and restart
 docker-compose -f docker-compose.prod.yml up -d --build
 
-# Run database migrations if needed
-docker-compose -f docker-compose.prod.yml exec app npm run db:migrate
+# Database schema is automatically pushed on startup - no manual steps needed
 ```
 
 ### Backup Database
@@ -277,7 +273,7 @@ docker-compose --version
 - [ ] Repository cloned
 - [ ] `.env` file configured with production values
 - [ ] Strong passwords set for database
-- [ ] Database schema initialized (`npm run db:migrate`)
+- [ ] Database schema automatically initialized on startup (via schema push)
 - [ ] Application accessible via public URL
 - [ ] Shopify webhook registered
 - [ ] Health checks passing

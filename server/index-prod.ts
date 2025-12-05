@@ -2,9 +2,29 @@ import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
 import { type Server } from "node:http";
+import { execSync } from "node:child_process";
 
 import express, { type Express } from "express";
 import runApp from "./app";
+
+/**
+ * Push database schema changes on startup using drizzle-kit push.
+ * This ensures the database schema is always in sync with the code.
+ */
+async function pushDatabaseSchema(): Promise<void> {
+  console.log("[Startup] Pushing database schema...");
+  
+  try {
+    execSync("npx drizzle-kit push --force", {
+      stdio: "inherit",
+      env: process.env,
+    });
+    console.log("[Startup] Database schema push completed successfully");
+  } catch (error) {
+    console.error("[Startup] Database schema push failed:", error);
+    process.exit(1);
+  }
+}
 
 export async function serveStatic(app: Express, _server: Server) {
   const distPath = path.resolve(import.meta.dirname, "public");
@@ -38,5 +58,7 @@ export async function serveStatic(app: Express, _server: Server) {
 }
 
 (async () => {
+  // Push database schema before starting the app
+  await pushDatabaseSchema();
   await runApp(serveStatic);
 })();

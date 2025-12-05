@@ -298,7 +298,7 @@ After testing each webhook, verify:
 1. **Check database connection** in `.env`
 2. **Verify database schema** is up to date:
    ```bash
-   npm run db:migrate
+   npm run db:push
    ```
 3. **Check application logs** for database errors
 
