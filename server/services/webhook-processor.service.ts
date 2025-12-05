@@ -131,6 +131,17 @@ export class WebhookProcessorService {
 
       // 2.5 Map Shopify payload to Internal Order Model
       // Critical for DuplicateDetectionService which expects 'customerEmail' not 'email'
+      
+      // Debug: Log what we're extracting from Shopify payload
+      logger.debug(`[WebhookProcessor] Shopify payload inspection:
+        - phone field: ${shopifyOrder.phone || 'missing'}
+        - customer.phone: ${shopifyOrder.customer?.phone || 'missing'}
+        - billing_address.phone: ${shopifyOrder.billing_address?.phone || 'missing'}
+        - shipping_address.phone: ${shopifyOrder.shipping_address?.phone || 'missing'}
+        - line_items count: ${shopifyOrder.line_items?.length || 0}
+        - line_items exists: ${!!shopifyOrder.line_items}
+      `);
+
       const mappedOrder: any = {
         shopDomain,
         shopifyOrderId: orderId.toString(),
@@ -139,7 +150,7 @@ export class WebhookProcessorService {
         customerName: shopifyOrder.customer
           ? `${shopifyOrder.customer.first_name || ""} ${shopifyOrder.customer.last_name || ""}`.trim()
           : "Unknown",
-        customerPhone: shopifyOrder.phone || shopifyOrder.customer?.phone,
+        customerPhone: shopifyOrder.phone || shopifyOrder.customer?.phone || shopifyOrder.billing_address?.phone || shopifyOrder.shipping_address?.phone,
         shippingAddress: shopifyOrder.shipping_address,
         lineItems: shopifyOrder.line_items,
         totalPrice: shopifyOrder.total_price || "0.00",
@@ -147,6 +158,9 @@ export class WebhookProcessorService {
         createdAt: new Date(shopifyOrder.created_at || new Date()),
         isFlagged: false
       };
+
+      logger.debug(`[WebhookProcessor] Mapped order - customerPhone: ${mappedOrder.customerPhone || 'null'}, lineItems: ${mappedOrder.lineItems?.length || 0} items`);
+
 
       // 3. Duplicate Detection
       logger.info(`[WebhookProcessor] checking for duplicates for order ${orderId}`);
