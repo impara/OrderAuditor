@@ -76,23 +76,31 @@ async function throwIfResNotOk(res: Response) {
             return new Promise(() => {}); // Pause execution indefinitely
           }
           
-          isShowingReinstallPrompt = true;
-          
-          // Show alert to get user gesture, then redirect
-          // Alert interaction counts as user gesture for navigation
-          const userConfirmed = confirm(
-            "Your session has expired or the app was uninstalled. Click OK to reinstall the app."
+          // Try to auto-redirect using App Bridge first (Zero Popup experience)
+          if (window.shopify && window.shopify.open) {
+            try {
+              console.log("[Auth] Attempting auto-redirect via App Bridge...");
+              const installUrlRaw = data.installUrl;
+              const installUrl = installUrlRaw.startsWith("http") 
+                ? installUrlRaw 
+                : `${window.location.origin}${installUrlRaw}`;
+                
+              window.shopify.open(installUrl, "_top");
+              return new Promise(() => {}); // Pause execution
+            } catch (e) {
+              console.warn("[Auth] App Bridge auto-redirect failed, falling back to modal:", e);
+            }
+          }
+
+          // Fallback: Dispatch event to show React UI modal
+          // This avoids the "Embedded page says" popup
+          window.dispatchEvent(
+            new CustomEvent("shopify:reinstall_required", {
+              detail: { installUrl: data.installUrl },
+            })
           );
           
-          if (userConfirmed) {
-            // User clicked OK - this provides the gesture needed for navigation
-            window.top!.location.href = data.installUrl;
-            return new Promise(() => {}); // Pause execution
-          } else {
-            // User clicked Cancel - reset flag so they can try again later
-            isShowingReinstallPrompt = false;
-            throw new Error("App installation required. Please refresh and try again.");
-          }
+          return new Promise(() => {}); // Pause execution
         }
         
         // Case 2: Session token expired but offline session exists

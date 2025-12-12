@@ -2,9 +2,31 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export function AppBridgeProvider({ children }: { children: React.ReactNode }) {
     const [isReady, setIsReady] = useState(false);
+    const [reinstallUrl, setReinstallUrl] = useState<string | null>(null);
+
+    useEffect(() => {
+        const handleReinstall = (event: Event) => {
+            const customEvent = event as CustomEvent;
+            if (customEvent.detail && customEvent.detail.installUrl) {
+                setReinstallUrl(customEvent.detail.installUrl);
+            }
+        };
+
+        window.addEventListener("shopify:reinstall_required", handleReinstall);
+        return () => window.removeEventListener("shopify:reinstall_required", handleReinstall);
+    }, []);
 
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
@@ -51,5 +73,30 @@ export function AppBridgeProvider({ children }: { children: React.ReactNode }) {
         );
     }
 
-    return <>{children}</>;
+    return (
+        <>
+            {children}
+            <AlertDialog open={!!reinstallUrl}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Connection Expired</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Your session has expired or the app needs to be reconnected. Please click the button below to restore the connection.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogAction
+                            onClick={() => {
+                                if (reinstallUrl) {
+                                    window.top!.location.href = reinstallUrl;
+                                }
+                            }}
+                        >
+                            Reconnect App
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </>
+    );
 }
