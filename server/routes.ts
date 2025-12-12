@@ -103,10 +103,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
           <p>Redirecting...</p>
           <script>
             // Break out of iframe and redirect to OAuth URL
-            if (window.top && window.top !== window) {
-              window.top.location.href = ${JSON.stringify(exitIframe)};
+            // Attempt to use App Bridge first as it is the most reliable way in new Shopify Admin
+            if (window.shopify && window.shopify.open) {
+                try {
+                    // App Bridge open with _top target handles the breakout
+                    window.shopify.open(${JSON.stringify(exitIframe)}, "_top");
+                } catch (e) {
+                    console.error("App Bridge open failed:", e);
+                    fallbackRedirect();
+                }
             } else {
-              window.location.href = ${JSON.stringify(exitIframe)};
+                fallbackRedirect();
+            }
+
+            function fallbackRedirect() {
+                try {
+                    if (window.top && window.top !== window) {
+                        window.top.location.href = ${JSON.stringify(exitIframe)};
+                    } else {
+                        window.location.href = ${JSON.stringify(exitIframe)};
+                    }
+                } catch (e) {
+                    // If top access is blocked, try standard navigation as last resort
+                    window.location.href = ${JSON.stringify(exitIframe)};
+                }
             }
           </script>
         </body>

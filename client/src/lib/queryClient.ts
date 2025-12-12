@@ -65,40 +65,29 @@ async function throwIfResNotOk(res: Response) {
       try {
         const data = await clonedRes.json();
         
-        // Case 1: App not installed or offline session missing
-        // Requires FULL OAuth with user gesture (cannot auto-redirect from iframe)
+          // Case 1: App not installed or offline session missing
+        // Requires FULL OAuth with user gesture (cannot auto-redirect from iframe usually)
         if (data.requiresInstall && data.installUrl) {
-          console.error("[Auth] App not installed. User must click to reinstall.");
+          console.error("[Auth] App not installed. Redirecting to install...");
           
-          // Prevent multiple simultaneous reinstall prompts
           if (isShowingReinstallPrompt) {
-            console.log("[Auth] Reinstall prompt already showing, skipping...");
+            console.log("[Auth] Reinstall redirect already in progress, skipping...");
             return new Promise(() => {}); // Pause execution indefinitely
           }
           
-          // Try to auto-redirect using App Bridge first (Zero Popup experience)
-          if (window.shopify && window.shopify.open) {
-            try {
-              console.log("[Auth] Attempting auto-redirect via App Bridge...");
-              const installUrlRaw = data.installUrl;
-              const installUrl = installUrlRaw.startsWith("http") 
-                ? installUrlRaw 
-                : `${window.location.origin}${installUrlRaw}`;
-                
-              window.shopify.open(installUrl, "_top");
-              return new Promise(() => {}); // Pause execution
-            } catch (e) {
-              console.warn("[Auth] App Bridge auto-redirect failed, falling back to modal:", e);
-            }
-          }
-
-          // Fallback: Dispatch event to show React UI modal
-          // This avoids the "Embedded page says" popup
-          window.dispatchEvent(
-            new CustomEvent("shopify:reinstall_required", {
-              detail: { installUrl: data.installUrl },
-            })
-          );
+          isShowingReinstallPrompt = true;
+          
+          // Use exitiframe pattern to break out of iframe
+          // This navigates the iframe to a page that handles the top-level redirect
+          // It avoids the "popup" experience by performing a standard navigation
+          const installUrl = data.installUrl.startsWith("http") 
+             ? data.installUrl 
+             : `${window.location.origin}${data.installUrl}`;
+             
+          const exitiframeUrl = `/exitiframe?exitIframe=${encodeURIComponent(installUrl)}`;
+          
+          console.log(`[Auth] Navigating to exitiframe: ${exitiframeUrl}`);
+          window.location.href = exitiframeUrl;
           
           return new Promise(() => {}); // Pause execution
         }
