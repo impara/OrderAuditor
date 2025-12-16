@@ -1320,6 +1320,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Validate returnUrl to prevent open redirect attacks
       const returnUrl = validateReturnUrl(requestedReturnUrl);
 
+      // Check for existing charges first to avoid 403 errors
+      const existingCharges = await shopifyBillingService.handleExistingCharges(
+        shop,
+        accessToken,
+        returnUrl
+      );
+
+      // If there's already a pending charge, reuse it
+      if (existingCharges.hasPendingCharge && existingCharges.pendingCharge) {
+        logger.info(
+          `[Subscription] Found existing pending charge ${existingCharges.pendingCharge.id}, reusing confirmation URL`
+        );
+        return res.json({
+          success: true,
+          charge: existingCharges.pendingCharge,
+          confirmationUrl: existingCharges.pendingCharge.confirmation_url,
+          existing: true,
+        });
+      }
+
+      // If there's already an active charge, return success
+      if (existingCharges.hasActiveCharge && existingCharges.activeCharge) {
+        logger.info(
+          `[Subscription] Store already has active charge ${existingCharges.activeCharge.id}`
+        );
+        return res.json({
+          success: true,
+          charge: existingCharges.activeCharge,
+          message: "Subscription already active",
+          alreadyActive: true,
+        });
+      }
+
+      // No existing charges, create a new one
       const charge = await shopifyBillingService.createRecurringCharge(
         shop,
         accessToken,
