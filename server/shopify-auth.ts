@@ -190,6 +190,21 @@ export async function authCallback(req: Request, res: Response) {
     const stored = await shopify.config.sessionStorage!.storeSession(session);
     logger.info(`[AuthCallback] Manual session storage result: ${stored}`);
 
+    // DIAGNOSTIC: Immediately try to load the session back to verify it was saved correctly
+    logger.info(`[AuthCallback] DIAGNOSTIC: Attempting to load session immediately after save...`);
+    const offlineSessionId = shopify.session.getOfflineId(session.shop);
+    logger.info(`[AuthCallback] DIAGNOSTIC: Session ID to load: ${offlineSessionId}`);
+    const verifySession = await shopify.config.sessionStorage.loadSession(offlineSessionId);
+    if (verifySession && verifySession.accessToken) {
+      logger.info(`[AuthCallback] DIAGNOSTIC: ✅ Session successfully verified - can be loaded immediately after save`);
+      logger.info(`[AuthCallback] DIAGNOSTIC: Verified session shop: ${verifySession.shop}, token prefix: ${verifySession.accessToken.substring(0, 6)}`);
+    } else {
+      logger.error(`[AuthCallback] DIAGNOSTIC: ❌ CRITICAL: Session NOT found immediately after save! This will cause 401 errors.`);
+      logger.error(`[AuthCallback] DIAGNOSTIC: Session ID that was stored: ${session.id}`);
+      logger.error(`[AuthCallback] DIAGNOSTIC: Session ID we tried to load: ${offlineSessionId}`);
+      logger.error(`[AuthCallback] DIAGNOSTIC: Are they the same? ${session.id === offlineSessionId}`);
+    }
+
     // Register webhooks after auth
     // Note: Webhook registration may fail if Protected Customer Data access is not approved
     // This is non-blocking - the app can still function, but duplicate detection will be limited

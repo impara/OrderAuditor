@@ -90,17 +90,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     // Return HTML that uses App Bridge to break out of iframe and redirect
+    // No visible content - redirect happens instantly
     const apiKey = process.env.SHOPIFY_API_KEY || "";
     res.send(`
       <!DOCTYPE html>
       <html>
         <head>
           <meta charset="utf-8">
-          <title>Redirecting...</title>
           <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
         </head>
         <body>
-          <p>Redirecting...</p>
           <script>
             // Break out of iframe and redirect to OAuth URL
             // Attempt to use App Bridge first as it is the most reliable way in new Shopify Admin
