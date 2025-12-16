@@ -37,8 +37,13 @@ function SubscriptionPage() {
   const upgradeMutation = useMutation({
     mutationFn: async () => {
       setUpgradeLoading(true);
-      const params = new URLSearchParams(window.location.search);
-      const returnUrl = `${window.location.origin}/subscription?upgrade=success${params.toString() ? `&${params.toString()}` : ''}`;
+      const currentParams = new URLSearchParams(window.location.search);
+      // Only keep essential context params to avoid URL length issues with Shopify API
+      const contextParams = new URLSearchParams();
+      if (currentParams.get("shop")) contextParams.set("shop", currentParams.get("shop")!);
+      if (currentParams.get("host")) contextParams.set("host", currentParams.get("host")!);
+
+      const returnUrl = `${window.location.origin}/subscription?upgrade=success&${contextParams.toString()}`;
 
       const res = await apiRequest("POST", "/api/subscription/upgrade", {
         returnUrl,

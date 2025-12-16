@@ -88,7 +88,7 @@ export class ShopifyBillingService {
       const chargeData = {
         recurring_application_charge: {
           name: "Duplicate Guard - Unlimited Plan",
-          price: 7.99,
+          price: "7.99",
           return_url: returnUrl,
           test: isTestMode,
         },
