@@ -57,6 +57,31 @@ export class ShopifyBillingService {
       // Set SHOPIFY_BILLING_TEST_MODE=true for review/dev stores
       // Set SHOPIFY_BILLING_TEST_MODE=false for production (real charges)
       const isTestMode = process.env.SHOPIFY_BILLING_TEST_MODE === 'true';
+      const isBypassMode = process.env.SHOPIFY_BILLING_BYPASS === 'true';
+
+      if (isBypassMode) {
+        logger.warn(
+          `[ShopifyBilling] BYPASS MODE ENABLED: Skipping Shopify Billing API call for ${shopDomain}. Simulating successful charge creation.`
+        );
+
+        // Simulate created charge
+        const mockCharge: ShopifyRecurringCharge = {
+          id: Math.floor(Math.random() * 1000000),
+          name: "Duplicate Guard - Unlimited Plan (Bypass)",
+          price: "7.99",
+          status: "pending",
+          return_url: returnUrl,
+          // In bypass mode, we redirect immediately to the return URL (success page)
+          // The frontend expects a confirmation_url to redirect to. We set it to the returnUrl
+          // so the user is "confirmed" immediately by the browser.
+          confirmation_url: returnUrl, 
+        };
+        return mockCharge;
+      }
+
+      this.logBillingMode(shopDomain, isTestMode);
+
+
 
       const chargeData = {
         recurring_application_charge: {
@@ -66,10 +91,6 @@ export class ShopifyBillingService {
           test: isTestMode,
         },
       };
-
-      logger.info(
-        `[ShopifyBilling] Creating ${isTestMode ? 'TEST' : 'LIVE'} recurring charge for ${shopDomain}`
-      );
 
       const response = await fetch(url, {
         method: "POST",
@@ -154,6 +175,15 @@ export class ShopifyBillingService {
   ): Promise<boolean> {
     if (!this.validateCredentials(shopDomain, accessToken)) {
       return false;
+    }
+
+    if (process.env.SHOPIFY_BILLING_BYPASS === 'true') {
+      logger.warn(
+        `[ShopifyBilling] BYPASS MODE ENABLED: Skipping active charge check for ${shopDomain}. Upgrading subscription immediately.`
+      );
+      // Update subscription to paid tier
+      await subscriptionService.updateTier(shopDomain, "paid", -1);
+      return true;
     }
 
     try {
@@ -366,6 +396,14 @@ export class ShopifyBillingService {
       logger.error("[ShopifyBilling] Error cancelling charge:", error);
       return false;
     }
+  }
+
+  private logBillingMode(shopDomain: string, isTestMode: boolean) {
+    logger.info(
+      `[ShopifyBilling] Creating ${
+        isTestMode ? "TEST" : "LIVE"
+      } recurring charge for ${shopDomain}`
+    );
   }
 }
 
