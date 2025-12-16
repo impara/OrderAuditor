@@ -117,72 +117,35 @@ export async function authCallback(req: Request, res: Response) {
     const tokenLength = session.accessToken?.length || 0;
 
     logger.info(
-      `[AuthCallback] OAuth callback completed, session ID: ${session.id}, shop: ${session.shop}, isOnline: ${session.isOnline}`
+      `[AuthCallback] OAuth completed for shop: ${session.shop}, session type: ${session.isOnline ? 'online' : 'offline'}`
     );
-    logger.info(
-      `[AuthCallback] Session has accessToken: ${!!session.accessToken}, token prefix: ${tokenPrefix}, token length: ${tokenLength}`
+    logger.debug(
+      `[AuthCallback] Session details - ID: ${session.id}, token prefix: ${tokenPrefix}, length: ${tokenLength}`
     );
 
-    // Log full session details for debugging
-    // Note: Token prefixes are NOT reliable indicators - check response structure instead
-    // Online tokens have: expires_in, associated_user_scope, associated_user
-    // Offline tokens have: only access_token and scope
-    logger.debug(`[AuthCallback] Full session details:`, {
-      id: session.id,
-      shop: session.shop,
-      isOnline: session.isOnline,
-      scope: session.scope,
-      expires: session.expires?.toISOString(),
-      tokenPrefix,
-      tokenLength,
-      hasOnlineAccessInfo: !!session.onlineAccessInfo,
-      onlineAccessInfo: session.onlineAccessInfo
-        ? {
-            hasAssociatedUser: !!session.onlineAccessInfo.associated_user,
-            expiresIn: session.onlineAccessInfo.expires_in,
-          }
-        : null,
-    });
-
-    // Determine actual token type based on response structure (not prefix)
-    const isActuallyOnlineToken =
-      !!session.onlineAccessInfo?.associated_user || !!session.expires;
+    // Validate token type based on response structure
     const isActuallyOfflineToken =
       !session.onlineAccessInfo?.associated_user && !session.expires;
 
-    logger.info(
-      `[AuthCallback] Token type analysis - Prefix: ${tokenPrefix}, Has expires: ${!!session.expires}, Has associated_user: ${!!session
-        .onlineAccessInfo?.associated_user}`
-    );
-    logger.info(
-      `[AuthCallback] Actual token type - Is Online: ${isActuallyOnlineToken}, Is Offline: ${isActuallyOfflineToken}`
+    logger.debug(
+      `[AuthCallback] Token validation - Prefix: ${tokenPrefix}, isOffline: ${isActuallyOfflineToken}`
     );
 
-    // Validate that we got an offline session as expected
+    // Validate we received the expected offline session
     if (session.isOnline) {
       logger.error(
-        `[AuthCallback] WARNING: Received ONLINE session but expected OFFLINE session! This will cause API call failures.`
+        `[AuthCallback] ERROR: Received ONLINE session but expected OFFLINE. Shop: ${session.shop}`
       );
+    } else if (tokenPrefix === "shpua_") {
       logger.error(
-        `[AuthCallback] Session details - ID: ${session.id}, Shop: ${session.shop}, Token prefix: ${tokenPrefix}`
+        `[AuthCallback] ERROR: Offline session has USER token (shpua_) instead of OFFLINE token (shpat_)!`
       );
+    } else if (tokenPrefix === "shpat_") {
+      logger.debug(`[AuthCallback] ✅ Valid offline token (shpat_)`);
     } else {
-      // Validate offline token format
-      if (session.accessToken) {
-        if (tokenPrefix === "shpua_") {
-          logger.error(
-            `[AuthCallback] CRITICAL: Offline session has USER ACCESS TOKEN (shpua_) instead of OFFLINE TOKEN (shpat_)!`
-          );
-        } else if (tokenPrefix === "shpat_") {
-          logger.info(
-            `[AuthCallback] ✅ Valid offline token received (shpat_ prefix)`
-          );
-        } else {
-          logger.warn(
-            `[AuthCallback] Unexpected token prefix: ${tokenPrefix}. Expected 'shpat_' for offline tokens.`
-          );
-        }
-      }
+      logger.warn(
+        `[AuthCallback] Unexpected token prefix: ${tokenPrefix}. Expected 'shpat_'`
+      );
     }
 
     // Manually store the session to ensure it's saved
@@ -190,19 +153,14 @@ export async function authCallback(req: Request, res: Response) {
     const stored = await shopify.config.sessionStorage!.storeSession(session);
     logger.info(`[AuthCallback] Manual session storage result: ${stored}`);
 
-    // DIAGNOSTIC: Immediately try to load the session back to verify it was saved correctly
-    logger.info(`[AuthCallback] DIAGNOSTIC: Attempting to load session immediately after save...`);
+    // Verify session was saved correctly (debug logging for troubleshooting)
+    logger.debug(`[AuthCallback] Verifying session save...`);
     const offlineSessionId = shopify.session.getOfflineId(session.shop);
-    logger.info(`[AuthCallback] DIAGNOSTIC: Session ID to load: ${offlineSessionId}`);
     const verifySession = await shopify.config.sessionStorage.loadSession(offlineSessionId);
     if (verifySession && verifySession.accessToken) {
-      logger.info(`[AuthCallback] DIAGNOSTIC: ✅ Session successfully verified - can be loaded immediately after save`);
-      logger.info(`[AuthCallback] DIAGNOSTIC: Verified session shop: ${verifySession.shop}, token prefix: ${verifySession.accessToken.substring(0, 6)}`);
+      logger.debug(`[AuthCallback] ✅ Session verified successfully`);
     } else {
-      logger.error(`[AuthCallback] DIAGNOSTIC: ❌ CRITICAL: Session NOT found immediately after save! This will cause 401 errors.`);
-      logger.error(`[AuthCallback] DIAGNOSTIC: Session ID that was stored: ${session.id}`);
-      logger.error(`[AuthCallback] DIAGNOSTIC: Session ID we tried to load: ${offlineSessionId}`);
-      logger.error(`[AuthCallback] DIAGNOSTIC: Are they the same? ${session.id === offlineSessionId}`);
+      logger.error(`[AuthCallback] ❌ CRITICAL: Session NOT found after save! Session ID: ${session.id}`);
     }
 
     // Register webhooks after auth
