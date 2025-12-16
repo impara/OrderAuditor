@@ -12,7 +12,7 @@ services:
     volumes:
       - postgres_data_prod:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:5000/api/health > /dev/null || exit 1"]
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:5000/api/health > /dev/null || exit 1" ]
       interval: 10s
       retries: 5
       timeout: 5s
@@ -28,11 +28,15 @@ services:
     environment:
       NODE_ENV: production
       PORT: 5000
+      LOG_LEVEL: ${LOG_LEVEL:-info}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      DB_POOL_MAX: ${DB_POOL_MAX:-20}
+      DB_POOL_MIN: ${DB_POOL_MIN:-5}
       SHOPIFY_SHOP_DOMAIN: ${SHOPIFY_SHOP_DOMAIN}
       SHOPIFY_API_KEY: ${SHOPIFY_API_KEY}
       SHOPIFY_API_SECRET: ${SHOPIFY_API_SECRET}
       SHOPIFY_WEBHOOK_SECRET: ${SHOPIFY_WEBHOOK_SECRET:-}
+      SHOPIFY_BILLING_TEST_MODE: ${SHOPIFY_BILLING_TEST_MODE:-true}
       APP_URL: ${APP_URL}
       VITE_SHOPIFY_API_KEY: ${SHOPIFY_API_KEY}
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
@@ -45,13 +49,13 @@ services:
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
     ports:
-      - "5000:5000"   # host -> container
+      - "5000:5000" # host -> container
     depends_on:
       - postgres
     networks:
       - duplicate-guard-network
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/health', r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      test: [ "CMD", "node", "-e", "require('http').get('http://localhost:5000/health', r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -65,11 +69,15 @@ services:
     environment:
       NODE_ENV: production
       PORT: 5000
+      LOG_LEVEL: ${LOG_LEVEL:-info}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      DB_POOL_MAX: ${DB_POOL_MAX:-20}
+      DB_POOL_MIN: ${DB_POOL_MIN:-5}
       SHOPIFY_SHOP_DOMAIN: ${SHOPIFY_SHOP_DOMAIN}
       SHOPIFY_API_KEY: ${SHOPIFY_API_KEY}
       SHOPIFY_API_SECRET: ${SHOPIFY_API_SECRET}
       SHOPIFY_WEBHOOK_SECRET: ${SHOPIFY_WEBHOOK_SECRET:-}
+      SHOPIFY_BILLING_TEST_MODE: ${SHOPIFY_BILLING_TEST_MODE:-true}
       APP_URL: ${APP_URL}
       VITE_SHOPIFY_API_KEY: ${SHOPIFY_API_KEY}
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
@@ -81,13 +89,13 @@ services:
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
-    ports: []  # inactive until promoted
+    ports: [] # inactive until promoted
     depends_on:
       - postgres
     networks:
       - duplicate-guard-network
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/health', r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      test: [ "CMD", "node", "-e", "require('http').get('http://localhost:5000/health', r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -95,6 +103,7 @@ services:
 
 volumes:
   postgres_data_prod:
+
 
 networks:
   duplicate-guard-network:
