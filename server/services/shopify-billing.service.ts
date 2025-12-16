@@ -53,16 +53,22 @@ export class ShopifyBillingService {
         shopDomain
       )}/recurring_application_charges.json`;
 
+      // Use test charges on development stores (required for app review)
+      // Set SHOPIFY_BILLING_TEST_MODE=true for review/dev stores
+      // Set SHOPIFY_BILLING_TEST_MODE=false for production (real charges)
+      const isTestMode = process.env.SHOPIFY_BILLING_TEST_MODE === 'true';
+
       const chargeData = {
         recurring_application_charge: {
           name: "Duplicate Guard - Unlimited Plan",
           price: 7.99,
           return_url: returnUrl,
+          test: isTestMode,
         },
       };
 
       logger.info(
-        `[ShopifyBilling] Creating recurring charge for ${shopDomain}`
+        `[ShopifyBilling] Creating ${isTestMode ? 'TEST' : 'LIVE'} recurring charge for ${shopDomain}`
       );
 
       const response = await fetch(url, {
