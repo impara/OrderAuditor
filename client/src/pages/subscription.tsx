@@ -37,8 +37,11 @@ function SubscriptionPage() {
   const upgradeMutation = useMutation({
     mutationFn: async () => {
       setUpgradeLoading(true);
+      const params = new URLSearchParams(window.location.search);
+      const returnUrl = `${window.location.origin}/subscription?upgrade=success${params.toString() ? `&${params.toString()}` : ''}`;
+
       const res = await apiRequest("POST", "/api/subscription/upgrade", {
-        returnUrl: `${window.location.origin}/subscription?upgrade=success`,
+        returnUrl,
       });
       return res.json();
     },
@@ -114,6 +117,31 @@ function SubscriptionPage() {
     },
   });
 
+  const activateMutation = useMutation({
+    mutationFn: async (chargeId: string) => {
+      const res = await apiRequest("POST", "/api/subscription/activate", {
+        chargeId: parseInt(chargeId),
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/subscription"] });
+      toast({
+        title: "Upgrade successful!",
+        description: "Your subscription has been activated.",
+      });
+      // Clean URL
+      window.history.replaceState({}, "", "/subscription");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Activation failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const cancelMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/subscription/cancel");
@@ -146,13 +174,15 @@ function SubscriptionPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("upgrade") === "success") {
-      queryClient.invalidateQueries({ queryKey: ["/api/subscription"] });
-      toast({
-        title: "Upgrade successful!",
-        description: "Your subscription has been activated.",
-      });
-      // Clean URL
-      window.history.replaceState({}, "", "/subscription");
+      const chargeId = params.get("charge_id");
+      if (chargeId) {
+        activateMutation.mutate(chargeId);
+      } else {
+        // Fallback or just showing success toast (but without activation it won't work)
+        // If we are here without charge_id, something might be wrong with the flow unless it was an existing active charge
+        // But let's assume if charge_id is missing, we might need to check subscription status
+        queryClient.invalidateQueries({ queryKey: ["/api/subscription"] });
+      }
     }
   }, [queryClient, toast]);
 

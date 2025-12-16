@@ -74,7 +74,8 @@ export class ShopifyBillingService {
           // In bypass mode, we redirect immediately to the return URL (success page)
           // The frontend expects a confirmation_url to redirect to. We set it to the returnUrl
           // so the user is "confirmed" immediately by the browser.
-          confirmation_url: returnUrl, 
+          // We append a dummy charge_id so the frontend detects it and calls activate()
+          confirmation_url: `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}charge_id=bypass_${Math.floor(Math.random() * 10000)}`, 
         };
         return mockCharge;
       }
