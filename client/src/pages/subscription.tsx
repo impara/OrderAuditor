@@ -130,8 +130,12 @@ function SubscriptionPage() {
         title: "Upgrade successful!",
         description: "Your subscription has been activated.",
       });
-      // Clean URL
-      window.history.replaceState({}, "", "/subscription");
+      // Clean URL but preserve context params
+      const params = new URLSearchParams(window.location.search);
+      params.delete("upgrade");
+      params.delete("charge_id");
+      const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}`;
+      window.history.replaceState({}, "", newUrl);
     },
     onError: (error: Error) => {
       toast({
