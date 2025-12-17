@@ -291,6 +291,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { shop } = res.locals.shopify;
       const validatedData = updateDetectionSettingsSchema.parse(req.body);
+
+      // Check subscription if user is trying to enable notifications
+      if (validatedData.enableNotifications) {
+        const subscription = await subscriptionService.getSubscription(shop);
+        if (subscription.tier !== "paid") {
+          logger.warn(
+            `[Settings] Shop ${shop} (free tier) attempted to enable notifications. Forcing disabled.`
+          );
+          validatedData.enableNotifications = false;
+        }
+      }
+
       const settings = await storage.updateSettings(shop, validatedData);
       res.json(settings);
     } catch (error) {

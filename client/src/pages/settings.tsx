@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -11,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
-import { Flag, Bell, Save } from "lucide-react";
+import { Flag, Bell, Save, Zap } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -25,9 +26,16 @@ import { WelcomeBanner } from "@/components/WelcomeBanner";
 export default function Settings() {
   const { toast } = useToast();
 
-  const { data: settings, isLoading } = useQuery<DetectionSettings>({
+  const { data: settings, isLoading: isLoadingSettings } = useQuery<DetectionSettings>({
     queryKey: ['/api/settings'],
   });
+
+  const { data: subscription, isLoading: isLoadingSubscription } = useQuery<any>({
+    queryKey: ['/api/subscription'],
+  });
+
+  const isLoading = isLoadingSettings || isLoadingSubscription;
+  const isPaid = subscription?.tier === "paid";
 
   const form = useForm<UpdateDetectionSettings>({
     resolver: zodResolver(updateDetectionSettingsSchema),
@@ -319,7 +327,21 @@ export default function Settings() {
               </TabsContent>
 
               <TabsContent value="notifications" className="space-y-4">
-                <Card>
+                {!isPaid && (
+                  <Alert className="mb-4 border-blue-500 bg-blue-50 dark:bg-blue-950/20">
+                    <div className="flex items-center gap-2">
+                      <Zap className="h-4 w-4 text-blue-500" />
+                      <AlertDescription>
+                        <strong>Premium Feature:</strong> Notifications are available on the Unlimited plan.{" "}
+                        <a href="/subscription" className="underline font-medium hover:text-blue-600">
+                          Upgrade to enable
+                        </a>
+                      </AlertDescription>
+                    </div>
+                  </Alert>
+                )}
+
+                <Card className={!isPaid ? "opacity-75" : ""}>
                   <CardHeader>
                     <CardTitle className="text-section-header">Enable Notifications</CardTitle>
                     <CardDescription>
@@ -333,7 +355,10 @@ export default function Settings() {
                       render={({ field }) => (
                         <FormItem className="flex items-center justify-between">
                           <div className="space-y-0.5">
-                            <FormLabel>Notification Alerts</FormLabel>
+                            <FormLabel className="flex items-center gap-2">
+                              Notification Alerts
+                              {!isPaid && <Badge variant="secondary" className="text-xs">Paid Plan</Badge>}
+                            </FormLabel>
                             <FormDescription>
                               Receive alerts via email or Slack
                             </FormDescription>
@@ -342,6 +367,7 @@ export default function Settings() {
                             <Switch
                               checked={field.value}
                               onCheckedChange={field.onChange}
+                              disabled={!isPaid}
                               data-testid="switch-enable-notifications"
                             />
                           </FormControl>
@@ -351,7 +377,7 @@ export default function Settings() {
                   </CardContent>
                 </Card>
 
-                <Card>
+                <Card className={!isPaid ? "opacity-75" : ""}>
                   <CardHeader>
                     <CardTitle className="text-section-header">Notification Channels</CardTitle>
                     <CardDescription>
@@ -371,6 +397,7 @@ export default function Settings() {
                               placeholder="admin@example.com"
                               {...field}
                               value={field.value || ""}
+                              disabled={!isPaid}
                               data-testid="input-notification-email"
                             />
                           </FormControl>
@@ -393,6 +420,7 @@ export default function Settings() {
                               placeholder="https://hooks.slack.com/services/..."
                               {...field}
                               value={field.value || ""}
+                              disabled={!isPaid}
                               data-testid="input-slack-webhook"
                             />
                           </FormControl>
@@ -422,6 +450,7 @@ export default function Settings() {
                               step={5}
                               value={[field.value || 80]}
                               onValueChange={([value]) => field.onChange(value)}
+                              disabled={!isPaid}
                               data-testid="slider-notification-threshold"
                             />
                           </FormControl>

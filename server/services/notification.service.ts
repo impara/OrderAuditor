@@ -1,5 +1,6 @@
 import { logger } from "../utils/logger";
 import type { DetectionSettings, Order } from "@shared/schema";
+import { subscriptionService } from "./subscription.service";
 import nodemailer from "nodemailer";
 
 interface NotificationData {
@@ -18,6 +19,19 @@ export class NotificationService {
     settings: DetectionSettings,
     data: NotificationData
   ): Promise<void> {
+    // Check if subscription allows notifications (Paid tier only)
+    try {
+      const subscription = await subscriptionService.getSubscription(shopDomain);
+      if (subscription?.tier !== "paid") {
+        logger.debug("[Notification] Free tier subscription, skipping notifications (Premium feature)");
+        return;
+      }
+    } catch (error) {
+      logger.error("[Notification] Failed to check subscription status:", error);
+      // Fail safe: don't send if we can't verify subscription
+      return;
+    }
+
     // Check if notifications are enabled
     if (!settings.enableNotifications) {
       logger.debug("[Notification] Notifications disabled, skipping");
