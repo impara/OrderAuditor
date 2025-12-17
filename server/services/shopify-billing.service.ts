@@ -85,12 +85,14 @@ export class ShopifyBillingService {
 
 
 
+      // Only include 'test' field when in test mode
+      // Per Shopify: "make sure the test flag is set to null" for production
       const chargeData = {
         recurring_application_charge: {
           name: "Duplicate Guard - Unlimited Plan",
           price: "7.99",
           return_url: returnUrl,
-          test: isTestMode,
+          ...(isTestMode && { test: true }),
         },
       };
 
