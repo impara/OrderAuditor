@@ -333,7 +333,7 @@ export default function Settings() {
                       <Zap className="h-4 w-4 text-blue-500" />
                       <AlertDescription>
                         <strong>Premium Feature:</strong> Notifications are available on the Unlimited plan.{" "}
-                        <a href="/subscription" className="underline font-medium hover:text-blue-600">
+                        <a href={`/subscription${window.location.search}`} className="underline font-medium hover:text-blue-600">
                           Upgrade to enable
                         </a>
                       </AlertDescription>
