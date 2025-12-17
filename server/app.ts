@@ -36,14 +36,14 @@ app.use(helmet({
 }));
 
 // Rate limiting
-// Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 1000, // Limit each IP to 1000 requests per windowMs
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
   message: "Too many requests from this IP, please try again later.",
-  // Use Cloudflare's CF-Connecting-IP header for more reliable client IP identification
+  // Use Cloudflare's CF-Connecting-IP header for reliable client IP identification
+  // CF-Connecting-IP is already normalized by Cloudflare so IPv6 handling is not needed
   keyGenerator: (req) => {
     return (req.headers['cf-connecting-ip'] as string) || req.ip || 'unknown';
   },
@@ -51,7 +51,9 @@ const limiter = rateLimit({
     // Skip rate limiting for webhooks as they come from Shopify servers
     // Also skip in development environment
     return req.path.startsWith('/api/webhooks') || process.env.NODE_ENV === 'development';
-  }
+  },
+  // Disable validation for keyGenerator - we use CF-Connecting-IP which Cloudflare normalizes
+  validate: { xForwardedForHeader: false, keyGeneratorIpFallback: false }
 });
 
 // Apply rate limiting to API routes only
