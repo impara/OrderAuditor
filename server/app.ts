@@ -18,6 +18,11 @@ export function log(message: string, source = "express") {
 
 export const app = express();
 
+// Trust proxy - required when running behind Cloudflare Tunnel (cloudflared)
+// Cloudflare Tunnel adds X-Forwarded-For header with the real client IP
+// Using 'true' trusts all proxies, which is safe when cloudflared is the only entry point
+app.set('trust proxy', true);
+
 declare module 'http' {
   interface IncomingMessage {
     rawBody: Buffer;
@@ -38,6 +43,10 @@ const limiter = rateLimit({
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
   message: "Too many requests from this IP, please try again later.",
+  // Use Cloudflare's CF-Connecting-IP header for more reliable client IP identification
+  keyGenerator: (req) => {
+    return (req.headers['cf-connecting-ip'] as string) || req.ip || 'unknown';
+  },
   skip: (req) => {
     // Skip rate limiting for webhooks as they come from Shopify servers
     // Also skip in development environment
