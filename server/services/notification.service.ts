@@ -225,7 +225,7 @@ Please review these orders in your Shopify admin.
                 🚨 Duplicate Order Detected
               </h1>
               <p style="margin: 8px 0 0; color: #94a3b8; font-size: 14px;">
-                Order Auditor Alert for ${shopDomain}
+                Duplicate Guard Alert for ${shopDomain}
               </p>
             </td>
           </tr>
@@ -352,7 +352,7 @@ Please review these orders in your Shopify admin.
                 This alert was sent because a potential duplicate order was detected in your store.
               </p>
               <p style="margin: 0; font-size: 12px; color: #94a3b8; text-align: center;">
-                Manage your notification settings in the <a href="https://${shopDomain}/admin/apps/order-auditor" style="color: #0369a1; text-decoration: none;">Order Auditor app</a>.
+                Manage your notification settings in the <a href="https://${shopDomain}/admin/apps/order-auditor" style="color: #0369a1; text-decoration: none;">Duplicate Guard app</a>.
               </p>
             </td>
           </tr>
