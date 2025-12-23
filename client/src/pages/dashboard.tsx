@@ -193,14 +193,14 @@ function OrderDetailsModal({ order, isOpen, onClose }: { order: Order; isOpen: b
                 <div className="flex items-center gap-2">
                   <Avatar className="h-10 w-10">
                     <AvatarFallback className="bg-primary/10 text-primary">
-                      {order.customerName?.charAt(0) || order.customerEmail.charAt(0).toUpperCase()}
+                      {order.customerName?.charAt(0) || order.customerEmail?.charAt(0).toUpperCase() || '?'}
                     </AvatarFallback>
                   </Avatar>
                   <div className="overflow-hidden">
                     <div className="text-sm font-medium truncate">{order.customerName || 'Unknown Customer'}</div>
                     <div className="text-xs text-muted-foreground flex items-center gap-1 truncate">
                       <Mail className="h-3 w-3 shrink-0" />
-                      {order.customerEmail}
+                      {order.customerEmail || 'No Email'}
                     </div>
                   </div>
                 </div>
@@ -308,12 +308,12 @@ function MobileOrderCard({ order, onClick }: { order: Order; onClick: () => void
         <div className="flex items-center gap-3 mb-3">
           <Avatar className="h-9 w-9">
             <AvatarFallback className="text-xs bg-primary/10 text-primary">
-              {order.customerName?.charAt(0) || order.customerEmail.charAt(0).toUpperCase()}
+              {order.customerName?.charAt(0) || order.customerEmail?.charAt(0).toUpperCase() || '?'}
             </AvatarFallback>
           </Avatar>
           <div className="overflow-hidden">
             <div className="text-sm font-medium truncate">{order.customerName || 'Unknown'}</div>
-            <div className="text-xs text-muted-foreground truncate">{order.customerEmail}</div>
+            <div className="text-xs text-muted-foreground truncate">{order.customerEmail || 'No Email'}</div>
           </div>
         </div>
 
@@ -367,7 +367,7 @@ function FlaggedOrdersTable({ orders }: { orders: Order[] }) {
                     <div className="flex items-center gap-2">
                       <Avatar className="h-8 w-8">
                         <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                          {order.customerName?.charAt(0) || order.customerEmail.charAt(0).toUpperCase()}
+                          {order.customerName?.charAt(0) || order.customerEmail?.charAt(0).toUpperCase() || '?'}
                         </AvatarFallback>
                       </Avatar>
                       <div>
@@ -375,7 +375,7 @@ function FlaggedOrdersTable({ orders }: { orders: Order[] }) {
                           {order.customerName || 'Unknown'}
                         </div>
                         <div className="text-xs text-muted-foreground" data-testid={`text-customer-email-${order.id}`}>
-                          {order.customerEmail}
+                          {order.customerEmail || 'No Email'}
                         </div>
                       </div>
                     </div>
