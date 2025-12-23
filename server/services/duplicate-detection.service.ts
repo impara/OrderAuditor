@@ -44,7 +44,7 @@ export class DuplicateDetectionService {
 
     let existingOrders: Order[] = [];
 
-    if (settings.matchEmail) {
+    if (settings.matchEmail && newOrder.customerEmail) {
       logger.debug(
         `[DuplicateDetection] Searching for orders with email: ${newOrder.customerEmail}`
       );
@@ -62,6 +62,10 @@ export class DuplicateDetectionService {
         `[DuplicateDetection] Found ${ordersByEmail.length} orders matching email`
       );
       existingOrders = [...existingOrders, ...ordersByEmail];
+    } else if (settings.matchEmail && !newOrder.customerEmail) {
+      logger.debug(
+        `[DuplicateDetection] Email matching enabled but new order has no email. Skipping email-based search.`
+      );
     }
 
     if (settings.matchPhone && newOrder.customerPhone) {

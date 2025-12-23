@@ -23,7 +23,7 @@ export const orders = pgTable("orders", {
   // To avoid complex composite keys in Drizzle for now, let's just remove unique constraint on shopifyOrderId or make it unique per shop.
   // Actually, Shopify IDs are unique across all of Shopify. But let's be safe.
   orderNumber: varchar("order_number").notNull(),
-  customerEmail: text("customer_email").notNull(),
+  customerEmail: text("customer_email"),
   customerName: text("customer_name"),
   customerPhone: text("customer_phone"),
   shippingAddress: jsonb("shipping_address").$type<{
