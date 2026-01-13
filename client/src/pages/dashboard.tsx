@@ -16,6 +16,7 @@ import { useState } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { Link, useLocation } from "wouter";
 import { Header } from "@/components/Header";
+import { QuotaWarningBanner } from "@/components/QuotaWarningBanner";
 
 function StatsCard({
   title,
@@ -451,6 +452,7 @@ export default function Dashboard() {
       <Header />
 
       <main className="container mx-auto px-4 sm:px-6 py-6">
+        <QuotaWarningBanner />
         <div className="flex flex-col lg:flex-row gap-6">
           <div className="flex-1 order-2 lg:order-1">
             {ordersLoading ? (

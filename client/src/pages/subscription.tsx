@@ -261,7 +261,7 @@ function SubscriptionPage() {
                 </Badge>
               </div>
               <CardDescription>
-                {isPaid ? "$7.99/month - Unlimited orders" : "Free - 50 orders/month"}
+                {isPaid ? "$7.99/month - Unlimited duplicates" : "Free - 30 duplicates/month"}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -287,7 +287,7 @@ function SubscriptionPage() {
                 )}
                 {!isUnlimited && (
                   <p className="text-xs text-muted-foreground mt-2">
-                    {remainingOrders} orders remaining this month
+                    {remainingOrders} duplicates remaining this month
                   </p>
                 )}
               </div>
@@ -312,14 +312,14 @@ function SubscriptionPage() {
                     <Alert className="mt-4 border-destructive/50 bg-destructive/10 text-destructive dark:border-destructive">
                       <AlertCircle className="h-4 w-4" />
                       <AlertDescription>
-                        You have reached your monthly limit. Upgrade to continue processing orders.
+                        You have reached your monthly limit. Upgrade to continue detecting duplicates.
                       </AlertDescription>
                     </Alert>
                   ) : usagePercentage >= 90 ? (
                     <Alert className="mt-4">
                       <AlertCircle className="h-4 w-4" />
                       <AlertDescription>
-                        You're approaching your monthly limit. Upgrade to continue processing orders.
+                        You're approaching your monthly limit. Upgrade to continue detecting duplicates.
                       </AlertDescription>
                     </Alert>
                   ) : null}
@@ -344,7 +344,7 @@ function SubscriptionPage() {
                   <ul className="space-y-2 text-sm">
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-primary" />
-                      <span>50 orders/month</span>
+                      <span>30 duplicates/month</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-primary" />
@@ -372,7 +372,7 @@ function SubscriptionPage() {
                   <ul className="space-y-2 text-sm">
                     <li className="flex items-center gap-2">
                       <Zap className="h-4 w-4 text-primary" />
-                      <span>Unlimited orders</span>
+                      <span>Unlimited duplicates</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-primary" />

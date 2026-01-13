@@ -118,7 +118,7 @@ export class SubscriptionService {
     } else if (tier === "paid") {
       updates.orderLimit = -1; // Unlimited for paid tier
     } else {
-      updates.orderLimit = 50; // Free tier limit
+      updates.orderLimit = 30; // Free tier limit
     }
 
     return storage.updateSubscription(shopDomain, updates);

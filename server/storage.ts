@@ -310,7 +310,7 @@ export class DatabaseStorage implements IStorage {
       tier: "free",
       status: "active",
       monthlyOrderCount: 0,
-      orderLimit: 50, // Free tier: 50 orders/month
+      orderLimit: 30, // Free tier: 30 duplicates/month
       currentBillingPeriodStart: periodStart,
       currentBillingPeriodEnd: periodEnd,
     });

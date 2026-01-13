@@ -123,12 +123,13 @@ export const subscriptions = pgTable("subscriptions", {
   tier: varchar("tier", { length: 20 }).notNull().default("free"), // 'free', 'paid'
   status: varchar("status", { length: 20 }).notNull().default("active"), // 'active', 'cancelled', 'expired'
   monthlyOrderCount: integer("monthly_order_count").notNull().default(0),
-  orderLimit: integer("order_limit").notNull().default(50), // 50 for free, -1 for unlimited paid
+  orderLimit: integer("order_limit").notNull().default(30), // 30 for free, -1 for unlimited paid
   currentBillingPeriodStart: timestamp("current_billing_period_start")
     .notNull()
     .default(sql`now()`),
   currentBillingPeriodEnd: timestamp("current_billing_period_end"),
   shopifyChargeId: varchar("shopify_charge_id", { length: 255 }), // Shopify Billing API charge ID
+  quotaExceededNotifiedAt: timestamp("quota_exceeded_notified_at"), // Timestamp when 100% quota notification was sent
   createdAt: timestamp("created_at")
     .notNull()
     .default(sql`now()`),

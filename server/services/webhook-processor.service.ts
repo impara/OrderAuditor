@@ -214,6 +214,20 @@ export class WebhookProcessorService {
         } catch (error) {
           logger.error(`[WebhookProcessor] Failed to send notification for order ${orderId}:`, error);
         }
+
+        // Increment duplicate count and check for quota exceeded notification
+        try {
+          const updatedSubscription = await subscriptionService.recordOrder(shopDomain);
+          logger.debug(`[WebhookProcessor] Updated duplicate count for ${shopDomain}: ${updatedSubscription.monthlyOrderCount}/${updatedSubscription.orderLimit}`);
+          
+          // Check if limit just reached (and hasn't been notified yet)
+          if (updatedSubscription.orderLimit !== -1 && 
+              updatedSubscription.monthlyOrderCount >= updatedSubscription.orderLimit) {
+            await notificationService.sendQuotaExceededNotification(shopDomain, updatedSubscription);
+          }
+        } catch (error) {
+          logger.warn(`[WebhookProcessor] Failed to update duplicate count:`, error);
+        }
       }
 
       // 5. Save Order to Database
@@ -229,25 +243,15 @@ export class WebhookProcessorService {
         };
 
         await storage.createOrder(orderToSave);
-         logger.info(`[WebhookProcessor] Saved order ${orderId} to database`);
+        logger.info(`[WebhookProcessor] Saved order ${orderId} to database`);
       } catch (error) {
         logger.error(`[WebhookProcessor] Failed to save order ${orderId} to database:`, error);
-        // This might be critical enough to retry the job?
         // If it's a unique constraint error (already exists), we shouldn't fail
         if (String(error).includes("unique-constraint") || String(error).includes("duplicate key")) {
             logger.warn(`[WebhookProcessor] Order ${orderId} already exists in DB.`);
         } else {
              throw error; // Retry for db connection issues
         }
-      }
-      
-      // 6. Check/Update Usage Quota
-      // This is a side effect to ensure we track usage
-      try {
-         await subscriptionService.recordOrder(shopDomain);
-         logger.debug(`[WebhookProcessor] Updated usage quota for ${shopDomain}`);
-      } catch (error) {
-          logger.warn(`[WebhookProcessor] Failed to update quota:`, error);
       }
 
     } catch (error) {

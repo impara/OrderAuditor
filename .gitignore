@@ -18,5 +18,6 @@ yarn-debug.log*
 yarn-error.log*
 
 app-idea.md
-landing-page.yaml
+duplicate-guard-landing-page.yaml
 video-description.md
+prod_dump.sql
