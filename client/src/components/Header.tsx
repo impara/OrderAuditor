@@ -18,6 +18,9 @@ export function Header() {
             <Button variant={location === "/subscription" ? "secondary" : "ghost"} asChild data-testid="link-subscription" className="justify-start">
                 <a href={`/subscription${search}`} className="text-sm font-medium">Subscription</a>
             </Button>
+            <Button variant={location === "/support" ? "secondary" : "ghost"} asChild data-testid="link-support" className="justify-start">
+                <a href={`/support${search}`} className="text-sm font-medium">Support</a>
+            </Button>
         </>
     );
 

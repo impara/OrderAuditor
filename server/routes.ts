@@ -311,6 +311,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Support request endpoint
+  app.post("/api/support", async (req: Request, res: Response) => {
+    try {
+      const { shop } = res.locals.shopify;
+      const { requestType, subject, description, priority } = req.body;
+
+      // Validate required fields
+      if (!requestType || !subject || !description) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      // Get subscription info for context
+      let tier = "free";
+      let merchantEmail: string | undefined;
+      try {
+        const subscription = await subscriptionService.getSubscription(shop);
+        tier = subscription?.tier || "free";
+      } catch (error) {
+        logger.warn(`[Support] Could not fetch subscription for ${shop}:`, error);
+      }
+
+      // Try to get merchant email from session
+      try {
+        const { shopifySessions } = await import("@shared/schema");
+        const { db } = await import("./db");
+        const { eq } = await import("drizzle-orm");
+        
+        const [session] = await db
+          .select()
+          .from(shopifySessions)
+          .where(eq(shopifySessions.shop, shop))
+          .limit(1);
+        
+        merchantEmail = session?.email || undefined;
+      } catch (error) {
+        logger.warn(`[Support] Could not fetch merchant email for ${shop}:`, error);
+      }
+
+      // Send the support request email
+      await notificationService.sendSupportRequest({
+        shopDomain: shop,
+        tier,
+        requestType,
+        subject,
+        description,
+        priority,
+        merchantEmail,
+      });
+
+      logger.info(`[Support] Support request submitted from ${shop}: ${requestType} - ${subject}`);
+
+      res.json({
+        success: true,
+        message: "Support request submitted successfully",
+      });
+    } catch (error) {
+      logger.error("[Support] Error submitting support request:", error);
+      res.status(500).json({
+        error: "Failed to submit support request",
+        details: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
   app.get("/api/webhooks/status", async (_req: Request, res: Response) => {
     try {
       const { shop, accessToken } = res.locals.shopify;

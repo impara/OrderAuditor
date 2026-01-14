@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Dashboard from "@/pages/dashboard";
 import Settings from "@/pages/settings";
 import Subscription from "@/pages/subscription";
+import Support from "@/pages/support";
 import NotFound from "@/pages/not-found";
 import { AppBridgeProvider } from "@/components/AppBridgeProvider";
 
@@ -15,6 +16,7 @@ function Router() {
       <Route path="/" component={Dashboard} />
       <Route path="/settings" component={Settings} />
       <Route path="/subscription" component={Subscription} />
+      <Route path="/support" component={Support} />
       <Route component={NotFound} />
     </Switch>
   );

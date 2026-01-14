@@ -652,6 +652,180 @@ Thank you for using Duplicate Guard!
       html: htmlBody,
     });
   }
+
+  /**
+   * Send support request email to support team
+   */
+  async sendSupportRequest(data: {
+    shopDomain: string;
+    tier: string;
+    requestType: string;
+    subject: string;
+    description: string;
+    priority?: string;
+    merchantEmail?: string;
+  }): Promise<void> {
+    const smtpHost = process.env.SMTP_HOST || "smtp.gmail.com";
+    const smtpPort = parseInt(process.env.SMTP_PORT || "587");
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPassword = process.env.SMTP_PASS;
+    const smtpFrom = process.env.SMTP_FROM || smtpUser;
+    const supportEmail = process.env.SUPPORT_EMAIL || "impara1@gmail.com";
+
+    if (!smtpUser || !smtpPassword) {
+      logger.warn("[Notification] SMTP credentials not configured, cannot send support request");
+      throw new Error("Email service not configured");
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpPort === 465,
+      auth: {
+        user: smtpUser,
+        pass: smtpPassword,
+      },
+    });
+
+    const requestTypeLabels: Record<string, string> = {
+      support: "🎫 Support Request",
+      feature: "💡 Feature Request",
+      bug: "🐛 Bug Report",
+      billing: "💳 Billing Question",
+    };
+
+    const priorityLabels: Record<string, string> = {
+      low: "🟢 Low",
+      normal: "🟡 Normal",
+      high: "🟠 High",
+      urgent: "🔴 Urgent",
+    };
+
+    const typeLabel = requestTypeLabels[data.requestType] || data.requestType;
+    const priorityLabel = priorityLabels[data.priority || "normal"] || data.priority;
+    const subject = `[Duplicate Guard] ${typeLabel}: ${data.subject}`;
+
+    const textBody = `
+${typeLabel}
+
+Shop: ${data.shopDomain}
+Tier: ${data.tier}
+Priority: ${priorityLabel}
+${data.merchantEmail ? `Merchant Email: ${data.merchantEmail}` : ""}
+
+Subject: ${data.subject}
+
+Description:
+${data.description}
+
+---
+Submitted at: ${new Date().toISOString()}
+    `.trim();
+
+    const htmlBody = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6; line-height: 1.6;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f3f4f6;">
+    <tr>
+      <td style="padding: 40px 20px;">
+        <table role="presentation" width="100%" style="max-width: 640px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+          
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #1e293b 0%, #334155 100%); padding: 24px 40px;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 20px; font-weight: 600;">
+                ${typeLabel}
+              </h1>
+            </td>
+          </tr>
+          
+          <!-- Metadata -->
+          <tr>
+            <td style="padding: 24px 40px 0;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f8fafc; border-radius: 8px;">
+                <tr>
+                  <td style="padding: 16px;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                      <tr>
+                        <td width="50%" style="padding: 0 8px 8px 0;">
+                          <span style="font-size: 12px; color: #64748b; display: block;">Shop</span>
+                          <span style="font-size: 14px; color: #1e293b; font-weight: 500;">${data.shopDomain}</span>
+                        </td>
+                        <td width="50%" style="padding: 0 0 8px 8px;">
+                          <span style="font-size: 12px; color: #64748b; display: block;">Tier</span>
+                          <span style="font-size: 14px; color: #1e293b; font-weight: 500;">${data.tier}</span>
+                        </td>
+                      </tr>
+                      ${data.priority ? `
+                      <tr>
+                        <td width="50%" style="padding: 8px 8px 0 0;">
+                          <span style="font-size: 12px; color: #64748b; display: block;">Priority</span>
+                          <span style="font-size: 14px; color: #1e293b; font-weight: 500;">${priorityLabel}</span>
+                        </td>
+                        ${data.merchantEmail ? `
+                        <td width="50%" style="padding: 8px 0 0 8px;">
+                          <span style="font-size: 12px; color: #64748b; display: block;">Merchant Email</span>
+                          <a href="mailto:${data.merchantEmail}" style="font-size: 14px; color: #0369a1; text-decoration: none;">${data.merchantEmail}</a>
+                        </td>
+                        ` : '<td></td>'}
+                      </tr>
+                      ` : ''}
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Subject -->
+          <tr>
+            <td style="padding: 24px 40px 0;">
+              <h2 style="margin: 0 0 8px; font-size: 16px; color: #1e293b; font-weight: 600;">${data.subject}</h2>
+            </td>
+          </tr>
+          
+          <!-- Description -->
+          <tr>
+            <td style="padding: 16px 40px 32px;">
+              <div style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px;">
+                <p style="margin: 0; font-size: 14px; color: #475569; white-space: pre-wrap;">${data.description}</p>
+              </div>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f8fafc; padding: 16px 40px; border-top: 1px solid #e2e8f0;">
+              <p style="margin: 0; font-size: 12px; color: #94a3b8; text-align: center;">
+                Submitted at ${new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
+              </p>
+            </td>
+          </tr>
+          
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `.trim();
+
+    await transporter.sendMail({
+      from: smtpFrom,
+      to: supportEmail,
+      replyTo: data.merchantEmail,
+      subject: subject,
+      text: textBody,
+      html: htmlBody,
+    });
+
+    logger.info(`[Notification] Support request sent for ${data.shopDomain}: ${data.subject}`);
+  }
 }
 
 export const notificationService = new NotificationService();
