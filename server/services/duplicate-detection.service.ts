@@ -1,4 +1,5 @@
 import { db } from "../db";
+import { storage } from "../storage";
 import { orders, detectionSettings, auditLogs } from "@shared/schema";
 import { eq, and, gte, sql } from "drizzle-orm";
 import type { Order, InsertOrder } from "@shared/schema";
@@ -19,17 +20,19 @@ export class DuplicateDetectionService {
     shopDomain: string
   ): Promise<DuplicateMatch | null> {
     // Filter settings by shopDomain for multi-tenant support
-    const [settings] = await db
+    let [settings] = await db
       .select()
       .from(detectionSettings)
       .where(eq(detectionSettings.shopDomain, shopDomain))
       .limit(1);
 
+    // Initialize settings if missing (e.g., merchant never visited Settings page)
     if (!settings) {
-      logger.warn(
-        `[DuplicateDetection] No settings found for shop: ${shopDomain}`
+      logger.info(
+        `[DuplicateDetection] No settings for shop ${shopDomain}, initializing defaults`
       );
-      return null;
+      const initialized = await storage.initializeSettings(shopDomain);
+      settings = initialized;
     }
 
     logger.debug(

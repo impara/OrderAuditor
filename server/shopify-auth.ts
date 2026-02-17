@@ -621,7 +621,15 @@ export async function verifyRequest(
 
     if (!authHeader?.startsWith("Bearer ")) {
       logger.warn(`[Auth] Missing or invalid Bearer token for ${req.path}`);
-      res.status(401).send("Unauthorized: Missing Bearer token");
+      const shopFromQuery = (req.query.shop as string)?.trim();
+      res.status(401).json({
+        message: "Unauthorized: Missing or invalid Bearer token",
+        ...(shopFromQuery && {
+          shop: shopFromQuery,
+          retryAuth: true,
+          installUrl: `/api/auth?shop=${encodeURIComponent(shopFromQuery)}`,
+        }),
+      });
       return;
     }
 
@@ -645,15 +653,14 @@ export async function verifyRequest(
 
     if (!session || !session.accessToken) {
       logger.error(`[Auth] No offline session found for shop ${shop}`);
-      
       // No offline session = app not installed or was uninstalled
-      // This requires FULL OAuth re-authentication (not just token refresh)
-      // We CANNOT auto-redirect from iframe - need user gesture
+      // Return reinstall hint so frontend can redirect to /api/auth?shop=...
       res.status(401).json({
-        message: "Unauthorized: No valid session found. App needs to be reinstalled.",
-        shop: shop,
-        requiresInstall: true, // Frontend shows clickable "Install App" button
-        installUrl: `/api/auth?shop=${shop}`, // URL for the install button
+        message: "Unauthorized: No valid session found. Please reconnect the app.",
+        shop,
+        retryAuth: true,
+        requiresInstall: true,
+        installUrl: `/api/auth?shop=${encodeURIComponent(shop)}`,
       });
       return;
     }

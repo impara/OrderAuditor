@@ -13,6 +13,11 @@ let isRedirectingToAuth = false;
 // Flag to prevent multiple simultaneous reinstall confirmation dialogs
 let isShowingReinstallPrompt = false;
 
+// Valid token: non-empty string, not literal "null" (prevents Authorization: Bearer null)
+function isValidToken(token: unknown): token is string {
+  return typeof token === "string" && token.length > 0 && token !== "null";
+}
+
 // Helper to get fresh session token using App Bridge v4
 async function getAuthToken(): Promise<string> {
   // DEVELOPMENT BYPASS
@@ -21,31 +26,31 @@ async function getAuthToken(): Promise<string> {
     return "dev-token";
   }
 
-  try {
-    // App Bridge v4 exposes the shopify global
-    if (window.shopify && window.shopify.idToken) {
-      console.log("[Auth] Fetching fresh session token from App Bridge v4...");
-      const token = await window.shopify.idToken();
-      console.log(
-        "[Auth] Got fresh token from App Bridge, length:",
-        token?.length
-      );
-      // Validate token is a string to maintain type contract
-      if (typeof token === "string" && token?.length > 0) {
-        return token;
-      } else {
-        console.warn(
-          "[Auth] Invalid token received from App Bridge (not a string or empty)"
-        );
-        return "";
-      }
-    } else {
-      console.warn(
-        "[Auth] window.shopify not available. Are you running in the Shopify Admin?"
-      );
-      // Fallback or retry logic could go here, but usually if script is loaded it should be there
+  const tryGetToken = async (): Promise<string> => {
+    if (!window.shopify?.idToken) {
+      console.warn("[Auth] window.shopify.idToken not available yet");
       return "";
     }
+    const token = await window.shopify.idToken();
+    if (isValidToken(token)) {
+      return token;
+    }
+    return "";
+  };
+
+  try {
+    let token = await tryGetToken();
+    // Race on mount: App Bridge may not be ready. Retry once after short delay.
+    if (!token && window.shopify) {
+      await new Promise((r) => setTimeout(r, 400));
+      token = await tryGetToken();
+    }
+    if (!token) {
+      console.warn(
+        "[Auth] No valid session token (App Bridge not ready or invalid)"
+      );
+    }
+    return token;
   } catch (error) {
     console.error("[Auth] Failed to get session token:", error);
     return "";
@@ -156,14 +161,13 @@ export async function apiRequest(
     ? { "Content-Type": "application/json" }
     : {};
 
-  // Get session token
+  // Get session token - only attach when valid (never send Bearer null)
   try {
     const token = await getAuthToken();
-
-    if (token) {
+    if (isValidToken(token)) {
       headers["Authorization"] = `Bearer ${token}`;
     } else {
-      console.error("[Auth apiRequest] Session token is empty");
+      console.warn("[Auth apiRequest] No valid session token, request may 401");
     }
   } catch (e) {
     console.error("[Auth apiRequest] Failed to get session token:", e);
@@ -189,11 +193,10 @@ export const getQueryFn: <T>(options: {
     // console.log("[Auth Query] queryFn CALLED for:", queryKey.join("/"));
     const headers: Record<string, string> = {};
 
-    // Get session token
+    // Get session token - only attach when valid (never send Bearer null)
     try {
       const token = await getAuthToken();
-
-      if (token) {
+      if (isValidToken(token)) {
         headers["Authorization"] = `Bearer ${token}`;
       }
     } catch (e) {

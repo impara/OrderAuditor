@@ -658,7 +658,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(401).json({ error: "Invalid webhook signature" });
         }
 
-        const shopDomain = shopHeader;
+        let shopDomain = shopHeader?.trim();
+        if (shopDomain) {
+          const sanitized = shopify.utils.sanitizeShop(shopDomain, false);
+          if (sanitized) shopDomain = sanitized;
+        }
         if (!shopDomain) {
           logger.error("[Webhook] ❌ Missing shop domain header");
           return res.status(400).json({ error: "Missing shop domain" });
@@ -756,7 +760,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(401).json({ error: "Invalid webhook signature" });
         }
 
-        const shopDomain = shopHeader;
+        let shopDomain = shopHeader?.trim();
+        if (shopDomain) {
+          const sanitized = shopify.utils.sanitizeShop(shopDomain, false);
+          if (sanitized) shopDomain = sanitized;
+        }
         const topic = topicHeader;
 
         if (!shopDomain) {
@@ -876,7 +884,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(401).json({ error: "Invalid webhook signature" });
         }
 
-        const shopDomain = shopHeader;
+        let shopDomain = shopHeader?.trim();
+        if (shopDomain) {
+          const sanitized = shopify.utils.sanitizeShop(shopDomain, false);
+          if (sanitized) shopDomain = sanitized;
+        }
         const topic = topicHeader;
 
         if (!shopDomain) {
@@ -1060,10 +1072,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const webhookData = JSON.parse(rawBody.toString("utf8"));
 
       // Extract shop_domain from header or payload (tenant routing)
-      let shopDomain = shopHeader;
-      if (!shopDomain && webhookData.shop_domain) {
-        shopDomain = webhookData.shop_domain;
+      let shopDomain = shopHeader?.trim() || webhookData.shop_domain?.trim();
+      if (webhookData.shop_domain && !shopHeader) {
         logger.info(`[Webhook] Using shop_domain from payload: ${shopDomain}`);
+      }
+      if (shopDomain) {
+        const sanitized = shopify.utils.sanitizeShop(shopDomain, false);
+        if (sanitized) shopDomain = sanitized;
       }
 
       if (!shopDomain) {
@@ -1285,7 +1300,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(401).json({ error: "Invalid webhook signature" });
         }
 
-        const shopDomain = shopHeader;
+        let shopDomain = shopHeader?.trim();
+        if (shopDomain) {
+          const sanitized = shopify.utils.sanitizeShop(shopDomain, false);
+          if (sanitized) shopDomain = sanitized;
+        }
         const topic = topicHeader;
 
         if (!shopDomain) {
