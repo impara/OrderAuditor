@@ -168,8 +168,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.status(dbStatus ? 200 : 503).json(health);
   });
 
-  // GlitchTip test route – throws an error to verify error reporting (skip in production if desired)
-  app.get("/api/debug-glitchtip", (_req, _res) => {
+  // GlitchTip test route – only throws in development so production cannot be spammed
+  app.get("/api/debug-glitchtip", (req, res) => {
+    if (process.env.NODE_ENV === "production") {
+      return res.status(404).json({ message: "Not Found" });
+    }
     throw new Error("My first GlitchTip error!");
   });
 
