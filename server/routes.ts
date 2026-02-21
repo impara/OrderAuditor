@@ -168,6 +168,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.status(dbStatus ? 200 : 503).json(health);
   });
 
+  // GlitchTip test route – throws an error to verify error reporting (skip in production if desired)
+  app.get("/api/debug-glitchtip", (_req, _res) => {
+    throw new Error("My first GlitchTip error!");
+  });
+
   // Webhook routes (bypass auth middleware)
   // ... (webhooks are registered below)
 
@@ -179,7 +184,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       path.startsWith("/auth") ||
       path.startsWith("/webhooks/shopify") ||
       path.startsWith("/internal") ||
-      path === "/health"
+      path === "/health" ||
+      path === "/debug-glitchtip"
     ) {
       next();
     } else {

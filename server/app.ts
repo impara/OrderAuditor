@@ -9,6 +9,7 @@ import express, {
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 
+import * as Sentry from "@sentry/node";
 import { registerRoutes } from "./routes";
 import { logger } from "./utils/logger";
 
@@ -101,12 +102,14 @@ export default async function runApp(
 ) {
   const server = await registerRoutes(app);
 
+  // GlitchTip/Sentry: capture errors and send to GlitchTip (after all routes, before other error middleware)
+  Sentry.setupExpressErrorHandler(app);
+
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
     res.status(status).json({ message });
-    throw err;
   });
 
   // importantly run the final setup after setting up all the other routes so

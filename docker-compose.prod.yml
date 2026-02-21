@@ -45,6 +45,8 @@ services:
       SMTP_USER: ${SMTP_USER}
       SMTP_PASS: ${SMTP_PASS}
       SMTP_FROM: ${SMTP_FROM:-${SMTP_USER}}
+      GLITCHTIP_DSN: ${GLITCHTIP_DSN:-}
+      VITE_GLITCHTIP_DSN: ${VITE_GLITCHTIP_DSN:-}
       TZ: ${TZ:-UTC}
     volumes:
       - /etc/localtime:/etc/localtime:ro
@@ -87,6 +89,8 @@ services:
       SMTP_USER: ${SMTP_USER}
       SMTP_PASS: ${SMTP_PASS}
       SMTP_FROM: ${SMTP_FROM:-${SMTP_USER}}
+      GLITCHTIP_DSN: ${GLITCHTIP_DSN:-}
+      VITE_GLITCHTIP_DSN: ${VITE_GLITCHTIP_DSN:-}
       TZ: ${TZ:-UTC}
     volumes:
       - /etc/localtime:/etc/localtime:ro
