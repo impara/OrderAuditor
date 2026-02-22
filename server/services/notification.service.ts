@@ -162,15 +162,14 @@ export class NotificationService {
    */
   private formatEmailBody(shopDomain: string, data: NotificationData): string {
     const orderUrl = `https://${shopDomain}/admin/orders/${data.order.shopifyOrderId}`;
-    
+
     return `
 Duplicate Order Detected
 
 Order Details:
 - Order Number: ${data.order.orderNumber}
-- Customer: ${data.order.customerName || "Unknown"} (${
-      data.order.customerEmail
-    })
+- Customer: ${data.order.customerName || "Unknown"} (${data.order.customerEmail
+      })
 - Total: ${data.order.currency} ${data.order.totalPrice}
 - Created: ${new Date(data.order.createdAt).toLocaleString()}
 - View in Shopify: ${orderUrl}
@@ -190,13 +189,13 @@ Please review these orders in your Shopify admin.
   private formatEmailHtml(shopDomain: string, data: NotificationData): string {
     const orderUrl = `https://${shopDomain}/admin/orders/${data.order.shopifyOrderId}`;
     const matchOrderUrl = `https://${shopDomain}/admin/orders/${data.duplicateOf.shopifyOrderId}`;
-    
+
     // Determine confidence level and color
     const confidenceLevel = data.confidence >= 85 ? 'high' : data.confidence >= 70 ? 'medium' : 'low';
     const confidenceColor = confidenceLevel === 'high' ? '#dc2626' : confidenceLevel === 'medium' ? '#f59e0b' : '#22c55e';
     const confidenceBgColor = confidenceLevel === 'high' ? '#fef2f2' : confidenceLevel === 'medium' ? '#fffbeb' : '#f0fdf4';
     const confidenceLabel = confidenceLevel === 'high' ? 'High Risk' : confidenceLevel === 'medium' ? 'Medium Risk' : 'Low Risk';
-    
+
     // Format dates
     const orderDate = new Date(data.order.createdAt).toLocaleDateString('en-US', {
       year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
@@ -451,10 +450,10 @@ Please review these orders in your Shopify admin.
       // Check if we already sent notification this billing period
       if (subscription.quotaExceededNotifiedAt) {
         const notifiedAt = new Date(subscription.quotaExceededNotifiedAt);
-        const periodStart = subscription.currentBillingPeriodStart 
-          ? new Date(subscription.currentBillingPeriodStart) 
+        const periodStart = subscription.currentBillingPeriodStart
+          ? new Date(subscription.currentBillingPeriodStart)
           : new Date(0);
-        
+
         if (notifiedAt >= periodStart) {
           logger.debug(`[Notification] Quota exceeded notification already sent this period for ${shopDomain}`);
           return;
@@ -490,7 +489,7 @@ Please review these orders in your Shopify admin.
       const { shopifySessions } = await import("@shared/schema");
       const { db } = await import("../db");
       const { eq, and } = await import("drizzle-orm");
-      
+
       // Get offline session for the shop (has access token and possibly email)
       const [session] = await db
         .select()
@@ -502,7 +501,7 @@ Please review these orders in your Shopify admin.
           )
         )
         .limit(1);
-      
+
       if (session?.email) {
         return session.email;
       }
@@ -513,7 +512,7 @@ Please review these orders in your Shopify admin.
         .from(shopifySessions)
         .where(eq(shopifySessions.shop, shopDomain))
         .limit(1);
-      
+
       return onlineSession?.email || null;
     } catch (error) {
       logger.error(`[Notification] Failed to get shop owner email for ${shopDomain}:`, error);
@@ -552,7 +551,7 @@ Please review these orders in your Shopify admin.
 
     const subject = `⚠️ Duplicate Guard: Monthly limit reached for ${shopDomain}`;
     const appUrl = process.env.APP_URL || `https://${shopDomain}/admin/apps/order-auditor`;
-    
+
     const textBody = `
 Duplicate Guard Monthly Limit Reached
 
@@ -670,7 +669,7 @@ Thank you for using Duplicate Guard!
     const smtpUser = process.env.SMTP_USER;
     const smtpPassword = process.env.SMTP_PASS;
     const smtpFrom = process.env.SMTP_FROM || smtpUser;
-    const supportEmail = process.env.SUPPORT_EMAIL || "impara1@gmail.com";
+    const supportEmail = process.env.SUPPORT_EMAIL || "info@amertech.online";
 
     if (!smtpUser || !smtpPassword) {
       logger.warn("[Notification] SMTP credentials not configured, cannot send support request");
