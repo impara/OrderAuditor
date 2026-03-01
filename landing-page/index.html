@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="google-site-verification" content="O4-k04comryHYUDVjLLnEe23MjUNS8N5uizZ_y0e1bE" />
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=AW-1059962761"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'AW-1059962761');
+    </script>
+    <title>Duplicate Guard - Stop Shopify Duplicate Orders</title>
+    <meta name="description" content="Automatically detect and flag duplicate orders in Shopify. Save money on shipping and improve customer satisfaction.">
+    <style>
+        /* Reset & Base */
+        :root {
+            --primary: #008060; /* Shopify Green */
+            --primary-dark: #004c3f;
+            --text-main: #202223;
+            --text-sub: #6d7175;
+            --bg-light: #f6f6f7;
+            --white: #ffffff;
+            --border: #e1e3e5;
+            --shadow: 0 4px 12px rgba(0,0,0,0.05);
+            --radius: 8px;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "San Francisco", "Segoe UI", Roboto, "Helvetica Neue", sans-serif; }
+        body { color: var(--text-main); line-height: 1.5; -webkit-font-smoothing: antialiased; }
+        a { text-decoration: none; color: inherit; }
+        
+        /* Layout Utilities */
+        .container { max-width: 1100px; margin: 0 auto; padding: 0 20px; }
+        .flex { display: flex; align-items: center; }
+        .flex-col { flex-direction: column; }
+        .justify-between { justify-content: space-between; }
+        .justify-center { justify-content: center; }
+        .grid { display: grid; gap: 40px; }
+        .grid-2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+        .grid-3 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+        .text-center { text-align: center; }
+        .mt-2 { margin-top: 1rem; }
+        .mt-4 { margin-top: 2rem; }
+        .mb-4 { margin-bottom: 2rem; }
+        
+        /* Typography */
+        h1 { font-size: 3rem; font-weight: 800; line-height: 1.1; letter-spacing: -0.02em; margin-bottom: 1.5rem; }
+        h2 { font-size: 2.25rem; font-weight: 700; margin-bottom: 1rem; letter-spacing: -0.01em; }
+        h3 { font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem; }
+        p { font-size: 1.125rem; color: var(--text-sub); max-width: 600px; margin-left: auto; margin-right: auto; }
+        
+        /* Components */
+        .btn {
+            display: inline-block;
+            background-color: var(--primary);
+            color: var(--white);
+            padding: 16px 32px;
+            border-radius: var(--radius);
+            font-weight: 600;
+            font-size: 1.125rem;
+            transition: transform 0.2s, background-color 0.2s;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,128,96,0.2);
+        }
+        .btn:hover { background-color: var(--primary-dark); transform: translateY(-2px); }
+        .btn-outline {
+            background-color: transparent;
+            border: 2px solid var(--primary);
+            color: var(--primary);
+            box-shadow: none;
+        }
+        .btn-outline:hover { background-color: #f1f8f5; color: var(--primary-dark); }
+        
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #e3f1df;
+            color: var(--primary-dark);
+            padding: 6px 12px;
+            border-radius: 100px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+        }
+        
+        /* Sections */
+        header { padding: 20px 0; background: var(--white); position: sticky; top: 0; z-index: 100; border-bottom: 1px solid var(--border); }
+        .logo { font-weight: 700; font-size: 1.25rem; color: var(--text-main); display: flex; align-items: center; gap: 8px; }
+        .logo img { height: 32px; width: auto; }
+        
+        .hero { padding: 100px 0 80px; background: radial-gradient(circle at top center, #f1f8f5 0%, #ffffff 70%); }
+        .hero-content { max-width: 800px; margin: 0 auto; }
+        .hero-image { margin-top: 60px; border-radius: 12px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); overflow: hidden; border: 1px solid var(--border); }
+        .hero-image img { width: 100%; height: auto; display: block; }
+        
+        .trust-signals { display: flex; gap: 24px; justify-content: center; margin-top: 24px; font-size: 0.875rem; color: var(--text-sub); }
+        .trust-item { display: flex; align-items: center; gap: 6px; }
+        
+        .features { padding: 80px 0; background: var(--white); }
+        .feature-card { padding: 32px; background: var(--bg-light); border-radius: 16px; transition: transform 0.2s; }
+        .feature-card:hover { transform: translateY(-4px); }
+        .icon { width: 48px; height: 48px; background: var(--white); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-bottom: 20px; color: var(--primary); box-shadow: var(--shadow); }
+        
+        .how-it-works { padding: 80px 0; background: var(--bg-light); }
+        .step { background: var(--white); padding: 40px; border-radius: 16px; box-shadow: var(--shadow); position: relative; overflow: hidden; }
+        .step-number { position: absolute; top: -20px; right: -20px; font-size: 8rem; font-weight: 900; color: rgba(0,0,0,0.03); line-height: 1; }
+        
+        /* Pricing */
+        .pricing { padding: 100px 0; background: var(--white); }
+        .pricing-card { border: 1px solid var(--border); border-radius: 16px; padding: 40px; text-align: left; position: relative; background: var(--white); }
+        .pricing-card.featured { border: 2px solid var(--primary); box-shadow: 0 8px 24px rgba(0,128,96,0.1); }
+        .pricing-header { margin-bottom: 24px; }
+        .price { font-size: 2.5rem; font-weight: 800; color: var(--text-main); }
+        .period { font-size: 1rem; color: var(--text-sub); font-weight: 400; }
+        .plan-name { font-size: 1.25rem; font-weight: 600; margin-bottom: 8px; display: block; }
+        .features-list { list-style: none; margin: 32px 0; }
+        .features-list li { margin-bottom: 16px; display: flex; align-items: center; gap: 12px; color: var(--text-sub); }
+        .check-icon { color: var(--primary); flex-shrink: 0; }
+        
+        /* FAQ */
+        .faq { padding: 80px 0; background: var(--bg-light); }
+        .faq-grid { max-width: 800px; margin: 0 auto; display: grid; gap: 24px; }
+        .faq-item { background: var(--white); padding: 32px; border-radius: 12px; box-shadow: var(--shadow); }
+        .faq-question { font-weight: 600; font-size: 1.125rem; margin-bottom: 12px; color: var(--text-main); }
+        .faq-answer { color: var(--text-sub); }
+        
+        .cta-section { padding: 100px 0; text-align: center; background: #002e25; color: var(--white); }
+        .cta-section h2 { color: var(--white); }
+        .cta-section p { color: rgba(255,255,255,0.8); margin-bottom: 32px; }
+        .cta-section .btn { background: var(--white); color: #002e25; }
+        .cta-section .btn:hover { background: #f1f1f1; }
+        
+        footer { padding: 60px 0; background: var(--white); border-top: 1px solid var(--border); font-size: 0.875rem; color: var(--text-sub); }
+        .footer-links { display: flex; gap: 24px; margin-top: 16px; }
+        .footer-links a:hover { color: var(--primary); text-decoration: underline; }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            h1 { font-size: 2.25rem; }
+            .hero { padding: 60px 0; }
+            .grid-2, .grid-3 { grid-template-columns: 1fr; }
+            .pricing-card { margin-bottom: 24px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Navigation -->
+    <header>
+        <div class="container flex justify-between">
+            <div class="logo">
+                <img src="/assets/logo.png" alt="Duplicate Guard Logo">
+                Duplicate Guard
+            </div>
+            <a href="https://apps.shopify.com/duplicate-guard" class="btn" style="padding: 10px 20px; font-size: 0.9rem;">Install App</a>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero text-center">
+        <div class="container hero-content">
+            <div class="badge">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                Automated Order Flagging Service
+            </div>
+            <h1>Stop Losing Revenue to<br>Duplicate Orders</h1>
+            <p>Simpler than full merging. <strong>We identify. You decide.</strong><br>Save 80% of time at 20% less cost with our Smart Order Flagging System.</p>
+            
+            <div class="mt-4">
+                <a href="https://apps.shopify.com/duplicate-guard" class="btn">Start for Free</a>
+            </div>
+            
+            <div class="trust-signals">
+                <div class="trust-item">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                    No Credit Card Required
+                </div>
+                <div class="trust-item">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                    Secure & Private
+                </div>
+                <div class="trust-item">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    Built for Shopify
+                </div>
+                <div class="trust-item">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                    COD &amp; Phone-First Friendly
+                </div>
+            </div>
+
+            <div class="hero-image">
+                <img src="/assets/hero.png" alt="Duplicate Guard Dashboard Impact">
+            </div>
+        </div>
+    </section>
+
+    <!-- Video Section -->
+    <section class="video-section" style="padding: 60px 0; background: var(--white); text-align: center;">
+        <div class="container">
+            <h2 style="margin-bottom: 40px;">See Duplicate Guard in Action</h2>
+            <div style="max-width: 800px; margin: 0 auto; border-radius: 12px; overflow: hidden; box-shadow: var(--shadow);">
+                <iframe width="100%" height="450" src="https://www.youtube.com/embed/53FDFrx2tu0?si=F6QtHYIhvqYo7wVS" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen style="border: none;"></iframe>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Grid -->
+    <section class="features">
+        <div class="container">
+            <div class="text-center mb-4">
+                <h2>Everything You Need to Protect Your Store</h2>
+                <p>Powerful detection logic that works in the background 24/7.</p>
+            </div>
+            <div class="grid grid-3">
+                <div class="feature-card">
+                    <div class="icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                    </div>
+                    <h3>Smart Order Flagging System</h3>
+                    <p>Our algorithm checks email, phone, shipping addresses, and product SKUs to identify duplicates with high accuracy. Detect both fraud patterns and duplicate SKU purchases.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                    </div>
+                    <h3>Instant Tagging</h3>
+                    <p>We focus on FLAGGING. Orders are instantly tagged with <code>Merge_Review_Candidate</code> so your fulfillment team knows to pause and review.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                    </div>
+                    <h3>Custom Rules</h3>
+                    <p>Set your own time windows and matching criteria. You decide what counts as a duplicate for your specific business needs.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>
+                    </div>
+                    <h3>SKU Detection</h3>
+                    <p>Prevent customers from circumventing sales limits by detecting when the same SKU is re-ordered within your defined time window. Perfect for limited edition items.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                    </div>
+                    <h3>Fraud Prevention</h3>
+                    <p>Detect suspicious patterns when customers place multiple orders with the same email and address but different products. Catch resellers and fraud attempts automatically.</p>
+                </div>
+            </div>
+            
+            <div class="mt-4 text-center">
+                <img src="/assets/dashboard.png" alt="Duplicate Guard Dashboard" style="max-width: 100%; border-radius: 12px; box-shadow: var(--shadow); border: 1px solid var(--border);">
+            </div>
+        </div>
+    </section>
+
+    <!-- Comparison Section -->
+    <section class="comparison" style="padding: 80px 0; background: #f1f8f5;">
+        <div class="container text-center">
+            <h2 style="margin-bottom: 40px;">Why Flagging is Better than Merging</h2>
+            <div class="grid grid-2" style="text-align: left; gap: 20px;">
+                <div style="background: white; padding: 30px; border-radius: 12px; border: 1px solid #e1e3e5;">
+                    <h3 style="color: #d82c0d; font-size: 1.5rem; margin-bottom: 15px;">The Risk of Merging</h3>
+                    <p>Competitors focus on <strong>MERGING</strong>. This is complex and risky. Automatic merging can lead to data loss, incorrect inventory counts, and customer confusion if done incorrectly.</p>
+                </div>
+                <div style="background: white; padding: 30px; border-radius: 12px; border: 2px solid var(--primary); box-shadow: var(--shadow);">
+                    <h3 style="color: var(--primary); font-size: 1.5rem; margin-bottom: 15px;">The Safety of Flagging</h3>
+                    <p>We focus on <strong>IDENTIFICATION</strong>. <em>We identify. You decide.</em> Our Smart Order Flagging System notifies you via Email/Slack and tags the order. It's simpler, lower risk, and keeps you in full control.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works -->
+    <section class="how-it-works">
+        <div class="container">
+            <div class="text-center mb-4">
+                <h2>How Duplicate Guard Works</h2>
+            </div>
+            <div class="grid grid-3">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <h3>Order Placed</h3>
+                    <p>A customer accidentally places the same order twice, or hits the submit button multiple times.</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <h3>We Scan It</h3>
+                    <p>Duplicate Guard instantly analyzes the order against your recent history using your custom rules.</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <h3>You Decide</h3>
+                    <p>The order is flagged. You decide to merge or cancel. Save 80% of time at 20% less cost compared to complex merging tools.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- The Problem We Solve Section -->
+    <section class="problem-section" style="padding: 80px 0; background: var(--white);">
+        <div class="container">
+            <div class="text-center mb-4">
+                <h2>The Problem We Solve</h2>
+                <p>Shopify is great at taking orders—but it's not built to enforce purchase limits or catch duplicates.</p>
+            </div>
+            <div class="grid grid-3" style="gap: 24px;">
+                <div style="background: #fef2f2; padding: 28px; border-radius: 12px; border-left: 4px solid #ef4444;">
+                    <h3 style="color: #dc2626; margin-bottom: 12px;">⏱️ Manual Busywork</h3>
+                    <p style="margin: 0;">Your team spends hours manually scanning orders to find matches before they hit the warehouse.</p>
+                </div>
+                <div style="background: #fef2f2; padding: 28px; border-radius: 12px; border-left: 4px solid #ef4444;">
+                    <h3 style="color: #dc2626; margin-bottom: 12px;">📦 Shipping Waste</h3>
+                    <p style="margin: 0;">If you don't catch duplicates, you pay for two labels when one would have sufficed.</p>
+                </div>
+                <div style="background: #fef2f2; padding: 28px; border-radius: 12px; border-left: 4px solid #ef4444;">
+                    <h3 style="color: #dc2626; margin-bottom: 12px;">💳 Chargeback Risk</h3>
+                    <p style="margin: 0;">High-frequency orders from the same card are a red flag that often end in costly chargebacks.</p>
+                </div>
+            </div>
+            <div class="text-center mt-4">
+                <a href="/blog.html" style="color: var(--primary); font-weight: 600; text-decoration: underline;">Read our full article: Stop the Drop Chaos →</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section class="pricing">
+        <div class="container">
+            <div class="text-center mb-4">
+                <h2>Simple, Transparent Pricing</h2>
+                <p>Start for free. Upgrade as you grow.</p>
+            </div>
+            <div class="grid grid-2" style="max-width: 900px; margin: 0 auto;">
+                <!-- Free Plan -->
+                <div class="pricing-card">
+                    <div class="pricing-header">
+                        <span class="plan-name">Free Plan</span>
+                        <div class="price">$0<span class="period">/month</span></div>
+                    </div>
+                    <p>Perfect for small stores just getting started.</p>
+                    <ul class="features-list">
+                        <li>
+                            <svg class="check-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                            Up to 30 duplicates/month
+                        </li>
+                        <li>
+                            <svg class="check-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                            Basic Duplicate Detection
+                        </li>
+                        <li>
+                            <svg class="check-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                            Dashboard Access
+                        </li>
+                    </ul>
+                    <a href="https://apps.shopify.com/duplicate-guard" class="btn btn-outline" style="width: 100%; text-align: center;">Install Free</a>
+                </div>
+
+                <!-- Pro Plan -->
+                <div class="pricing-card featured">
+                    <div class="pricing-header">
+                        <span class="plan-name" style="color: var(--primary);">Unlimited Plan</span>
+                        <div class="price">$7.99<span class="period">/month</span></div>
+                    </div>
+                    <p>For growing stores that need complete peace of mind.</p>
+                    <ul class="features-list">
+                        <li>
+                            <svg class="check-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                            <strong>Unlimited</strong> orders
+                        </li>
+                        <li>
+                            <svg class="check-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                            Email & Slack Notifications
+                        </li>
+                        <li>
+                            <svg class="check-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                            Priority Support
+                        </li>
+                        <li>
+                            <svg class="check-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                            Advanced Matching Rules
+                        </li>
+                    </ul>
+                    <a href="https://apps.shopify.com/duplicate-guard" class="btn" style="width: 100%; text-align: center;">Install Pro</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section class="faq">
+        <div class="container">
+            <div class="text-center mb-4">
+                <h2>Frequently Asked Questions</h2>
+            </div>
+            <div class="faq-grid">
+                <div class="faq-item">
+                    <div class="faq-question">How does Duplicate Guard detect duplicates?</div>
+                    <div class="faq-answer">We analyze every incoming order and compare it with your recent order history based on customer email, phone number, and shipping address. If we find a match within your specified time window, we flag it.</div>
+                </div>
+                <div class="faq-item">
+                    <div class="faq-question">Does it work on the free plan?</div>
+                    <div class="faq-answer">Yes! The free plan includes full duplicate detection for up to 30 duplicates per month. It's perfect for testing the app or for stores with lower volume.</div>
+                </div>
+                <div class="faq-item">
+                    <div class="faq-question">What happens when an order is flagged?</div>
+                    <div class="faq-answer">We automatically add a tag (e.g., <code>Merge_Review_Candidate</code>) to the order in Shopify. This allows you to filter orders in your admin or set up automation flows to hold fulfillment.</div>
+                </div>
+                <div class="faq-item">
+                    <div class="faq-question">Can I cancel my subscription anytime?</div>
+                    <div class="faq-answer">Absolutely. You can cancel your subscription at any time directly from the app dashboard. There are no long-term contracts.</div>
+                </div>
+                <div class="faq-item">
+                    <div class="faq-question">Why can't I just use Shopify Flow for this?</div>
+                    <div class="faq-answer">Shopify Flow is powerful, but it wasn't built specifically for duplicate detection. It often ignores SKU-specific filters or fires incorrectly, leading to false positives or missed duplicates. Duplicate Guard was built specifically to fill this gap with precision tracking across 24-hour windows.</div>
+                </div>
+                <div class="faq-item">
+                    <div class="faq-question">Does it work for COD (Cash-on-Delivery) stores without customer emails?</div>
+                    <div class="faq-answer">Yes! Duplicate Guard is perfect for COD and phone-first checkout flows common in markets like India. We detect duplicates using <strong>phone number + name</strong> or <strong>phone number + address</strong> matching—no email required. If your checkout only collects mobile numbers, we've got you covered.</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta-section">
+        <div class="container">
+            <h2>Ready to streamline your fulfillment?</h2>
+            <p>Join smart merchants who are saving thousands on shipping fees every year.</p>
+            <a href="https://apps.shopify.com/duplicate-guard" class="btn">Install Duplicate Guard Now</a>
+            <div class="mt-2" style="font-size: 0.875rem; opacity: 0.7;">
+                30-day money-back guarantee • Cancel anytime
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container flex justify-between flex-col" style="align-items: flex-start;">
+            <div style="width: 100%; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <strong>Duplicate Guard</strong>
+                    <p style="margin: 0; font-size: 0.875rem;">Automated order protection for Shopify.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="/blog.html">Blog</a>
+                    <a href="/privacy.html">Privacy Policy</a>
+                    <a href="#">Terms of Service</a>
+                    <a href="mailto:info@amertech.online">Support</a>
+                </div>
+            </div>
+            <div style="margin-top: 24px; font-size: 0.8rem; color: #999;">
+                &copy; 2025 Duplicate Guard. All rights reserved.
+            </div>
+        </div>
+    </footer>
+
+</body>
+</html>
