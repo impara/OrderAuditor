@@ -4,12 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="google-site-verification" content="O4-k04comryHYUDVjLLnEe23MjUNS8N5uizZ_y0e1bE" />
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=AW-1059962761"></script>
+    <!-- Google tag (gtag.js) for GA4 + Google Ads -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-PEDH1P2YQG"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
+
+      // GA4 property for Duplicate Guard
+      gtag('config', 'G-PEDH1P2YQG');
+
+      // Google Ads conversion tag
       gtag('config', 'AW-1059962761');
     </script>
     <title>Duplicate Guard - Stop Shopify Duplicate Orders</title>
@@ -156,7 +161,14 @@
                 <img src="/assets/logo.png" alt="Duplicate Guard Logo">
                 Duplicate Guard
             </div>
-            <a href="https://apps.shopify.com/duplicate-guard" class="btn" style="padding: 10px 20px; font-size: 0.9rem;">Install App</a>
+            <a
+                href="https://apps.shopify.com/duplicate-guard"
+                class="btn"
+                style="padding: 10px 20px; font-size: 0.9rem;"
+                onclick="gtag('event', 'shopify_install_click', {location: 'header'});"
+            >
+                Install App
+            </a>
         </div>
     </header>
 
@@ -171,7 +183,13 @@
             <p>Simpler than full merging. <strong>We identify. You decide.</strong><br>Save 80% of time at 20% less cost with our Smart Order Flagging System.</p>
             
             <div class="mt-4">
-                <a href="https://apps.shopify.com/duplicate-guard" class="btn">Start for Free</a>
+                <a
+                    href="https://apps.shopify.com/duplicate-guard"
+                    class="btn"
+                    onclick="gtag('event', 'shopify_install_click', {location: 'hero'});"
+                >
+                    Start for Free
+                </a>
             </div>
             
             <div class="trust-signals">
@@ -359,7 +377,14 @@
                             Dashboard Access
                         </li>
                     </ul>
-                    <a href="https://apps.shopify.com/duplicate-guard" class="btn btn-outline" style="width: 100%; text-align: center;">Install Free</a>
+                    <a
+                        href="https://apps.shopify.com/duplicate-guard"
+                        class="btn btn-outline"
+                        style="width: 100%; text-align: center;"
+                        onclick="gtag('event', 'shopify_install_click', {location: 'pricing_free'});"
+                    >
+                        Install Free
+                    </a>
                 </div>
 
                 <!-- Pro Plan -->
@@ -387,7 +412,14 @@
                             Advanced Matching Rules
                         </li>
                     </ul>
-                    <a href="https://apps.shopify.com/duplicate-guard" class="btn" style="width: 100%; text-align: center;">Install Pro</a>
+                    <a
+                        href="https://apps.shopify.com/duplicate-guard"
+                        class="btn"
+                        style="width: 100%; text-align: center;"
+                        onclick="gtag('event', 'shopify_install_click', {location: 'pricing_pro'});"
+                    >
+                        Install Pro
+                    </a>
                 </div>
             </div>
         </div>
@@ -433,7 +465,13 @@
         <div class="container">
             <h2>Ready to streamline your fulfillment?</h2>
             <p>Join smart merchants who are saving thousands on shipping fees every year.</p>
-            <a href="https://apps.shopify.com/duplicate-guard" class="btn">Install Duplicate Guard Now</a>
+            <a
+                href="https://apps.shopify.com/duplicate-guard"
+                class="btn"
+                onclick="gtag('event', 'shopify_install_click', {location: 'cta_section'});"
+            >
+                Install Duplicate Guard Now
+            </a>
             <div class="mt-2" style="font-size: 0.875rem; opacity: 0.7;">
                 30-day money-back guarantee • Cancel anytime
             </div>
