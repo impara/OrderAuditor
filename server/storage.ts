@@ -324,6 +324,7 @@ export class DatabaseStorage implements IStorage {
       tier: "free",
       status: "active",
       monthlyOrderCount: 0,
+      allTimeOrderCount: 0,
       orderLimit: 30, // Free tier: 30 duplicates/month
       currentBillingPeriodStart: periodStart,
       currentBillingPeriodEnd: periodEnd,
@@ -338,6 +339,7 @@ export class DatabaseStorage implements IStorage {
 
     return this.updateSubscription(shopDomain, {
       monthlyOrderCount: subscription.monthlyOrderCount + 1,
+      allTimeOrderCount: subscription.allTimeOrderCount + 1,
     });
   }
 
@@ -363,10 +365,7 @@ export class DatabaseStorage implements IStorage {
     totalOrders: number;
     hasDetectedDuplicate: boolean;
   }> {
-    const [totalOrdersResult] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(orders)
-      .where(eq(orders.shopDomain, shopDomain));
+    const subscription = await this.getSubscription(shopDomain);
 
     const [duplicateEvidence] = await db
       .select({ id: orders.id })
@@ -380,7 +379,7 @@ export class DatabaseStorage implements IStorage {
       .limit(1);
 
     return {
-      totalOrders: totalOrdersResult?.count || 0,
+      totalOrders: subscription?.allTimeOrderCount || 0,
       hasDetectedDuplicate: !!duplicateEvidence,
     };
   }

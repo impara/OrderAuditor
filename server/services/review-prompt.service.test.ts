@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Subscription } from "@shared/schema";
+import type { Subscription } from "../../shared/schema";
 
 const {
   getSubscription,
@@ -40,6 +40,7 @@ function createSubscription(
     tier: "free",
     status: "active",
     monthlyOrderCount: 0,
+    allTimeOrderCount: 0,
     orderLimit: 30,
     currentBillingPeriodStart: now,
     currentBillingPeriodEnd: periodEnd,

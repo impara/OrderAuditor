@@ -123,6 +123,7 @@ export const subscriptions = pgTable("subscriptions", {
   tier: varchar("tier", { length: 20 }).notNull().default("free"), // 'free', 'paid'
   status: varchar("status", { length: 20 }).notNull().default("active"), // 'active', 'cancelled', 'expired'
   monthlyOrderCount: integer("monthly_order_count").notNull().default(0),
+  allTimeOrderCount: integer("all_time_order_count").notNull().default(0),
   orderLimit: integer("order_limit").notNull().default(30), // 30 for free, -1 for unlimited paid
   currentBillingPeriodStart: timestamp("current_billing_period_start")
     .notNull()
