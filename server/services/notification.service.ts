@@ -663,6 +663,9 @@ Thank you for using Duplicate Guard!
     description: string;
     priority?: string;
     merchantEmail?: string;
+    source?: string;
+    sentiment?: string;
+    promptVersion?: string;
   }): Promise<void> {
     const smtpHost = process.env.SMTP_HOST || "smtp.gmail.com";
     const smtpPort = parseInt(process.env.SMTP_PORT || "587");
@@ -710,6 +713,9 @@ ${typeLabel}
 Shop: ${data.shopDomain}
 Tier: ${data.tier}
 Priority: ${priorityLabel}
+${data.source ? `Source: ${data.source}` : ""}
+${data.sentiment ? `Sentiment: ${data.sentiment}` : ""}
+${data.promptVersion ? `Prompt Version: ${data.promptVersion}` : ""}
 ${data.merchantEmail ? `Merchant Email: ${data.merchantEmail}` : ""}
 
 Subject: ${data.subject}
@@ -772,6 +778,18 @@ Submitted at: ${new Date().toISOString()}
                           <a href="mailto:${data.merchantEmail}" style="font-size: 14px; color: #0369a1; text-decoration: none;">${data.merchantEmail}</a>
                         </td>
                         ` : '<td></td>'}
+                      </tr>
+                      ` : ''}
+                      ${data.source || data.sentiment || data.promptVersion ? `
+                      <tr>
+                        <td width="50%" style="padding: 8px 8px 0 0;">
+                          <span style="font-size: 12px; color: #64748b; display: block;">Source</span>
+                          <span style="font-size: 14px; color: #1e293b; font-weight: 500;">${data.source || 'N/A'}</span>
+                        </td>
+                        <td width="50%" style="padding: 8px 0 0 8px;">
+                          <span style="font-size: 12px; color: #64748b; display: block;">Review Context</span>
+                          <span style="font-size: 14px; color: #1e293b; font-weight: 500;">${[data.sentiment, data.promptVersion].filter(Boolean).join(' · ') || 'N/A'}</span>
+                        </td>
                       </tr>
                       ` : ''}
                     </table>

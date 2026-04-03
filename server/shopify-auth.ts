@@ -11,6 +11,7 @@ import { logger } from "./utils/logger";
 import * as jose from "jose";
 import { createSecretKey } from "crypto";
 import { shopifyBillingService } from "./services/shopify-billing.service";
+import { subscriptionService } from "./services/subscription.service";
 
 // Initialize Shopify API client
 const shopify = shopifyApi({
@@ -161,6 +162,18 @@ export async function authCallback(req: Request, res: Response) {
       logger.debug(`[AuthCallback] ✅ Session verified successfully`);
     } else {
       logger.error(`[AuthCallback] ❌ CRITICAL: Session NOT found after save! Session ID: ${session.id}`);
+    }
+
+    try {
+      await subscriptionService.getSubscription(session.shop);
+      logger.debug(
+        `[AuthCallback] Ensured subscription lifecycle row exists for ${session.shop}`
+      );
+    } catch (error) {
+      logger.warn(
+        `[AuthCallback] Failed to ensure subscription row for ${session.shop}:`,
+        error
+      );
     }
 
     // Register webhooks after auth

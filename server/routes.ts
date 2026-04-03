@@ -7,6 +7,7 @@ import { shopifyService } from "./services/shopify.service";
 import { notificationService } from "./services/notification.service";
 import { subscriptionService } from "./services/subscription.service";
 import { shopifyBillingService } from "./services/shopify-billing.service";
+import { reviewPromptService } from "./services/review-prompt.service";
 import {
   insertOrderSchema,
   updateDetectionSettingsSchema,
@@ -207,6 +208,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/review-prompt", async (req: Request, res: Response) => {
+    try {
+      const { shop } = res.locals.shopify;
+      const testOverride = req.query.testReviewPrompt === "true";
+
+      const promptState = await reviewPromptService.getPromptState(shop, {
+        forceShow: testOverride,
+      });
+
+      res.json(promptState);
+    } catch (error) {
+      logger.error("Error fetching review prompt state:", error);
+      res.status(500).json({ error: "Failed to fetch review prompt state" });
+    }
+  });
+
+  app.post("/api/review-prompt", async (req: Request, res: Response) => {
+    try {
+      const { shop } = res.locals.shopify;
+      const { intent, branch } = req.body ?? {};
+
+      if (!intent || typeof intent !== "string") {
+        return res.status(400).json({ error: "intent is required" });
+      }
+
+      switch (intent) {
+        case "dismiss":
+          await reviewPromptService.dismiss(shop);
+          break;
+        case "defer":
+          await reviewPromptService.defer(shop);
+          break;
+        case "select-branch":
+          if (branch !== "positive" && branch !== "negative") {
+            return res.status(400).json({
+              error: "branch must be either 'positive' or 'negative'",
+            });
+          }
+          await reviewPromptService.selectBranch(shop, branch);
+          break;
+        case "cta-click":
+          await reviewPromptService.recordCtaClick(shop);
+          break;
+        default:
+          return res.status(400).json({ error: "Unknown review prompt intent" });
+      }
+
+      const promptState = await reviewPromptService.getPromptState(shop);
+      res.json({ success: true, prompt: promptState });
+    } catch (error) {
+      logger.error("Error updating review prompt state:", error);
+      res.status(500).json({ error: "Failed to update review prompt state" });
+    }
+  });
+
   app.get("/api/orders/flagged", async (_req: Request, res: Response) => {
     try {
       const { shop } = res.locals.shopify;
@@ -324,7 +380,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/support", async (req: Request, res: Response) => {
     try {
       const { shop } = res.locals.shopify;
-      const { requestType, subject, description, priority } = req.body;
+      const {
+        requestType,
+        subject,
+        description,
+        priority,
+        source,
+        sentiment,
+        promptVersion,
+      } = req.body;
 
       // Validate required fields
       if (!requestType || !subject || !description) {
@@ -367,6 +431,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description,
         priority,
         merchantEmail,
+        source,
+        sentiment,
+        promptVersion,
       });
 
       logger.info(`[Support] Support request submitted from ${shop}: ${requestType} - ${subject}`);

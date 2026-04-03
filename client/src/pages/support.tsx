@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Header } from "@/components/Header";
 import { Send, MessageSquare, Lightbulb, Bug, CreditCard, CheckCircle } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { REVIEW_PROMPT_VERSION } from "@/lib/reviewPrompt";
 
 type RequestType = "support" | "feature" | "bug" | "billing";
 type Priority = "low" | "normal" | "high" | "urgent";
@@ -19,6 +20,12 @@ interface SupportFormData {
     subject: string;
     description: string;
     priority: Priority;
+}
+
+interface SupportRequestMetadata {
+    source?: string;
+    sentiment?: string;
+    promptVersion?: string;
 }
 
 const requestTypeConfig: Record<RequestType, { label: string; icon: typeof MessageSquare; description: string }> = {
@@ -47,9 +54,16 @@ const requestTypeConfig: Record<RequestType, { label: string; icon: typeof Messa
 export default function Support() {
     const { toast } = useToast();
     const [submitted, setSubmitted] = useState(false);
+    const searchParams = new URLSearchParams(window.location.search);
+    const supportMetadata: SupportRequestMetadata = {
+        source: searchParams.get("source") || undefined,
+        sentiment: searchParams.get("sentiment") || undefined,
+        promptVersion: searchParams.get("promptVersion") || undefined,
+    };
+    const isReviewPromptFeedback = supportMetadata.source === "review_prompt";
     const [formData, setFormData] = useState<SupportFormData>({
         requestType: "support",
-        subject: "",
+        subject: isReviewPromptFeedback ? "Feedback about Duplicate Guard" : "",
         description: "",
         priority: "normal",
     });
@@ -60,7 +74,7 @@ export default function Support() {
     });
 
     const submitMutation = useMutation({
-        mutationFn: async (data: SupportFormData) => {
+        mutationFn: async (data: SupportFormData & SupportRequestMetadata) => {
             return await apiRequest("POST", "/api/support", data);
         },
         onSuccess: () => {
@@ -89,13 +103,17 @@ export default function Support() {
             });
             return;
         }
-        submitMutation.mutate(formData);
+        submitMutation.mutate({
+            ...formData,
+            ...supportMetadata,
+            promptVersion: supportMetadata.promptVersion || REVIEW_PROMPT_VERSION,
+        });
     };
 
     const resetForm = () => {
         setFormData({
             requestType: "support",
-            subject: "",
+            subject: isReviewPromptFeedback ? "Feedback about Duplicate Guard" : "",
             description: "",
             priority: "normal",
         });
@@ -143,6 +161,17 @@ export default function Support() {
                         Have a question, idea, or issue? We'd love to hear from you.
                     </p>
                 </div>
+
+                {isReviewPromptFeedback && (
+                    <div className="mb-6 rounded-lg border border-primary/20 bg-primary/5 p-4">
+                        <p className="text-sm font-medium text-foreground">
+                            Thanks for sharing feedback instead of leaving a review.
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                            Tell us what felt missing or frustrating and we&apos;ll use it to improve Duplicate Guard.
+                        </p>
+                    </div>
+                )}
 
                 <form onSubmit={handleSubmit}>
                     <Card className="mb-6">

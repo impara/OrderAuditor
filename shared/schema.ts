@@ -130,6 +130,13 @@ export const subscriptions = pgTable("subscriptions", {
   currentBillingPeriodEnd: timestamp("current_billing_period_end"),
   shopifyChargeId: varchar("shopify_charge_id", { length: 255 }), // Shopify Billing API charge ID
   quotaExceededNotifiedAt: timestamp("quota_exceeded_notified_at"), // Timestamp when 100% quota notification was sent
+  reviewPromptDismissedAt: timestamp("review_prompt_dismissed_at"),
+  reviewPromptDeferredUntil: timestamp("review_prompt_deferred_until"),
+  reviewPromptResponse: varchar("review_prompt_response", { length: 20 }).$type<
+    "positive" | "negative" | "dismissed"
+  >(),
+  reviewPromptRespondedAt: timestamp("review_prompt_responded_at"),
+  reviewPromptCtaClickedAt: timestamp("review_prompt_cta_clicked_at"),
   createdAt: timestamp("created_at")
     .notNull()
     .default(sql`now()`),
@@ -184,6 +191,11 @@ export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  reviewPromptResponse: z
+    .enum(["positive", "negative", "dismissed"])
+    .nullable()
+    .optional(),
 });
 
 export const insertWebhookDeliverySchema = createInsertSchema(

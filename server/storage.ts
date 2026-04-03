@@ -19,7 +19,17 @@ import {
   type InsertWebhookDelivery,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, gte, sql, and, ne, or, inArray } from "drizzle-orm";
+import {
+  eq,
+  desc,
+  gte,
+  sql,
+  and,
+  ne,
+  or,
+  inArray,
+  isNotNull,
+} from "drizzle-orm";
 
 export interface IStorage {
   getOrder(shopDomain: string, id: string): Promise<Order | undefined>;
@@ -54,6 +64,10 @@ export interface IStorage {
   initializeSubscription(shopDomain: string): Promise<Subscription>;
   incrementOrderCount(shopDomain: string): Promise<Subscription>;
   resetMonthlyOrderCount(shopDomain: string): Promise<Subscription>;
+  getReviewPromptActivationSummary(shopDomain: string): Promise<{
+    totalOrders: number;
+    hasDetectedDuplicate: boolean;
+  }>;
 
   dismissOrder(shopDomain: string, orderId: string): Promise<Order>;
   resolveOrder(
@@ -343,6 +357,32 @@ export class DatabaseStorage implements IStorage {
       currentBillingPeriodStart: periodStart,
       currentBillingPeriodEnd: periodEnd,
     });
+  }
+
+  async getReviewPromptActivationSummary(shopDomain: string): Promise<{
+    totalOrders: number;
+    hasDetectedDuplicate: boolean;
+  }> {
+    const [totalOrdersResult] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(orders)
+      .where(eq(orders.shopDomain, shopDomain));
+
+    const [duplicateEvidence] = await db
+      .select({ id: orders.id })
+      .from(orders)
+      .where(
+        and(
+          eq(orders.shopDomain, shopDomain),
+          isNotNull(orders.duplicateOfOrderId)
+        )
+      )
+      .limit(1);
+
+    return {
+      totalOrders: totalOrdersResult?.count || 0,
+      hasDetectedDuplicate: !!duplicateEvidence,
+    };
   }
 
   async dismissOrder(shopDomain: string, orderId: string): Promise<Order> {
