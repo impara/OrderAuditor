@@ -389,13 +389,11 @@ export class ShopifyBillingService {
         return false;
       }
 
-      // Downgrade subscription to free tier
-      await subscriptionService.cancelSubscription(shopDomain);
-
       logger.info(
-        `[ShopifyBilling] Cancelled charge ${chargeId} and downgraded subscription`
+        `[ShopifyBilling] Cancelled charge ${chargeId} for ${shopDomain}. Caller is responsible for downgrading subscription.`
       );
       return true;
+
     } catch (error) {
       logger.error("[ShopifyBilling] Error cancelling charge:", error);
       return false;

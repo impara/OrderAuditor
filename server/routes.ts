@@ -2,6 +2,9 @@ import type { Express, Request, Response } from "express";
 import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { db } from "./db";
+import { orders, webhookDeliveries } from "@shared/schema";
+import { eq, desc, and, isNotNull, sql } from "drizzle-orm";
 import { duplicateDetectionService } from "./services/duplicate-detection.service";
 import { shopifyService } from "./services/shopify.service";
 import { notificationService } from "./services/notification.service";
@@ -14,6 +17,7 @@ import {
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { logger } from "./utils/logger";
+
 
 /**
  * Validate returnUrl to prevent open redirect attacks
@@ -448,6 +452,114 @@ export async function registerRoutes(app: Express): Promise<Server> {
         error: "Failed to submit support request",
         details: error instanceof Error ? error.message : String(error),
       });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Onboarding status — single lightweight call for the setup checklist
+  // Returns webhook health, last order received, subscription quota, and
+  // detection config readiness so the UI can guide merchants step-by-step.
+  // ---------------------------------------------------------------------------
+  app.get("/api/onboarding/status", async (_req: Request, res: Response) => {
+    try {
+      const { shop } = res.locals.shopify;
+
+      // 1. Subscription / quota status
+      const subscription = await subscriptionService.getSubscription(shop);
+      const quotaUsed = subscription.monthlyOrderCount;
+      const quotaLimit = subscription.orderLimit; // -1 = unlimited
+      const quotaPercent =
+        quotaLimit === -1 ? 0 : Math.round((quotaUsed / quotaLimit) * 100);
+
+      // 2. Detection settings readiness
+      const settings = await storage.getSettings(shop);
+      const hasAnyMatchCriteria =
+        settings &&
+        (settings.matchEmail ||
+          settings.matchPhone ||
+          settings.matchAddress ||
+          settings.matchSku);
+
+      // 3. Last order received (most recent order in DB regardless of flagged status)
+      const [lastOrder] = await db
+        .select({ createdAt: orders.createdAt, orderNumber: orders.orderNumber })
+        .from(orders)
+        .where(eq(orders.shopDomain, shop))
+        .orderBy(desc(orders.createdAt))
+        .limit(1);
+
+      // 4. Webhook registration (lightweight: just check DB delivery records instead
+      //    of making a Shopify API call on every page load)
+      const [lastDelivery] = await db
+        .select({ processedAt: webhookDeliveries.processedAt })
+        .from(webhookDeliveries)
+        .where(eq(webhookDeliveries.shopDomain, shop))
+        .orderBy(desc(webhookDeliveries.processedAt))
+        .limit(1);
+
+      // 5. PII hint: if we have orders but email is missing on most, PII may be blocked.
+      //    We infer this by checking if any stored order has a non-null customer email.
+      const [orderWithEmail] = await db
+        .select({ id: orders.id })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.shopDomain, shop),
+            isNotNull(orders.customerEmail)
+          )
+        )
+        .limit(1);
+
+      const totalOrders = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(orders)
+        .where(eq(orders.shopDomain, shop));
+
+      const totalOrderCount = totalOrders[0]?.count || 0;
+      // PII is likely blocked if we have orders but none of them have an email
+      const piiLikelyBlocked =
+        totalOrderCount > 0 && !orderWithEmail;
+
+      res.json({
+        // App installed (always true if we get here)
+        appInstalled: true,
+
+        // Webhook delivery evidence (healthy if we have at least one delivery record)
+        webhooksReceived: !!lastDelivery,
+        lastWebhookReceivedAt: lastDelivery?.processedAt || null,
+
+        // Order processing
+        totalOrdersProcessed: totalOrderCount,
+        lastOrderReceivedAt: lastOrder?.createdAt || null,
+        lastOrderNumber: lastOrder?.orderNumber || null,
+
+        // Detection configuration
+        detectionConfigured: !!hasAnyMatchCriteria,
+        detectionSettings: settings
+          ? {
+              matchEmail: settings.matchEmail,
+              matchPhone: settings.matchPhone,
+              matchAddress: settings.matchAddress,
+              matchSku: settings.matchSku,
+              timeWindowHours: settings.timeWindowHours,
+            }
+          : null,
+
+        // PII access hint
+        piiAccessLikelyBlocked: piiLikelyBlocked,
+
+        // Quota
+        subscription: {
+          tier: subscription.tier,
+          status: subscription.status,
+          quotaUsed,
+          quotaLimit,
+          quotaPercent,
+        },
+      });
+    } catch (error) {
+      logger.error("[API] Error fetching onboarding status:", error);
+      res.status(500).json({ error: "Failed to fetch onboarding status" });
     }
   });
 

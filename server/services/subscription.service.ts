@@ -1,6 +1,7 @@
-import { storage } from "../storage";
+import { storage, FREE_TIER_ORDER_LIMIT } from "../storage";
 import { logger } from "../utils/logger";
 import type { Subscription } from "@shared/schema";
+
 
 export interface QuotaCheckResult {
   allowed: boolean;
@@ -42,11 +43,12 @@ export class SubscriptionService {
         subscription = await storage.updateSubscription(shopDomain, {
           tier: "free",
           status: "active",
-          orderLimit: 50,
+          orderLimit: FREE_TIER_ORDER_LIMIT,
           monthlyOrderCount: 0,
           currentBillingPeriodStart: periodStart,
           currentBillingPeriodEnd: periodEnd,
         });
+
       } else {
         // Just reset the count for the new period (whether free or paid)
         logger.info(`[Subscription] Resetting order count for ${shopDomain}`);
@@ -118,8 +120,9 @@ export class SubscriptionService {
     } else if (tier === "paid") {
       updates.orderLimit = -1; // Unlimited for paid tier
     } else {
-      updates.orderLimit = 30; // Free tier limit
+      updates.orderLimit = FREE_TIER_ORDER_LIMIT; // Free tier limit
     }
+
 
     return storage.updateSubscription(shopDomain, updates);
   }
@@ -152,7 +155,8 @@ export class SubscriptionService {
     logger.info(
       `[Subscription] Cancelling ${shopDomain} immediately (no active period or not paid tier)`
     );
-    return this.updateTier(shopDomain, "free", 50);
+    return this.updateTier(shopDomain, "free", FREE_TIER_ORDER_LIMIT);
+
   }
 }
 

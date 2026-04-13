@@ -91,7 +91,10 @@ export class WebhookProcessorService {
       // 1.6 Check Subscription Quota
       const quota = await subscriptionService.checkQuota(shopDomain);
       if (!quota.allowed) {
-        logger.warn(`[WebhookProcessor] Quota exceeded for shop ${shopDomain}: ${quota.reason}. Skipping processing.`);
+        // Log at info (not warn) — the warn fires once when the limit is first hit
+        // and the email notification is sent. Subsequent orders log at info to
+        // reduce noise in Dozzle for stores that are already over their quota.
+        logger.info(`[WebhookProcessor] Quota exceeded for shop ${shopDomain}: ${quota.reason}. Skipping processing.`);
         return;
       }
 

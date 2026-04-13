@@ -31,6 +31,10 @@ import {
   isNotNull,
 } from "drizzle-orm";
 
+/** Single source of truth for the free-tier duplicate order cap */
+export const FREE_TIER_ORDER_LIMIT = 50;
+
+
 export interface IStorage {
   getOrder(shopDomain: string, id: string): Promise<Order | undefined>;
   getOrderByShopifyId(
@@ -206,6 +210,27 @@ export class DatabaseStorage implements IStorage {
       );
     }
 
+    // Calculate real average resolution time from resolved orders
+    const [avgResolutionResult] = await db
+      .select({
+        avgHours: sql<number>`
+          COALESCE(
+            AVG(
+              EXTRACT(EPOCH FROM (resolved_at - flagged_at)) / 3600.0
+            ),
+            0
+          )
+        `,
+      })
+      .from(orders)
+      .where(
+        and(
+          eq(orders.shopDomain, shopDomain),
+          isNotNull(orders.resolvedAt),
+          isNotNull(orders.flaggedAt)
+        )
+      );
+
     return {
       totalFlagged,
       totalFlaggedTrend,
@@ -213,7 +238,9 @@ export class DatabaseStorage implements IStorage {
         totalValueResult?.sum?.toString() || "0"
       ),
       ordersFlaggedToday: todayFlaggedResult?.count || 0,
-      averageResolutionTime: 2.5,
+      averageResolutionTime: parseFloat(
+        (avgResolutionResult?.avgHours || 0).toFixed(1)
+      ),
     };
   }
 
@@ -325,7 +352,7 @@ export class DatabaseStorage implements IStorage {
       status: "active",
       monthlyOrderCount: 0,
       allTimeOrderCount: 0,
-      orderLimit: 30, // Free tier: 30 duplicates/month
+      orderLimit: FREE_TIER_ORDER_LIMIT, // Free tier: defined by FREE_TIER_ORDER_LIMIT constant
       currentBillingPeriodStart: periodStart,
       currentBillingPeriodEnd: periodEnd,
     });

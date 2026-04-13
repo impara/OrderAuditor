@@ -18,6 +18,8 @@ import { Link, useLocation } from "wouter";
 import { Header } from "@/components/Header";
 import { QuotaWarningBanner } from "@/components/QuotaWarningBanner";
 import { ReviewPromptBanner } from "@/components/ReviewPromptBanner";
+import { OnboardingChecklist } from "@/components/OnboardingChecklist";
+
 
 function StatsCard({
   title,
@@ -453,6 +455,7 @@ export default function Dashboard() {
       <Header />
 
       <main className="container mx-auto px-4 sm:px-6 py-6">
+        <OnboardingChecklist />
         <QuotaWarningBanner />
         <ReviewPromptBanner />
         <div className="flex flex-col lg:flex-row gap-6">

@@ -26,7 +26,7 @@ const shopify = shopifyApi({
   ],
   hostName: (process.env.APP_URL || "").replace(/https?:\/\//, ""),
   hostScheme: "https",
-  apiVersion: ApiVersion.October24,
+  apiVersion: ApiVersion.October25,
   isEmbeddedApp: true,
   sessionStorage: new PostgresSessionStorage(),
 });
