@@ -213,10 +213,10 @@ export class DatabaseStorage implements IStorage {
     // Calculate real average resolution time from resolved orders
     const [avgResolutionResult] = await db
       .select({
-        avgHours: sql<number>`
+        avgHours: sql<number | string>`
           COALESCE(
             AVG(
-              EXTRACT(EPOCH FROM (resolved_at - flagged_at)) / 3600.0
+              EXTRACT(EPOCH FROM (${orders.resolvedAt} - ${orders.flaggedAt})) / 3600.0
             ),
             0
           )
@@ -231,6 +231,9 @@ export class DatabaseStorage implements IStorage {
         )
       );
 
+    const rawAvg = avgResolutionResult?.avgHours || 0;
+    const avgAsNumber = typeof rawAvg === 'string' ? parseFloat(rawAvg) : rawAvg;
+
     return {
       totalFlagged,
       totalFlaggedTrend,
@@ -238,9 +241,7 @@ export class DatabaseStorage implements IStorage {
         totalValueResult?.sum?.toString() || "0"
       ),
       ordersFlaggedToday: todayFlaggedResult?.count || 0,
-      averageResolutionTime: parseFloat(
-        (avgResolutionResult?.avgHours || 0).toFixed(1)
-      ),
+      averageResolutionTime: parseFloat(avgAsNumber.toFixed(1)),
     };
   }
 
