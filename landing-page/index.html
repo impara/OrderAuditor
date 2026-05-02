@@ -44,7 +44,7 @@
         .justify-center { justify-content: center; }
         .grid { display: grid; gap: 40px; }
         .grid-2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
-        .grid-3 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+        .grid-3 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
         .text-center { text-align: center; }
         .mt-2 { margin-top: 1rem; }
         .mt-4 { margin-top: 2rem; }
@@ -140,15 +140,23 @@
         .cta-section .btn:hover { background: #f1f1f1; }
         
         footer { padding: 60px 0; background: var(--white); border-top: 1px solid var(--border); font-size: 0.875rem; color: var(--text-sub); }
-        .footer-links { display: flex; gap: 24px; margin-top: 16px; }
+        .footer-links { display: flex; gap: 24px; margin-top: 16px; flex-wrap: wrap; }
         .footer-links a:hover { color: var(--primary); text-decoration: underline; }
+        .footer-inner { width: 100%; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 24px; }
         
+        /* Social Proof Banner */
+        .social-proof-banner { padding: 20px 0; background: var(--bg-light); border-bottom: 1px solid var(--border); text-align: center; font-size: 0.95rem; color: var(--text-sub); }
+        .social-proof-banner strong { color: var(--text-main); }
+
         /* Responsive */
         @media (max-width: 768px) {
             h1 { font-size: 2.25rem; }
             .hero { padding: 60px 0; }
             .grid-2, .grid-3 { grid-template-columns: 1fr; }
             .pricing-card { margin-bottom: 24px; }
+            .trust-signals { flex-wrap: wrap; justify-content: center; }
+            .footer-inner { flex-direction: column; align-items: flex-start; }
+            .footer-links { margin-top: 8px; }
         }
     </style>
 </head>
@@ -167,7 +175,7 @@
                 style="padding: 10px 20px; font-size: 0.9rem;"
                 onclick="gtag('event', 'shopify_install_click', {location: 'header'});"
             >
-                Install App
+                Protect My Store
             </a>
         </div>
     </header>
@@ -179,8 +187,8 @@
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
                 Automated Order Flagging Service
             </div>
-            <h1>Stop Losing Revenue to<br>Duplicate Orders</h1>
-            <p>Simpler than full merging. <strong>We identify. You decide.</strong><br>Save 80% of time at 20% less cost with our Smart Order Flagging System.</p>
+            <h1>Catch Duplicate Shopify Orders<br>Before They Ship</h1>
+            <p>Stop paying for double shipping labels. <strong>We identify the duplicates, you decide what to do.</strong><br>Simpler, safer, and cheaper than risky auto-merging tools.</p>
             
             <div class="mt-4">
                 <a
@@ -188,7 +196,7 @@
                     class="btn"
                     onclick="gtag('event', 'shopify_install_click', {location: 'hero'});"
                 >
-                    Start for Free
+                    Start Catching Duplicates — Free
                 </a>
             </div>
             
@@ -217,12 +225,46 @@
         </div>
     </section>
 
+    <!-- Social Proof Banner -->
+    <div class="social-proof-banner">
+        <div class="container">
+            ✅ Trusted by <strong>Shopify merchants</strong> processing thousands of orders monthly
+        </div>
+    </div>
+
     <!-- Video Section -->
     <section class="video-section" style="padding: 60px 0; background: var(--white); text-align: center;">
         <div class="container">
             <h2 style="margin-bottom: 40px;">See Duplicate Guard in Action</h2>
             <div style="max-width: 800px; margin: 0 auto; border-radius: 12px; overflow: hidden; box-shadow: var(--shadow);">
                 <iframe width="100%" height="450" src="https://www.youtube.com/embed/53FDFrx2tu0?si=F6QtHYIhvqYo7wVS" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen style="border: none;"></iframe>
+            </div>
+        </div>
+    </section>
+
+    <!-- The Problem We Solve Section (MOVED UP — agitate pain before presenting features) -->
+    <section class="problem-section" style="padding: 80px 0; background: var(--white);">
+        <div class="container">
+            <div class="text-center mb-4">
+                <h2>The Problem We Solve</h2>
+                <p>Shopify is great at taking orders—but it's not built to enforce purchase limits or catch duplicates.</p>
+            </div>
+            <div class="grid grid-3" style="gap: 24px;">
+                <div style="background: #fef2f2; padding: 28px; border-radius: 12px; border-left: 4px solid #ef4444;">
+                    <h3 style="color: #dc2626; margin-bottom: 12px;">⏱️ Manual Busywork</h3>
+                    <p style="margin: 0;">Your team spends hours manually scanning orders to find matches before they hit the warehouse.</p>
+                </div>
+                <div style="background: #fef2f2; padding: 28px; border-radius: 12px; border-left: 4px solid #ef4444;">
+                    <h3 style="color: #dc2626; margin-bottom: 12px;">📦 Shipping Waste</h3>
+                    <p style="margin: 0;">If you don't catch duplicates, you pay for two labels when one would have sufficed.</p>
+                </div>
+                <div style="background: #fef2f2; padding: 28px; border-radius: 12px; border-left: 4px solid #ef4444;">
+                    <h3 style="color: #dc2626; margin-bottom: 12px;">💳 Chargeback Risk</h3>
+                    <p style="margin: 0;">High-frequency orders from the same card are a red flag that often end in costly chargebacks.</p>
+                </div>
+            </div>
+            <div class="text-center mt-4">
+                <a href="/blog.html" style="color: var(--primary); font-weight: 600; text-decoration: underline;">Read our full article: Stop the Drop Chaos →</a>
             </div>
         </div>
     </section>
@@ -315,38 +357,13 @@
                 <div class="step">
                     <div class="step-number">3</div>
                     <h3>You Decide</h3>
-                    <p>The order is flagged. You decide to merge or cancel. Save 80% of time at 20% less cost compared to complex merging tools.</p>
+                    <p>The order is tagged and your team is notified via Email or Slack. You decide whether to merge, cancel, or ship — no risky auto-merging.</p>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- The Problem We Solve Section -->
-    <section class="problem-section" style="padding: 80px 0; background: var(--white);">
-        <div class="container">
-            <div class="text-center mb-4">
-                <h2>The Problem We Solve</h2>
-                <p>Shopify is great at taking orders—but it's not built to enforce purchase limits or catch duplicates.</p>
-            </div>
-            <div class="grid grid-3" style="gap: 24px;">
-                <div style="background: #fef2f2; padding: 28px; border-radius: 12px; border-left: 4px solid #ef4444;">
-                    <h3 style="color: #dc2626; margin-bottom: 12px;">⏱️ Manual Busywork</h3>
-                    <p style="margin: 0;">Your team spends hours manually scanning orders to find matches before they hit the warehouse.</p>
-                </div>
-                <div style="background: #fef2f2; padding: 28px; border-radius: 12px; border-left: 4px solid #ef4444;">
-                    <h3 style="color: #dc2626; margin-bottom: 12px;">📦 Shipping Waste</h3>
-                    <p style="margin: 0;">If you don't catch duplicates, you pay for two labels when one would have sufficed.</p>
-                </div>
-                <div style="background: #fef2f2; padding: 28px; border-radius: 12px; border-left: 4px solid #ef4444;">
-                    <h3 style="color: #dc2626; margin-bottom: 12px;">💳 Chargeback Risk</h3>
-                    <p style="margin: 0;">High-frequency orders from the same card are a red flag that often end in costly chargebacks.</p>
-                </div>
-            </div>
-            <div class="text-center mt-4">
-                <a href="/blog.html" style="color: var(--primary); font-weight: 600; text-decoration: underline;">Read our full article: Stop the Drop Chaos →</a>
-            </div>
-        </div>
-    </section>
+
 
     <!-- Pricing Section -->
     <section class="pricing">
@@ -383,12 +400,13 @@
                         style="width: 100%; text-align: center;"
                         onclick="gtag('event', 'shopify_install_click', {location: 'pricing_free'});"
                     >
-                        Install Free
+                        Start Free
                     </a>
                 </div>
 
-                <!-- Pro Plan -->
+                <!-- Pro Plan (Featured — the one we want them to pick) -->
                 <div class="pricing-card featured">
+                    <div style="position: absolute; top: -14px; left: 50%; transform: translateX(-50%); background: var(--primary); color: white; padding: 4px 16px; border-radius: 100px; font-size: 0.8rem; font-weight: 600;">Most Popular</div>
                     <div class="pricing-header">
                         <span class="plan-name" style="color: var(--primary);">Unlimited Plan</span>
                         <div class="price">$7.99<span class="period">/month</span></div>
@@ -401,7 +419,7 @@
                         </li>
                         <li>
                             <svg class="check-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                            Email & Slack Notifications
+                            Email &amp; Slack Notifications
                         </li>
                         <li>
                             <svg class="check-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -418,9 +436,11 @@
                         style="width: 100%; text-align: center;"
                         onclick="gtag('event', 'shopify_install_click', {location: 'pricing_pro'});"
                     >
-                        Install Pro
+                        Protect My Store
                     </a>
                 </div>
+
+
             </div>
         </div>
     </section>
@@ -470,7 +490,7 @@
                 class="btn"
                 onclick="gtag('event', 'shopify_install_click', {location: 'cta_section'});"
             >
-                Install Duplicate Guard Now
+                Stop Duplicates Now — It's Free
             </a>
             <div class="mt-2" style="font-size: 0.875rem; opacity: 0.7;">
                 30-day money-back guarantee • Cancel anytime
@@ -481,7 +501,7 @@
     <!-- Footer -->
     <footer>
         <div class="container flex justify-between flex-col" style="align-items: flex-start;">
-            <div style="width: 100%; display: flex; justify-content: space-between; align-items: center;">
+            <div class="footer-inner">
                 <div>
                     <strong>Duplicate Guard</strong>
                     <p style="margin: 0; font-size: 0.875rem;">Automated order protection for Shopify.</p>
@@ -494,7 +514,7 @@
                 </div>
             </div>
             <div style="margin-top: 24px; font-size: 0.8rem; color: #999;">
-                &copy; 2025 Duplicate Guard. All rights reserved.
+                &copy; 2026 Duplicate Guard. All rights reserved.
             </div>
         </div>
     </footer>
