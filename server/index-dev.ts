@@ -47,10 +47,21 @@ export async function setupVite(app: Express, server: Server) {
 
       // always reload the index.html file from disk incase it changes
       let template = await fs.promises.readFile(clientTemplate, "utf-8");
+      const isInternalAdminRoute =
+        url.startsWith("/internal-admin") ||
+        url.startsWith("/webhook-ops/internal/");
       
       // Inject Shopify API key into the template
-      const apiKey = process.env.SHOPIFY_API_KEY || process.env.VITE_SHOPIFY_API_KEY || "";
+      const apiKey = isInternalAdminRoute
+        ? ""
+        : process.env.SHOPIFY_API_KEY || process.env.VITE_SHOPIFY_API_KEY || "";
       template = template.replace("__SHOPIFY_API_KEY__", apiKey);
+      if (isInternalAdminRoute) {
+        template = template.replace(
+          '<script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>',
+          ""
+        );
+      }
       
       template = template.replace(
         `src="/src/main.tsx"`,

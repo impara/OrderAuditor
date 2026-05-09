@@ -104,6 +104,182 @@ function requireInternalAdmin(
   next();
 }
 
+async function getWebhookOpsData(shop: string) {
+  try {
+    return await getWebhookOpsDataWithDeliveryStatus(shop);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes('column "status" does not exist')) {
+      logger.warn(
+        `[WebhookOps] Falling back to legacy webhook delivery stats for ${shop}; status columns are missing.`
+      );
+      return getLegacyWebhookOpsData(shop);
+    }
+
+    throw error;
+  }
+}
+
+async function getWebhookQueueStats() {
+  try {
+    const { queueService } = await import("./services/queue.service");
+    return await queueService.getHealthStats();
+  } catch (error) {
+    logger.warn("[WebhookOps] Failed to load queue stats:", error);
+    return { status: "error", error: String(error) };
+  }
+}
+
+async function getWebhookOpsDataWithDeliveryStatus(shop: string) {
+  const statusRows = await db
+    .select({
+      status: webhookDeliveries.status,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(webhookDeliveries)
+    .where(eq(webhookDeliveries.shopDomain, shop))
+    .groupBy(webhookDeliveries.status);
+
+  const [rollup] = await db
+    .select({
+      total: sql<number>`count(*)::int`,
+      receivedLastHour: sql<number>`
+        count(*) filter (
+          where ${webhookDeliveries.receivedAt} >= now() - interval '1 hour'
+        )::int
+      `,
+      failedLastDay: sql<number>`
+        count(*) filter (
+          where ${webhookDeliveries.status} = 'failed'
+            and coalesce(${webhookDeliveries.failedAt}, ${webhookDeliveries.receivedAt}) >= now() - interval '24 hours'
+        )::int
+      `,
+      staleQueuedOrProcessing: sql<number>`
+        count(*) filter (
+          where ${webhookDeliveries.status} in ('queued', 'processing')
+            and ${webhookDeliveries.receivedAt} < now() - interval '15 minutes'
+        )::int
+      `,
+    })
+    .from(webhookDeliveries)
+    .where(eq(webhookDeliveries.shopDomain, shop));
+
+  const deliveryColumns = {
+    id: webhookDeliveries.id,
+    deliveryId: webhookDeliveries.deliveryId,
+    topic: webhookDeliveries.topic,
+    status: webhookDeliveries.status,
+    attemptCount: webhookDeliveries.attemptCount,
+    lastError: webhookDeliveries.lastError,
+    receivedAt: webhookDeliveries.receivedAt,
+    processedAt: webhookDeliveries.processedAt,
+    failedAt: webhookDeliveries.failedAt,
+  };
+
+  const recentDeliveries = await db
+    .select(deliveryColumns)
+    .from(webhookDeliveries)
+    .where(eq(webhookDeliveries.shopDomain, shop))
+    .orderBy(desc(webhookDeliveries.receivedAt))
+    .limit(50);
+
+  const failedDeliveries = await db
+    .select(deliveryColumns)
+    .from(webhookDeliveries)
+    .where(
+      and(
+        eq(webhookDeliveries.shopDomain, shop),
+        eq(webhookDeliveries.status, "failed")
+      )
+    )
+    .orderBy(desc(webhookDeliveries.failedAt), desc(webhookDeliveries.receivedAt))
+    .limit(25);
+
+  const staleDeliveries = await db
+    .select(deliveryColumns)
+    .from(webhookDeliveries)
+    .where(
+      and(
+        eq(webhookDeliveries.shopDomain, shop),
+        sql`${webhookDeliveries.status} in ('queued', 'processing')`,
+        sql`${webhookDeliveries.receivedAt} < now() - interval '15 minutes'`
+      )
+    )
+    .orderBy(desc(webhookDeliveries.receivedAt))
+    .limit(25);
+
+  return {
+    shop,
+    generatedAt: new Date().toISOString(),
+    rollup: rollup ?? {
+      total: 0,
+      receivedLastHour: 0,
+      failedLastDay: 0,
+      staleQueuedOrProcessing: 0,
+    },
+    statusCounts: statusRows.reduce<Record<string, number>>((acc, row) => {
+      acc[row.status] = row.count;
+      return acc;
+    }, {}),
+    queue: await getWebhookQueueStats(),
+    recentDeliveries,
+    failedDeliveries,
+    staleDeliveries,
+  };
+}
+
+async function getLegacyWebhookOpsData(shop: string) {
+  const [rollup] = await db
+    .select({
+      total: sql<number>`count(*)::int`,
+      receivedLastHour: sql<number>`
+        count(*) filter (
+          where ${webhookDeliveries.processedAt} >= now() - interval '1 hour'
+        )::int
+      `,
+    })
+    .from(webhookDeliveries)
+    .where(eq(webhookDeliveries.shopDomain, shop));
+
+  const recentDeliveries = await db
+    .select({
+      id: webhookDeliveries.id,
+      deliveryId: webhookDeliveries.deliveryId,
+      topic: webhookDeliveries.topic,
+      status: sql<"processed">`'processed'`,
+      attemptCount: sql<number>`0`,
+      lastError: sql<string | null>`null`,
+      receivedAt: webhookDeliveries.processedAt,
+      processedAt: webhookDeliveries.processedAt,
+      failedAt: sql<Date | null>`null`,
+    })
+    .from(webhookDeliveries)
+    .where(eq(webhookDeliveries.shopDomain, shop))
+    .orderBy(desc(webhookDeliveries.processedAt))
+    .limit(50);
+
+  const total = Number(rollup?.total || 0);
+
+  return {
+    shop,
+    generatedAt: new Date().toISOString(),
+    legacyMode: true,
+    rollup: {
+      total,
+      receivedLastHour: Number(rollup?.receivedLastHour || 0),
+      failedLastDay: 0,
+      staleQueuedOrProcessing: 0,
+    },
+    statusCounts: {
+      processed: total,
+    },
+    queue: await getWebhookQueueStats(),
+    recentDeliveries,
+    failedDeliveries: [],
+    staleDeliveries: [],
+  };
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   app.use(
     express.json({
@@ -746,129 +922,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/webhook-ops", async (_req: Request, res: Response) => {
     try {
       const { shop } = res.locals.shopify;
-
-      const statusRows = await db
-        .select({
-          status: webhookDeliveries.status,
-          count: sql<number>`count(*)::int`,
-        })
-        .from(webhookDeliveries)
-        .where(eq(webhookDeliveries.shopDomain, shop))
-        .groupBy(webhookDeliveries.status);
-
-      const [rollup] = await db
-        .select({
-          total: sql<number>`count(*)::int`,
-          receivedLastHour: sql<number>`
-            count(*) filter (
-              where ${webhookDeliveries.receivedAt} >= now() - interval '1 hour'
-            )::int
-          `,
-          failedLastDay: sql<number>`
-            count(*) filter (
-              where ${webhookDeliveries.status} = 'failed'
-                and coalesce(${webhookDeliveries.failedAt}, ${webhookDeliveries.receivedAt}) >= now() - interval '24 hours'
-            )::int
-          `,
-          staleQueuedOrProcessing: sql<number>`
-            count(*) filter (
-              where ${webhookDeliveries.status} in ('queued', 'processing')
-                and ${webhookDeliveries.receivedAt} < now() - interval '15 minutes'
-            )::int
-          `,
-        })
-        .from(webhookDeliveries)
-        .where(eq(webhookDeliveries.shopDomain, shop));
-
-      const recentDeliveries = await db
-        .select({
-          id: webhookDeliveries.id,
-          deliveryId: webhookDeliveries.deliveryId,
-          topic: webhookDeliveries.topic,
-          status: webhookDeliveries.status,
-          attemptCount: webhookDeliveries.attemptCount,
-          lastError: webhookDeliveries.lastError,
-          receivedAt: webhookDeliveries.receivedAt,
-          processedAt: webhookDeliveries.processedAt,
-          failedAt: webhookDeliveries.failedAt,
-        })
-        .from(webhookDeliveries)
-        .where(eq(webhookDeliveries.shopDomain, shop))
-        .orderBy(desc(webhookDeliveries.receivedAt))
-        .limit(50);
-
-      const failedDeliveries = await db
-        .select({
-          id: webhookDeliveries.id,
-          deliveryId: webhookDeliveries.deliveryId,
-          topic: webhookDeliveries.topic,
-          status: webhookDeliveries.status,
-          attemptCount: webhookDeliveries.attemptCount,
-          lastError: webhookDeliveries.lastError,
-          receivedAt: webhookDeliveries.receivedAt,
-          processedAt: webhookDeliveries.processedAt,
-          failedAt: webhookDeliveries.failedAt,
-        })
-        .from(webhookDeliveries)
-        .where(
-          and(
-            eq(webhookDeliveries.shopDomain, shop),
-            eq(webhookDeliveries.status, "failed")
-          )
-        )
-        .orderBy(desc(webhookDeliveries.failedAt), desc(webhookDeliveries.receivedAt))
-        .limit(25);
-
-      const staleDeliveries = await db
-        .select({
-          id: webhookDeliveries.id,
-          deliveryId: webhookDeliveries.deliveryId,
-          topic: webhookDeliveries.topic,
-          status: webhookDeliveries.status,
-          attemptCount: webhookDeliveries.attemptCount,
-          lastError: webhookDeliveries.lastError,
-          receivedAt: webhookDeliveries.receivedAt,
-          processedAt: webhookDeliveries.processedAt,
-          failedAt: webhookDeliveries.failedAt,
-        })
-        .from(webhookDeliveries)
-        .where(
-          and(
-            eq(webhookDeliveries.shopDomain, shop),
-            sql`${webhookDeliveries.status} in ('queued', 'processing')`,
-            sql`${webhookDeliveries.receivedAt} < now() - interval '15 minutes'`
-          )
-        )
-        .orderBy(desc(webhookDeliveries.receivedAt))
-        .limit(25);
-
-      let queue: any = { status: "unknown" };
-      try {
-        const { queueService } = await import("./services/queue.service");
-        queue = await queueService.getHealthStats();
-      } catch (error) {
-        logger.warn("[WebhookOps] Failed to load queue stats:", error);
-        queue = { status: "error", error: String(error) };
-      }
-
-      res.json({
-        shop,
-        generatedAt: new Date().toISOString(),
-        rollup: rollup ?? {
-          total: 0,
-          receivedLastHour: 0,
-          failedLastDay: 0,
-          staleQueuedOrProcessing: 0,
-        },
-        statusCounts: statusRows.reduce<Record<string, number>>((acc, row) => {
-          acc[row.status] = row.count;
-          return acc;
-        }, {}),
-        queue,
-        recentDeliveries,
-        failedDeliveries,
-        staleDeliveries,
-      });
+      res.json(await getWebhookOpsData(shop));
     } catch (error) {
       logger.error("[WebhookOps] Failed to load webhook ops view:", error);
       res.status(500).json({
@@ -877,6 +931,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
+
+  app.get(
+    "/api/internal/admin/shops/:shopDomain/webhook-ops",
+    requireInternalAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        res.json(await getWebhookOpsData(req.params.shopDomain));
+      } catch (error) {
+        logger.error("[WebhookOps] Failed to load internal webhook ops view:", error);
+        res.status(500).json({
+          error: "Failed to load webhook ops view",
+          details: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  );
 
   app.post("/api/webhooks/register", async (_req: Request, res: Response) => {
     try {

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
   AlertTriangle,
+  ArrowLeft,
   CheckCircle2,
   Clock3,
   RefreshCw,
@@ -20,7 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 type WebhookDeliveryStatus = "queued" | "processing" | "processed" | "failed";
 
@@ -39,6 +40,7 @@ interface WebhookDeliveryRow {
 interface WebhookOpsData {
   shop: string;
   generatedAt: string;
+  legacyMode?: boolean;
   rollup: {
     total: number;
     receivedLastHour: number;
@@ -76,6 +78,62 @@ function formatDate(value?: string | null) {
 function shortId(value: string) {
   if (value.length <= 18) return value;
   return `${value.slice(0, 10)}...${value.slice(-6)}`;
+}
+
+function getInternalAdminToken() {
+  return window.localStorage.getItem("internal-admin-token") || "";
+}
+
+function decodeStoreKey(storeKey: string) {
+  const normalized = storeKey.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(
+    normalized.length + ((4 - (normalized.length % 4)) % 4),
+    "="
+  );
+  return atob(padded);
+}
+
+function getSelectedInternalStore() {
+  const match = window.location.pathname.match(
+    /^\/webhook-ops\/internal\/([^/]+)$/
+  );
+  if (!match) return null;
+
+  try {
+    return decodeStoreKey(match[1]);
+  } catch {
+    return null;
+  }
+}
+
+async function fetchInternalWebhookOps(shop: string): Promise<WebhookOpsData> {
+  const token = getInternalAdminToken();
+  if (!token) {
+    throw new Error("Missing internal admin token. Open Internal Admin first.");
+  }
+
+  const response = await fetch(
+    `/api/internal/admin/shops/${encodeURIComponent(shop)}/webhook-ops`,
+    {
+      headers: {
+        "X-Admin-Token": token,
+      },
+      credentials: "include",
+    }
+  );
+
+  if (!response.ok) {
+    let message = response.statusText;
+    try {
+      const data = await response.json();
+      message = data.error || data.message || message;
+    } catch {
+      // Keep status text.
+    }
+    throw new Error(`${response.status}: ${message}`);
+  }
+
+  return response.json();
 }
 
 function StatCard({
@@ -168,14 +226,27 @@ function DeliveryTable({
 }
 
 export default function WebhookOps() {
+  const selectedStore = getSelectedInternalStore();
+  const queryKey = selectedStore
+    ? ["/api/internal/admin/shops", selectedStore, "webhook-ops"]
+    : ["/api/webhook-ops"];
+
   const { data, isLoading, error } = useQuery<WebhookOpsData>({
-    queryKey: ["/api/webhook-ops"],
+    queryKey,
+    queryFn: async () => {
+      if (selectedStore) {
+        return fetchInternalWebhookOps(selectedStore);
+      }
+
+      const response = await apiRequest("GET", "/api/webhook-ops");
+      return response.json();
+    },
     refetchInterval: 30000,
     staleTime: 30000,
   });
 
   const refresh = () => {
-    queryClient.invalidateQueries({ queryKey: ["/api/webhook-ops"] });
+    queryClient.invalidateQueries({ queryKey });
   };
 
   if (isLoading) {
@@ -204,7 +275,8 @@ export default function WebhookOps() {
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
-              Failed to load webhook operations data.
+              Failed to load webhook operations data
+              {error instanceof Error ? `: ${error.message}` : "."}
             </AlertDescription>
           </Alert>
         </main>
@@ -228,10 +300,20 @@ export default function WebhookOps() {
               {data.shop} - Updated {formatDate(data.generatedAt)}
             </p>
           </div>
-          <Button variant="outline" onClick={refresh} data-testid="button-refresh-webhook-ops">
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Refresh
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {selectedStore ? (
+              <Button variant="outline" asChild>
+                <a href="/internal-admin">
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Internal Admin
+                </a>
+              </Button>
+            ) : null}
+            <Button variant="outline" onClick={refresh} data-testid="button-refresh-webhook-ops">
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Refresh
+            </Button>
+          </div>
         </div>
 
         {data.rollup.staleQueuedOrProcessing > 0 || data.rollup.failedLastDay > 0 ? (
@@ -239,6 +321,16 @@ export default function WebhookOps() {
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
               This shop has webhook deliveries that need review.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
+        {data.legacyMode ? (
+          <Alert className="mb-4">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              This database is using the legacy webhook delivery schema, so failed,
+              queued, and processing states are not available.
             </AlertDescription>
           </Alert>
         ) : null}

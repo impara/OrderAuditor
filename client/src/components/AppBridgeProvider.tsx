@@ -32,7 +32,9 @@ export function AppBridgeProvider({ children }: { children: React.ReactNode }) {
         const urlParams = new URLSearchParams(window.location.search);
         const host = urlParams.get("host");
         const shop = urlParams.get("shop");
-        const isInternalAdmin = window.location.pathname === "/internal-admin";
+        const isInternalAdmin =
+            window.location.pathname === "/internal-admin" ||
+            window.location.pathname.startsWith("/webhook-ops/internal/");
 
         // In App Bridge v4, the script tag in index.html handles initialization
         // We just need to ensure we have the necessary params for the app to function

@@ -48,14 +48,25 @@ export async function serveStatic(app: Express, _server: Server) {
   }));
 
   // Always serve index.html with API key injection for all routes
-  app.use("*", async (_req, res, next) => {
+  app.use("*", async (req, res, next) => {
     const indexPath = path.resolve(distPath, "index.html");
     
     try {
       // Read and inject API key into HTML template
       let html = await fs.promises.readFile(indexPath, "utf-8");
-      const apiKey = process.env.SHOPIFY_API_KEY || process.env.VITE_SHOPIFY_API_KEY || "";
+      const isInternalAdminRoute =
+        req.originalUrl.startsWith("/internal-admin") ||
+        req.originalUrl.startsWith("/webhook-ops/internal/");
+      const apiKey = isInternalAdminRoute
+        ? ""
+        : process.env.SHOPIFY_API_KEY || process.env.VITE_SHOPIFY_API_KEY || "";
       html = html.replace("__SHOPIFY_API_KEY__", apiKey);
+      if (isInternalAdminRoute) {
+        html = html.replace(
+          '<script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>',
+          ""
+        );
+      }
       
       res.status(200).set({ "Content-Type": "text/html" }).end(html);
     } catch (e) {

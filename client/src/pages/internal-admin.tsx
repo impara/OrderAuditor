@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Activity,
   CalendarClock,
   CheckCircle2,
   Gift,
@@ -56,6 +57,13 @@ type InternalAdminResponse = {
 
 function getStoredToken() {
   return window.localStorage.getItem("internal-admin-token") || "";
+}
+
+function encodeStoreKey(shopDomain: string) {
+  return btoa(shopDomain)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 }
 
 async function internalAdminRequest<T>(
@@ -422,6 +430,16 @@ export default function InternalAdminPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
+                            <Button size="sm" variant="secondary" asChild>
+                              <a
+                                href={`/webhook-ops/internal/${encodeStoreKey(
+                                  shop.shopDomain
+                                )}`}
+                              >
+                                <Activity className="mr-2 h-4 w-4" />
+                                Ops
+                              </a>
+                            </Button>
                             <Button
                               size="sm"
                               variant="outline"

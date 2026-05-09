@@ -19,6 +19,7 @@ function Router() {
       <Route path="/settings" component={Settings} />
       <Route path="/subscription" component={Subscription} />
       <Route path="/support" component={Support} />
+      <Route path="/webhook-ops/internal/:storeKey" component={WebhookOps} />
       <Route path="/webhook-ops" component={WebhookOps} />
       <Route path="/internal-admin" component={InternalAdmin} />
       <Route component={NotFound} />
