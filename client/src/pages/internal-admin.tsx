@@ -137,6 +137,10 @@ function PlanBadge({ shop }: { shop: InternalShop }) {
   }
 
   if (shop.tier === "paid") {
+    if (shop.status !== "active") {
+      return <Badge variant="secondary">Paid {shop.status}</Badge>;
+    }
+
     return <Badge>Paid</Badge>;
   }
 
