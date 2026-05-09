@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { webhookDeliveries } from "@shared/schema";
-import { sql, lt } from "drizzle-orm";
+import { and, eq, lt } from "drizzle-orm";
 import { logger } from "../utils/logger";
 
 /**
@@ -28,7 +28,12 @@ export class CleanupService {
     try {
       const result = await db
         .delete(webhookDeliveries)
-        .where(lt(webhookDeliveries.processedAt, cutoffDate))
+        .where(
+          and(
+            eq(webhookDeliveries.status, "processed"),
+            lt(webhookDeliveries.processedAt, cutoffDate)
+          )
+        )
         .returning({ id: webhookDeliveries.id });
 
       logger.info(

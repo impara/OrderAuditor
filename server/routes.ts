@@ -12,6 +12,10 @@ import { subscriptionService } from "./services/subscription.service";
 import { shopifyBillingService } from "./services/shopify-billing.service";
 import { reviewPromptService } from "./services/review-prompt.service";
 import {
+  buildOrderCreateDeliveryId,
+  buildOrderCreateJobKey,
+} from "./services/webhook-processor.service";
+import {
   insertOrderSchema,
   updateDetectionSettingsSchema,
 } from "@shared/schema";
@@ -695,6 +699,141 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/webhook-ops", async (_req: Request, res: Response) => {
+    try {
+      const { shop } = res.locals.shopify;
+
+      const statusRows = await db
+        .select({
+          status: webhookDeliveries.status,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(webhookDeliveries)
+        .where(eq(webhookDeliveries.shopDomain, shop))
+        .groupBy(webhookDeliveries.status);
+
+      const [rollup] = await db
+        .select({
+          total: sql<number>`count(*)::int`,
+          receivedLastHour: sql<number>`
+            count(*) filter (
+              where ${webhookDeliveries.receivedAt} >= now() - interval '1 hour'
+            )::int
+          `,
+          failedLastDay: sql<number>`
+            count(*) filter (
+              where ${webhookDeliveries.status} = 'failed'
+                and coalesce(${webhookDeliveries.failedAt}, ${webhookDeliveries.receivedAt}) >= now() - interval '24 hours'
+            )::int
+          `,
+          staleQueuedOrProcessing: sql<number>`
+            count(*) filter (
+              where ${webhookDeliveries.status} in ('queued', 'processing')
+                and ${webhookDeliveries.receivedAt} < now() - interval '15 minutes'
+            )::int
+          `,
+        })
+        .from(webhookDeliveries)
+        .where(eq(webhookDeliveries.shopDomain, shop));
+
+      const recentDeliveries = await db
+        .select({
+          id: webhookDeliveries.id,
+          deliveryId: webhookDeliveries.deliveryId,
+          topic: webhookDeliveries.topic,
+          status: webhookDeliveries.status,
+          attemptCount: webhookDeliveries.attemptCount,
+          lastError: webhookDeliveries.lastError,
+          receivedAt: webhookDeliveries.receivedAt,
+          processedAt: webhookDeliveries.processedAt,
+          failedAt: webhookDeliveries.failedAt,
+        })
+        .from(webhookDeliveries)
+        .where(eq(webhookDeliveries.shopDomain, shop))
+        .orderBy(desc(webhookDeliveries.receivedAt))
+        .limit(50);
+
+      const failedDeliveries = await db
+        .select({
+          id: webhookDeliveries.id,
+          deliveryId: webhookDeliveries.deliveryId,
+          topic: webhookDeliveries.topic,
+          status: webhookDeliveries.status,
+          attemptCount: webhookDeliveries.attemptCount,
+          lastError: webhookDeliveries.lastError,
+          receivedAt: webhookDeliveries.receivedAt,
+          processedAt: webhookDeliveries.processedAt,
+          failedAt: webhookDeliveries.failedAt,
+        })
+        .from(webhookDeliveries)
+        .where(
+          and(
+            eq(webhookDeliveries.shopDomain, shop),
+            eq(webhookDeliveries.status, "failed")
+          )
+        )
+        .orderBy(desc(webhookDeliveries.failedAt), desc(webhookDeliveries.receivedAt))
+        .limit(25);
+
+      const staleDeliveries = await db
+        .select({
+          id: webhookDeliveries.id,
+          deliveryId: webhookDeliveries.deliveryId,
+          topic: webhookDeliveries.topic,
+          status: webhookDeliveries.status,
+          attemptCount: webhookDeliveries.attemptCount,
+          lastError: webhookDeliveries.lastError,
+          receivedAt: webhookDeliveries.receivedAt,
+          processedAt: webhookDeliveries.processedAt,
+          failedAt: webhookDeliveries.failedAt,
+        })
+        .from(webhookDeliveries)
+        .where(
+          and(
+            eq(webhookDeliveries.shopDomain, shop),
+            sql`${webhookDeliveries.status} in ('queued', 'processing')`,
+            sql`${webhookDeliveries.receivedAt} < now() - interval '15 minutes'`
+          )
+        )
+        .orderBy(desc(webhookDeliveries.receivedAt))
+        .limit(25);
+
+      let queue: any = { status: "unknown" };
+      try {
+        const { queueService } = await import("./services/queue.service");
+        queue = await queueService.getHealthStats();
+      } catch (error) {
+        logger.warn("[WebhookOps] Failed to load queue stats:", error);
+        queue = { status: "error", error: String(error) };
+      }
+
+      res.json({
+        shop,
+        generatedAt: new Date().toISOString(),
+        rollup: rollup ?? {
+          total: 0,
+          receivedLastHour: 0,
+          failedLastDay: 0,
+          staleQueuedOrProcessing: 0,
+        },
+        statusCounts: statusRows.reduce<Record<string, number>>((acc, row) => {
+          acc[row.status] = row.count;
+          return acc;
+        }, {}),
+        queue,
+        recentDeliveries,
+        failedDeliveries,
+        staleDeliveries,
+      });
+    } catch (error) {
+      logger.error("[WebhookOps] Failed to load webhook ops view:", error);
+      res.status(500).json({
+        error: "Failed to load webhook ops view",
+        details: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
   app.post("/api/webhooks/register", async (_req: Request, res: Response) => {
     try {
       const { shop, accessToken } = res.locals.shopify;
@@ -1001,26 +1140,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
+        const jobKey = buildOrderCreateJobKey(shopDomain, shopifyOrder.id);
+
         // Enqueue job for async processing
         const jobData = {
           shopDomain,
           payload: shopifyOrder,
-          deliveryId: deliveryIdHeader || `gen_${shopifyOrder.id}_${Date.now()}`,
+          deliveryId: buildOrderCreateDeliveryId(
+            shopDomain,
+            shopifyOrder.id,
+            deliveryIdHeader
+          ),
           accessToken, // Pass token if we have it, otherwise worker will try to fetch it
           webhookTopic: topic || "orders/create",
         };
 
         const { queueService, QUEUES } = await import("./services/queue.service");
-        const jobId = await queueService.addJob(QUEUES.ORDERS_CREATE, jobData);
+        const jobId = await queueService.addJob(QUEUES.ORDERS_CREATE, jobData, {
+          singletonKey: jobKey,
+          singletonSeconds: 15 * 60,
+        });
 
         if (jobId) {
+           await storage.markWebhookDeliveryQueued({
+             shopDomain,
+             deliveryId: jobData.deliveryId,
+             topic: jobData.webhookTopic,
+           });
            logger.info(`[Webhook] Enqueued job ${jobId} for order ${shopifyOrder.id}`);
            res.status(200).json({ success: true, jobId, message: "Webhook accepted for processing" });
         } else {
-           logger.error(`[Webhook] Failed to enqueue job for order ${shopifyOrder.id}`);
-           // If queue fails, should we process synchronously or fail?
-           // Failing allows Shopify to retry.
-           res.status(503).json({ error: "Failed to queue webhook processing" });
+           logger.info(
+             `[Webhook] Order ${shopifyOrder.id} is already queued or processing. Acknowledging duplicate delivery.`
+           );
+           res.status(200).json({
+             success: true,
+             duplicate: true,
+             message: "Webhook already queued or processing",
+           });
         }
 
       } catch (error) {

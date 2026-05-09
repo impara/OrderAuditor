@@ -1,17 +1,24 @@
 
 import PgBoss from "pg-boss";
 import { logger } from "../utils/logger";
-import { db } from "../db";
 
 // Queue names
 export const QUEUES = {
   ORDERS_CREATE: "orders-create-processing",
 } as const;
 
+const QUEUE_OPTIONS: Record<string, PgBoss.Queue> = {
+  [QUEUES.ORDERS_CREATE]: {
+    name: QUEUES.ORDERS_CREATE,
+    policy: "stately",
+  },
+};
+
 export class QueueService {
   private static instance: QueueService;
   private boss: PgBoss | null = null;
   private isReady: boolean = false;
+  private ensuredQueues = new Set<string>();
 
   private constructor() {}
 
@@ -45,6 +52,7 @@ export class QueueService {
 
       await this.boss.start();
       this.isReady = true;
+      this.ensuredQueues.clear();
       logger.info("[Queue] Queue service initialized and started");
     } catch (error) {
       logger.error("[Queue] Failed to initialize queue service:", error);
@@ -60,25 +68,50 @@ export class QueueService {
       await this.boss.stop();
       this.isReady = false;
       this.boss = null;
+      this.ensuredQueues.clear();
       logger.info("[Queue] Queue service stopped");
     }
+  }
+
+  private async ensureQueue(queueName: string): Promise<void> {
+    if (!this.boss) {
+      throw new Error("Queue service not initialized");
+    }
+
+    if (this.ensuredQueues.has(queueName)) {
+      return;
+    }
+
+    const queueOptions = QUEUE_OPTIONS[queueName] ?? { name: queueName };
+
+    await this.boss.createQueue(queueName, queueOptions);
+
+    if (QUEUE_OPTIONS[queueName]) {
+      await this.boss.updateQueue(queueName, queueOptions);
+    }
+
+    this.ensuredQueues.add(queueName);
   }
 
   /**
    * Add a job to the queue
    */
-  public async addJob(queueName: string, data: any, options: any = {}): Promise<string | null> {
+  public async addJob(
+    queueName: string,
+    data: any,
+    options: PgBoss.SendOptions = {}
+  ): Promise<string | null> {
     if (!this.boss || !this.isReady) {
-      logger.warn(`[Queue] Attempted to add job but queue is not ready. boss: ${!!this.boss}, isReady: ${this.isReady}`);
-      return null;
+      const message = `[Queue] Attempted to add job but queue is not ready. boss: ${!!this.boss}, isReady: ${this.isReady}`;
+      logger.error(message);
+      throw new Error(message);
     }
 
     try {
-      // Ensure queue exists (idempotent)
-      await this.boss.createQueue(queueName);
+      await this.ensureQueue(queueName);
 
       // Default options
-      const jobOptions = {
+      const jobOptions: PgBoss.SendOptions = {
         retryLimit: 3,
         retryDelay: 60, // 1 minute
         expireInMinutes: 15, // Job timeout
@@ -88,7 +121,7 @@ export class QueueService {
       const jobId = await this.boss.send(queueName, data, jobOptions);
       
       if (!jobId) {
-         logger.error(`[Queue] pg-boss.send returned null for ${queueName}. Params: ${JSON.stringify(jobOptions)}`);
+         logger.info(`[Queue] Job was not enqueued to ${queueName}; pg-boss treated it as a duplicate or constrained job. Params: ${JSON.stringify(jobOptions)}`);
       } else {
          logger.debug(`[Queue] Job enqueued to ${queueName}. Job ID: ${jobId}`);
       }
@@ -109,6 +142,8 @@ export class QueueService {
     }
 
     try {
+      await this.ensureQueue(queueName);
+
       // pg-boss work function takes a handler that returns a promise
       await this.boss.work(queueName, options, async (jobs: any) => {
         // Handle array of jobs (pg-boss v10+ default for some configs) or single job

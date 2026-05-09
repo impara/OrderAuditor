@@ -83,6 +83,13 @@ export interface IStorage {
   // Webhook delivery tracking
   hasWebhookDelivery(shopDomain: string, deliveryId: string): Promise<boolean>;
   recordWebhookDelivery(delivery: InsertWebhookDelivery): Promise<void>;
+  markWebhookDeliveryQueued(delivery: InsertWebhookDelivery): Promise<void>;
+  markWebhookDeliveryProcessing(delivery: InsertWebhookDelivery): Promise<void>;
+  markWebhookDeliveryProcessed(delivery: InsertWebhookDelivery): Promise<void>;
+  markWebhookDeliveryFailed(
+    delivery: InsertWebhookDelivery,
+    error: unknown
+  ): Promise<void>;
   // Atomic insert-or-detect-duplicate: returns true if inserted (new), false if duplicate
   tryRecordWebhookDelivery(delivery: InsertWebhookDelivery): Promise<boolean>;
 
@@ -458,7 +465,112 @@ export class DatabaseStorage implements IStorage {
   }
 
   async recordWebhookDelivery(delivery: InsertWebhookDelivery): Promise<void> {
-    await db.insert(webhookDeliveries).values(delivery).onConflictDoNothing();
+    await this.markWebhookDeliveryProcessed(delivery);
+  }
+
+  async markWebhookDeliveryQueued(
+    delivery: InsertWebhookDelivery
+  ): Promise<void> {
+    await db
+      .insert(webhookDeliveries)
+      .values({
+        shopDomain: delivery.shopDomain,
+        deliveryId: delivery.deliveryId,
+        topic: delivery.topic,
+        status: "queued",
+        receivedAt: new Date(),
+        lastError: null,
+        failedAt: null,
+      })
+      .onConflictDoUpdate({
+        target: [webhookDeliveries.shopDomain, webhookDeliveries.deliveryId],
+        set: {
+          topic: delivery.topic,
+          status: "queued",
+          receivedAt: new Date(),
+          lastError: null,
+          failedAt: null,
+        },
+      });
+  }
+
+  async markWebhookDeliveryProcessing(
+    delivery: InsertWebhookDelivery
+  ): Promise<void> {
+    await db
+      .insert(webhookDeliveries)
+      .values({
+        shopDomain: delivery.shopDomain,
+        deliveryId: delivery.deliveryId,
+        topic: delivery.topic,
+        status: "processing",
+        attemptCount: 1,
+        receivedAt: new Date(),
+        lastError: null,
+        failedAt: null,
+      })
+      .onConflictDoUpdate({
+        target: [webhookDeliveries.shopDomain, webhookDeliveries.deliveryId],
+        set: {
+          topic: delivery.topic,
+          status: "processing",
+          attemptCount: sql`${webhookDeliveries.attemptCount} + 1`,
+          lastError: null,
+          failedAt: null,
+        },
+      });
+  }
+
+  async markWebhookDeliveryProcessed(
+    delivery: InsertWebhookDelivery
+  ): Promise<void> {
+    await db
+      .insert(webhookDeliveries)
+      .values({
+        shopDomain: delivery.shopDomain,
+        deliveryId: delivery.deliveryId,
+        topic: delivery.topic,
+        status: "processed",
+        processedAt: new Date(),
+        lastError: null,
+        failedAt: null,
+      })
+      .onConflictDoUpdate({
+        target: [webhookDeliveries.shopDomain, webhookDeliveries.deliveryId],
+        set: {
+          topic: delivery.topic,
+          status: "processed",
+          processedAt: new Date(),
+          lastError: null,
+          failedAt: null,
+        },
+      });
+  }
+
+  async markWebhookDeliveryFailed(
+    delivery: InsertWebhookDelivery,
+    error: unknown
+  ): Promise<void> {
+    await db
+      .insert(webhookDeliveries)
+      .values({
+        shopDomain: delivery.shopDomain,
+        deliveryId: delivery.deliveryId,
+        topic: delivery.topic,
+        status: "failed",
+        receivedAt: new Date(),
+        failedAt: new Date(),
+        lastError: error instanceof Error ? error.message : String(error),
+      })
+      .onConflictDoUpdate({
+        target: [webhookDeliveries.shopDomain, webhookDeliveries.deliveryId],
+        set: {
+          topic: delivery.topic,
+          status: "failed",
+          failedAt: new Date(),
+          lastError: error instanceof Error ? error.message : String(error),
+        },
+      });
   }
 
   /**
@@ -471,7 +583,13 @@ export class DatabaseStorage implements IStorage {
   ): Promise<boolean> {
     const result = await db
       .insert(webhookDeliveries)
-      .values(delivery)
+      .values({
+        shopDomain: delivery.shopDomain,
+        deliveryId: delivery.deliveryId,
+        topic: delivery.topic,
+        status: "processed",
+        processedAt: new Date(),
+      })
       .onConflictDoNothing()
       .returning({ id: webhookDeliveries.id });
     // If result has a row, we inserted it (first time). If empty, it was a duplicate.

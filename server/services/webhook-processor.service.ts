@@ -15,6 +15,26 @@ interface OrderCreateJobData {
   webhookTopic: string;
 }
 
+export function buildOrderCreateDeliveryId(
+  shopDomain: string,
+  orderId: string | number,
+  deliveryIdHeader?: string | null
+): string {
+  const trimmedDeliveryId = deliveryIdHeader?.trim();
+  if (trimmedDeliveryId) {
+    return trimmedDeliveryId;
+  }
+
+  return buildOrderCreateJobKey(shopDomain, orderId);
+}
+
+export function buildOrderCreateJobKey(
+  shopDomain: string,
+  orderId: string | number
+): string {
+  return `orders/create:${shopDomain}:${orderId}`;
+}
+
 export class WebhookProcessorService {
   private static instance: WebhookProcessorService;
 
@@ -34,10 +54,28 @@ export class WebhookProcessorService {
   public async processOrderCreate(data: OrderCreateJobData): Promise<void> {
     const { shopDomain, payload: shopifyOrder, deliveryId, accessToken: providedAccessToken } = data;
     const orderId = shopifyOrder.id;
+    const webhookTopic = data.webhookTopic || "orders/create";
+    const deliveryRecord = {
+      shopDomain,
+      deliveryId,
+      topic: webhookTopic,
+    };
+
+    const recordProcessedDelivery = async () => {
+      if (!deliveryId) {
+        return;
+      }
+
+      await storage.markWebhookDeliveryProcessed(deliveryRecord);
+    };
 
     logger.info(`[WebhookProcessor] Processing order ${orderId} for shop ${shopDomain}`);
 
     try {
+      if (deliveryId) {
+        await storage.markWebhookDeliveryProcessing(deliveryRecord);
+      }
+
       // 1. Get Access Token
       let accessToken = providedAccessToken;
       if (!accessToken) {
@@ -54,37 +92,24 @@ export class WebhookProcessorService {
       }
 
       if (!accessToken) {
-        logger.error(`[WebhookProcessor] No access token available for ${shopDomain}. Skipping processing.`);
-        return;
-      }
-  
-      //  I will implement "At most once" (Record at Start) because that matches strict interpretation of "idempotency protection".
-      //  AND because `pg-boss` retries are for *unexpected* failures. If we crash, we might want to inspect manually?
-      //  Actually, losing order is bad.
-      //  But preventing duplicates via `deliveryId` IS the standard simple approach.
-      //  If I `tryRecord` at start, and it fails (duplicate), I return.
-      
-      //  I'll stick to: Record at Start.
-      //  If valid, `isNew` is true.
-      //  If not, return.
-      
-      if (deliveryId) {
-        const isNew = await storage.tryRecordWebhookDelivery({
-          shopDomain,
-          deliveryId,
-          topic: data.webhookTopic || "orders/create"
-        });
-        
-        if (!isNew) {
-           logger.info(`[WebhookProcessor] Duplicate webhook delivery ${deliveryId}. Skipping.`);
-           return;
-        }
+        throw new Error(`[WebhookProcessor] No access token available for ${shopDomain}. Retrying processing.`);
       }
 
-      // 1.5 Check if order already exists (Idempotency)
+      // 1.5 Check if order already exists. This is the primary idempotency guard.
       const existingOrder = await storage.getOrderByShopifyId(shopDomain, orderId.toString());
       if (existingOrder) {
-        logger.info(`[WebhookProcessor] Order ${orderId} already exists in database. Skipping duplicate processing.`);
+        logger.info(`[WebhookProcessor] Order ${orderId} already exists in database. Marking delivery processed.`);
+        if (existingOrder.isFlagged) {
+          try {
+            await shopifyService.tagOrder(shopDomain, accessToken, orderId.toString(), [
+              "Merge_Review_Candidate",
+            ]);
+            logger.info(`[WebhookProcessor] Ensured tag for existing flagged order ${orderId}`);
+          } catch (error) {
+            logger.error(`[WebhookProcessor] Failed to ensure tag for existing flagged order ${orderId}:`, error);
+          }
+        }
+        await recordProcessedDelivery();
         return;
       }
 
@@ -95,6 +120,7 @@ export class WebhookProcessorService {
         // and the email notification is sent. Subsequent orders log at info to
         // reduce noise in Dozzle for stores that are already over their quota.
         logger.info(`[WebhookProcessor] Quota exceeded for shop ${shopDomain}: ${quota.reason}. Skipping processing.`);
+        await recordProcessedDelivery();
         return;
       }
 
@@ -252,12 +278,26 @@ export class WebhookProcessorService {
         // If it's a unique constraint error (already exists), we shouldn't fail
         if (String(error).includes("unique-constraint") || String(error).includes("duplicate key")) {
             logger.warn(`[WebhookProcessor] Order ${orderId} already exists in DB.`);
+            await recordProcessedDelivery();
+            return;
         } else {
              throw error; // Retry for db connection issues
         }
       }
 
+      await recordProcessedDelivery();
+
     } catch (error) {
+      if (deliveryId) {
+        try {
+          await storage.markWebhookDeliveryFailed(deliveryRecord, error);
+        } catch (deliveryError) {
+          logger.error(
+            `[WebhookProcessor] Failed to mark delivery ${deliveryId} as failed:`,
+            deliveryError
+          );
+        }
+      }
       logger.error(`[WebhookProcessor] Critical error processing order ${orderId}:`, error);
       throw error;
     }

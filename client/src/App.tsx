@@ -7,6 +7,7 @@ import Dashboard from "@/pages/dashboard";
 import Settings from "@/pages/settings";
 import Subscription from "@/pages/subscription";
 import Support from "@/pages/support";
+import WebhookOps from "@/pages/webhook-ops";
 import NotFound from "@/pages/not-found";
 import { AppBridgeProvider } from "@/components/AppBridgeProvider";
 
@@ -17,6 +18,7 @@ function Router() {
       <Route path="/settings" component={Settings} />
       <Route path="/subscription" component={Subscription} />
       <Route path="/support" component={Support} />
+      <Route path="/webhook-ops" component={WebhookOps} />
       <Route component={NotFound} />
     </Switch>
   );

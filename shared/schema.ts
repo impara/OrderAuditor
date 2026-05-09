@@ -173,6 +173,16 @@ export const webhookDeliveries = pgTable(
     shopDomain: varchar("shop_domain").notNull(),
     deliveryId: varchar("delivery_id", { length: 255 }).notNull(), // X-Shopify-Delivery-Id or X-Shopify-Webhook-Id header
     topic: varchar("topic", { length: 100 }).notNull(), // e.g., 'orders/create', 'orders/updated', 'app/uninstalled'
+    status: varchar("status", { length: 20 })
+      .$type<"queued" | "processing" | "processed" | "failed">()
+      .notNull()
+      .default("processed"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    lastError: text("last_error"),
+    receivedAt: timestamp("received_at")
+      .notNull()
+      .default(sql`now()`),
+    failedAt: timestamp("failed_at"),
     processedAt: timestamp("processed_at")
       .notNull()
       .default(sql`now()`),
@@ -220,6 +230,11 @@ export const insertWebhookDeliverySchema = createInsertSchema(
   webhookDeliveries
 ).omit({
   id: true,
+  status: true,
+  attemptCount: true,
+  lastError: true,
+  receivedAt: true,
+  failedAt: true,
   processedAt: true,
 });
 
