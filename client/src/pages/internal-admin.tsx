@@ -111,7 +111,12 @@ function daysRemaining(value: string | null) {
   );
 }
 
-function periodLabel(value: string | null) {
+function periodLabel(shop: InternalShop) {
+  if (shop.tier === "paid" && shop.status === "active") {
+    return "Active";
+  }
+
+  const value = shop.currentBillingPeriodEnd;
   if (!value) return "No end date";
 
   const days = daysRemaining(value);
@@ -377,7 +382,7 @@ export default function InternalAdminPage() {
                   <TableRow>
                     <TableHead>Store</TableHead>
                     <TableHead>Plan</TableHead>
-                    <TableHead>Usage</TableHead>
+                        <TableHead>Period usage</TableHead>
                     <TableHead>Orders</TableHead>
                     <TableHead>Period</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -419,13 +424,17 @@ export default function InternalAdminPage() {
                         <TableCell>
                           <div>{shop.totalOrders} total</div>
                           <div className="text-xs text-muted-foreground">
-                            {shop.flaggedOrders} flagged
+                            {shop.flaggedOrders} flagged total
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div>{formatDate(shop.currentBillingPeriodEnd)}</div>
+                          <div>
+                            {shop.tier === "paid" && shop.status === "active"
+                              ? "Unlimited"
+                              : formatDate(shop.currentBillingPeriodEnd)}
+                          </div>
                           <div className="text-xs text-muted-foreground">
-                            {periodLabel(shop.currentBillingPeriodEnd)}
+                            {periodLabel(shop)}
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
