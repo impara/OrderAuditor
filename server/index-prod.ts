@@ -9,10 +9,16 @@ import express, { type Express } from "express";
 import runApp from "./app";
 
 /**
- * Push database schema changes on startup using drizzle-kit push.
- * This ensures the database schema is always in sync with the code.
+ * Push database schema changes when enabled.
+ * Blue/green deploys should run this as a separate one-off deployment step
+ * before starting the inactive app container.
  */
 async function pushDatabaseSchema(): Promise<void> {
+  if (process.env.RUN_SCHEMA_PUSH === "false") {
+    console.log("[Startup] Skipping database schema push (RUN_SCHEMA_PUSH=false)");
+    return;
+  }
+
   console.log("[Startup] Pushing database schema...");
   
   try {
@@ -62,7 +68,7 @@ import { queueService } from "./services/queue.service";
 import { webhookWorker } from "./workers/webhook-worker";
 
 (async () => {
-  // Push database schema before starting the app
+  // Push database schema before starting the app unless disabled by deployment.
   await pushDatabaseSchema();
   
   // Initialize queue system

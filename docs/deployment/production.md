@@ -123,7 +123,17 @@ docker-compose -f docker-compose.prod.yml ps
 
 ### 2. Database Schema
 
-The database schema is automatically pushed on container startup using `drizzle-kit push`. No manual migration steps are required.
+The database schema can still be deployed automatically, but blue/green deployments should run it as a separate one-off step before the inactive app container is started and before ports are swapped.
+
+Recommended deployment order:
+
+```bash
+docker compose -f docker-compose.prod.yml pull "$INACTIVE"
+docker compose -f docker-compose.prod.yml run --rm --no-deps "$INACTIVE" npm run db:push:force
+docker compose -f docker-compose.prod.yml up -d "$INACTIVE"
+```
+
+Production app services set `RUN_SCHEMA_PUSH=false` by default so normal app container starts do not run schema sync themselves. If the one-off schema step fails, the deploy script should stop before the port swap and keep the currently active container serving traffic.
 
 ### 3. Register Shopify Webhook
 
@@ -159,7 +169,7 @@ git pull
 # Rebuild and restart
 docker-compose -f docker-compose.prod.yml up -d --build
 
-# Database schema is automatically pushed on startup - no manual steps needed
+# Database schema should be pushed by the deploy script before the port swap
 ```
 
 ### Backup Database
