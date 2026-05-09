@@ -29,10 +29,14 @@ export class SubscriptionService {
     ) {
       logger.info(`[Subscription] Billing period expired for ${shopDomain}`);
 
-      // If subscription was cancelled but still in paid tier (grace period), downgrade now
-      if (subscription.status === "cancelled" && subscription.tier === "paid") {
+      // If subscription is in a temporary paid state, downgrade when the period ends.
+      if (
+        subscription.tier === "paid" &&
+        (subscription.status === "cancelled" ||
+          subscription.status === "complimentary")
+      ) {
         logger.info(
-          `[Subscription] Grace period ended for ${shopDomain}, downgrading to free tier`
+          `[Subscription] Temporary paid period ended for ${shopDomain}, downgrading to free tier`
         );
         // Downgrade to free tier and reset order count and billing period for new free tier period
         // Do this atomically to prevent re-processing the same expired period

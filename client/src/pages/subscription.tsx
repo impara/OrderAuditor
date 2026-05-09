@@ -222,6 +222,7 @@ function SubscriptionPage() {
   }
 
   const isPaid = subscription.tier === "paid";
+  const isComplimentary = subscription.status === "complimentary";
   const isUnlimited = subscription.orderLimit === -1;
   const usagePercentage = isUnlimited
     ? 0
@@ -256,12 +257,19 @@ function SubscriptionPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Current Plan</CardTitle>
-                <Badge variant={isPaid ? "default" : "secondary"}>
-                  {isPaid ? "Paid" : "Free"}
+                <Badge
+                  variant={isPaid ? "default" : "secondary"}
+                  className={isComplimentary ? "bg-emerald-600 hover:bg-emerald-600" : ""}
+                >
+                  {isComplimentary ? "Complimentary" : isPaid ? "Paid" : "Free"}
                 </Badge>
               </div>
               <CardDescription>
-                {isPaid ? "$7.99/month - Unlimited duplicates" : "Free - 30 duplicates/month"}
+                {isComplimentary
+                  ? "Unlimited access granted by Duplicate Guard"
+                  : isPaid
+                    ? "$7.99/month - Unlimited duplicates"
+                    : "Free - 30 duplicates/month"}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -295,13 +303,15 @@ function SubscriptionPage() {
               {periodEnd && (
                 <div className="pt-4 border-t">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">{isPaid ? "Billing Period" : "Usage Cycle"}</span>
+                    <span className="text-muted-foreground">
+                      {isComplimentary ? "Complimentary Access" : isPaid ? "Billing Period" : "Usage Cycle"}
+                    </span>
                     <span className="font-medium">
                       {daysRemaining !== null ? `${daysRemaining} days remaining` : "Active"}
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Resets on {periodEnd.toLocaleDateString()}
+                    {isComplimentary ? "Ends on" : "Resets on"} {periodEnd.toLocaleDateString()}
                   </p>
                 </div>
               )}
@@ -389,7 +399,11 @@ function SubscriptionPage() {
                   </ul>
                   <div className="mt-4">
                     {isPaid ? (
-                      subscription.status === "cancelled" ? (
+                      isComplimentary ? (
+                        <div className="w-full text-center p-2 border border-emerald-500/50 bg-emerald-500/10 rounded text-sm text-emerald-700 dark:text-emerald-400">
+                          Complimentary until {periodEnd?.toLocaleDateString()}
+                        </div>
+                      ) : subscription.status === "cancelled" ? (
                         <div className="w-full text-center p-2 border border-yellow-500/50 bg-yellow-500/10 rounded text-sm text-yellow-600 dark:text-yellow-400">
                           Cancels on {periodEnd?.toLocaleDateString()}
                         </div>

@@ -1,9 +1,14 @@
-import type { Express, Request, Response } from "express";
+import type { Express, NextFunction, Request, Response } from "express";
 import express from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import { FREE_TIER_ORDER_LIMIT, storage } from "./storage";
 import { db } from "./db";
-import { orders, webhookDeliveries } from "@shared/schema";
+import {
+  orders,
+  subscriptions,
+  shopifySessions,
+  webhookDeliveries,
+} from "@shared/schema";
 import { eq, desc, and, isNotNull, sql } from "drizzle-orm";
 import { duplicateDetectionService } from "./services/duplicate-detection.service";
 import { shopifyService } from "./services/shopify.service";
@@ -19,7 +24,7 @@ import {
   insertOrderSchema,
   updateDetectionSettingsSchema,
 } from "@shared/schema";
-import { randomUUID } from "crypto";
+import { randomUUID, timingSafeEqual } from "crypto";
 import { logger } from "./utils/logger";
 
 
@@ -59,6 +64,45 @@ function validateReturnUrl(returnUrl: string): string {
 }
 
 import { auth, authCallback, verifyRequest, shopify } from "./shopify-auth";
+
+function getConfiguredAdminToken(): string | undefined {
+  return process.env.INTERNAL_ADMIN_TOKEN || process.env.ADMIN_API_TOKEN;
+}
+
+function constantTimeEquals(a: string, b: string): boolean {
+  const aBuffer = Buffer.from(a);
+  const bBuffer = Buffer.from(b);
+
+  if (aBuffer.length !== bBuffer.length) {
+    return false;
+  }
+
+  return timingSafeEqual(aBuffer, bBuffer);
+}
+
+function requireInternalAdmin(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  const configuredToken = getConfiguredAdminToken();
+
+  if (!configuredToken && process.env.NODE_ENV === "production") {
+    logger.error("[InternalAdmin] Missing INTERNAL_ADMIN_TOKEN in production");
+    return res.status(503).json({ error: "Internal admin is not configured" });
+  }
+
+  const expectedToken = configuredToken || "dev-admin-token";
+  const providedToken =
+    req.get("X-Admin-Token") ||
+    (typeof req.query.token === "string" ? req.query.token : "");
+
+  if (!providedToken || !constantTimeEquals(providedToken, expectedToken)) {
+    return res.status(401).json({ error: "Invalid admin token" });
+  }
+
+  next();
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.use(
@@ -907,6 +951,189 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
+
+  app.get(
+    "/api/internal/admin/shops",
+    requireInternalAdmin,
+    async (_req: Request, res: Response) => {
+      try {
+        const rows = await db
+          .select({
+            id: subscriptions.id,
+            shopDomain: subscriptions.shopifyShopDomain,
+            tier: subscriptions.tier,
+            status: subscriptions.status,
+            monthlyOrderCount: subscriptions.monthlyOrderCount,
+            allTimeOrderCount: subscriptions.allTimeOrderCount,
+            orderLimit: subscriptions.orderLimit,
+            currentBillingPeriodStart:
+              subscriptions.currentBillingPeriodStart,
+            currentBillingPeriodEnd: subscriptions.currentBillingPeriodEnd,
+            shopifyChargeId: subscriptions.shopifyChargeId,
+            createdAt: subscriptions.createdAt,
+            updatedAt: subscriptions.updatedAt,
+            totalOrders: sql<number>`COALESCE((
+              SELECT COUNT(*)::int
+              FROM ${orders}
+              WHERE ${orders.shopDomain} = ${subscriptions.shopifyShopDomain}
+            ), 0)`,
+            flaggedOrders: sql<number>`COALESCE((
+              SELECT COUNT(*)::int
+              FROM ${orders}
+              WHERE ${orders.shopDomain} = ${subscriptions.shopifyShopDomain}
+                AND ${orders.isFlagged} = true
+            ), 0)`,
+            lastOrderAt: sql<Date | null>`(
+              SELECT MAX(${orders.createdAt})
+              FROM ${orders}
+              WHERE ${orders.shopDomain} = ${subscriptions.shopifyShopDomain}
+            )`,
+            merchantEmail: sql<string | null>`(
+              SELECT MAX(${shopifySessions.email})
+              FROM ${shopifySessions}
+              WHERE ${shopifySessions.shop} = ${subscriptions.shopifyShopDomain}
+            )`,
+            merchantName: sql<string | null>`(
+              SELECT NULLIF(
+                TRIM(CONCAT(
+                  MAX(${shopifySessions.firstName}),
+                  ' ',
+                  MAX(${shopifySessions.lastName})
+                )),
+                ''
+              )
+              FROM ${shopifySessions}
+              WHERE ${shopifySessions.shop} = ${subscriptions.shopifyShopDomain}
+            )`,
+          })
+          .from(subscriptions)
+          .orderBy(desc(subscriptions.updatedAt));
+
+        const shops = rows.map((row) => ({
+          ...row,
+          totalOrders: Number(row.totalOrders || 0),
+          flaggedOrders: Number(row.flaggedOrders || 0),
+        }));
+
+        const summary = shops.reduce(
+          (acc, shop) => {
+            acc.total += 1;
+            if (shop.tier === "paid" && shop.status !== "complimentary") {
+              acc.paid += 1;
+            }
+            if (shop.tier === "free") acc.free += 1;
+            if (shop.status === "complimentary") acc.complimentary += 1;
+            acc.flaggedOrders += shop.flaggedOrders;
+            return acc;
+          },
+          {
+            total: 0,
+            free: 0,
+            paid: 0,
+            complimentary: 0,
+            flaggedOrders: 0,
+          }
+        );
+
+        res.json({ shops, summary });
+      } catch (error) {
+        logger.error("[InternalAdmin] Error fetching shops:", error);
+        res.status(500).json({ error: "Failed to fetch shops" });
+      }
+    }
+  );
+
+  app.post(
+    "/api/internal/admin/shops/:shopDomain/grant-complimentary",
+    requireInternalAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const { shopDomain } = req.params;
+        const requestedDays = Number(req.body?.days ?? 30);
+        const days = Number.isFinite(requestedDays)
+          ? Math.min(365, Math.max(1, Math.floor(requestedDays)))
+          : 30;
+
+        const now = new Date();
+        const periodEnd = new Date(now);
+        periodEnd.setDate(periodEnd.getDate() + days);
+
+        let subscription = await storage.getSubscription(shopDomain);
+        if (!subscription) {
+          subscription = await storage.initializeSubscription(shopDomain);
+        }
+
+        const updated = await storage.updateSubscription(shopDomain, {
+          tier: "paid",
+          status: "complimentary",
+          orderLimit: -1,
+          currentBillingPeriodStart: now,
+          currentBillingPeriodEnd: periodEnd,
+          quotaExceededNotifiedAt: null,
+        });
+
+        logger.info(
+          `[InternalAdmin] Granted ${days} complimentary days to ${shopDomain}`
+        );
+
+        res.json({
+          success: true,
+          subscription: updated,
+          message: `Granted ${days} complimentary days to ${shopDomain}`,
+        });
+      } catch (error) {
+        logger.error("[InternalAdmin] Error granting complimentary access:", error);
+        res.status(500).json({
+          error: "Failed to grant complimentary access",
+          details: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  );
+
+  app.post(
+    "/api/internal/admin/shops/:shopDomain/revoke-complimentary",
+    requireInternalAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const { shopDomain } = req.params;
+        const subscription = await storage.getSubscription(shopDomain);
+
+        if (!subscription) {
+          return res.status(404).json({ error: "Subscription not found" });
+        }
+
+        const now = new Date();
+        const periodEnd = new Date(now);
+        periodEnd.setDate(periodEnd.getDate() + 30);
+
+        const updated = await storage.updateSubscription(shopDomain, {
+          tier: "free",
+          status: "active",
+          orderLimit: FREE_TIER_ORDER_LIMIT,
+          currentBillingPeriodStart: now,
+          currentBillingPeriodEnd: periodEnd,
+          shopifyChargeId: null,
+        });
+
+        logger.info(
+          `[InternalAdmin] Revoked complimentary access for ${shopDomain}`
+        );
+
+        res.json({
+          success: true,
+          subscription: updated,
+          message: `Revoked complimentary access for ${shopDomain}`,
+        });
+      } catch (error) {
+        logger.error("[InternalAdmin] Error revoking complimentary access:", error);
+        res.status(500).json({
+          error: "Failed to revoke complimentary access",
+          details: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  );
 
   // Internal cleanup endpoint (for scheduled jobs like Ofelia)
   app.post("/api/internal/cleanup", async (_req: Request, res: Response) => {

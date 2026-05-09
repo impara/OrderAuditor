@@ -32,6 +32,7 @@ export function AppBridgeProvider({ children }: { children: React.ReactNode }) {
         const urlParams = new URLSearchParams(window.location.search);
         const host = urlParams.get("host");
         const shop = urlParams.get("shop");
+        const isInternalAdmin = window.location.pathname === "/internal-admin";
 
         // In App Bridge v4, the script tag in index.html handles initialization
         // We just need to ensure we have the necessary params for the app to function
@@ -42,7 +43,9 @@ export function AppBridgeProvider({ children }: { children: React.ReactNode }) {
             isInIframe: window !== window.parent,
         });
 
-        if (host) {
+        if (isInternalAdmin) {
+            setIsReady(true);
+        } else if (host) {
             setIsReady(true);
         } else if (import.meta.env.DEV) {
             // Allow dev mode without host if needed (e.g. direct browser access)

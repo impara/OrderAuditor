@@ -8,6 +8,7 @@ import Settings from "@/pages/settings";
 import Subscription from "@/pages/subscription";
 import Support from "@/pages/support";
 import WebhookOps from "@/pages/webhook-ops";
+import InternalAdmin from "@/pages/internal-admin";
 import NotFound from "@/pages/not-found";
 import { AppBridgeProvider } from "@/components/AppBridgeProvider";
 
@@ -19,6 +20,7 @@ function Router() {
       <Route path="/subscription" component={Subscription} />
       <Route path="/support" component={Support} />
       <Route path="/webhook-ops" component={WebhookOps} />
+      <Route path="/internal-admin" component={InternalAdmin} />
       <Route component={NotFound} />
     </Switch>
   );
