@@ -242,12 +242,12 @@ export default function Settings() {
                             <FormLabel className="flex items-center gap-2">
                               Shipping Address
                               <InfoTooltip
-                                content="Worth up to 45 points for full match (street + city + zip), or 25 points for partial match. Automatically skipped for orders without shipping addresses (digital products, gift cards)."
+                                content="Worth up to 50 points for full match (street + city + zip), or 25 points for partial match. Automatically skipped for orders without shipping addresses (digital products, gift cards)."
                                 side="bottom"
                               />
                             </FormLabel>
                             <FormDescription>
-                              Flag orders shipping to the same address (45 points for full match, 25 for partial)
+                              Flag orders shipping to the same address (50 points for full match, 25 for partial)
                             </FormDescription>
                           </div>
                           <FormControl>
@@ -271,7 +271,7 @@ export default function Settings() {
                             <FormLabel className="flex items-center gap-2">
                               Product SKU
                               <InfoTooltip
-                                content="Worth 50 points. Checks if the new order contains any SKU that was previously purchased by the same customer within the time window."
+                                content="Worth 50 points. Checks if the new order contains any SKU seen in a prior order within the time window. Name, email, phone, or address evidence still determines whether it reaches the flagging threshold."
                                 side="bottom"
                               />
                             </FormLabel>
@@ -290,13 +290,13 @@ export default function Settings() {
                       )}
                     />
 
-                    {/* Warning for address-only mode */}
+                    {/* Guidance for address-only mode */}
                     {form.watch("matchAddress") &&
                       !form.watch("matchEmail") &&
                       !form.watch("matchPhone") && (
                         <Alert variant="default" className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950">
                           <AlertDescription className="text-sm">
-                            ⚠️ <strong>Address-only matching won't flag duplicates.</strong> Address alone (45 pts) + Name (20 pts) = 65 points, which is below the 70-point threshold. Enable email or phone matching for duplicate detection to work.
+                            <strong>Address-only mode is conservative.</strong> Exact address + matching name reaches 70 points and will be flagged. Address without a matching name stays below the threshold.
                           </AlertDescription>
                         </Alert>
                       )}
@@ -309,7 +309,7 @@ export default function Settings() {
                       <ul className="text-xs text-muted-foreground space-y-1 ml-4">
                         <li>• Email match: <strong>50 points</strong></li>
                         <li>• Phone match: <strong>50 points</strong></li>
-                        <li>• Full address match (street + city + zip): <strong>45 points</strong></li>
+                        <li>• Full address match (street + city + zip): <strong>50 points</strong></li>
                         <li>• Partial address match: <strong>25 points</strong></li>
                         <li>• SKU match: <strong>50 points</strong></li>
                         <li>• Name match: <strong>20 points</strong> (supporting evidence)</li>
@@ -317,6 +317,7 @@ export default function Settings() {
                       <div className="mt-4 space-y-2 text-xs text-muted-foreground border-t border-border pt-3">
                         <p><strong>Example - Fraud Detection:</strong></p>
                         <p>Same customer (Email 50 + Name 20) orders different products → <strong>70 pts → Flagged ✓</strong></p>
+                        <p>Same recipient (Address 50 + Name 20) ships to the same place: <strong>70 pts, Flagged</strong></p>
                         <p className="mt-2"><strong>Example - Limit Purchase by SKU:</strong></p>
                         <p>Enable <em>only</em> SKU matching. Same customer re-orders same SKU → <strong>70 pts (SKU 50 + Name 20) → Flagged ✓</strong></p>
                         <p className="italic mt-2">💡 Tip: Name is always checked as supporting evidence. Combine Email + SKU for strongest fraud detection.</p>

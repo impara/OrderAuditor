@@ -8,52 +8,69 @@ import {
   boolean,
   jsonb,
   decimal,
+  index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // Orders table - stores order data from Shopify webhooks
-export const orders = pgTable("orders", {
-  id: varchar("id")
-    .primaryKey()
-    .default(sql`gen_random_uuid()`),
-  shopDomain: varchar("shop_domain").notNull(), // Multi-tenancy support
-  shopifyOrderId: varchar("shopify_order_id").notNull(), // Removed unique constraint as different shops might have same ID (unlikely but possible with different shops) or same order ID across shops? No, shopify IDs are unique globally usually, but safer to scope by shop. Actually, let's keep it unique per shop if possible, but for now just remove unique or make it unique(shop, orderId).
-  // To avoid complex composite keys in Drizzle for now, let's just remove unique constraint on shopifyOrderId or make it unique per shop.
-  // Actually, Shopify IDs are unique across all of Shopify. But let's be safe.
-  orderNumber: varchar("order_number").notNull(),
-  customerEmail: text("customer_email"),
-  customerName: text("customer_name"),
-  customerPhone: text("customer_phone"),
-  shippingAddress: jsonb("shipping_address").$type<{
-    address1?: string;
-    address2?: string;
-    city?: string;
-    province?: string;
-    country?: string;
-    zip?: string;
-  }>(),
-  totalPrice: decimal("total_price", { precision: 10, scale: 2 }).notNull(),
-  currency: varchar("currency", { length: 3 }).notNull(),
-  createdAt: timestamp("created_at").notNull(),
-  isFlagged: boolean("is_flagged").default(false).notNull(),
-  flaggedAt: timestamp("flagged_at"),
-  duplicateOfOrderId: varchar("duplicate_of_order_id"),
-  matchReason: text("match_reason"),
-  matchConfidence: integer("match_confidence"), // 0-100 percentage
-  resolvedAt: timestamp("resolved_at"),
-  resolvedBy: varchar("resolved_by", { length: 50 }), // 'manual_dashboard', 'shopify_tag_removed', 'auto_merged'
-  lineItems: jsonb("line_items").$type<
-    Array<{
-      id: string;
-      sku: string | null;
-      title: string;
-      quantity: number;
-      price: string;
-    }>
-  >(),
-});
+export const orders = pgTable(
+  "orders",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    shopDomain: varchar("shop_domain").notNull(), // Multi-tenancy support
+    shopifyOrderId: varchar("shopify_order_id").notNull(),
+    orderNumber: varchar("order_number").notNull(),
+    customerEmail: text("customer_email"),
+    customerName: text("customer_name"),
+    customerPhone: text("customer_phone"),
+    shippingAddress: jsonb("shipping_address").$type<{
+      address1?: string;
+      address2?: string;
+      city?: string;
+      province?: string;
+      country?: string;
+      zip?: string;
+    }>(),
+    totalPrice: decimal("total_price", { precision: 10, scale: 2 }).notNull(),
+    currency: varchar("currency", { length: 3 }).notNull(),
+    createdAt: timestamp("created_at").notNull(),
+    isFlagged: boolean("is_flagged").default(false).notNull(),
+    flaggedAt: timestamp("flagged_at"),
+    duplicateOfOrderId: varchar("duplicate_of_order_id"),
+    matchReason: text("match_reason"),
+    matchConfidence: integer("match_confidence"), // 0-100 percentage
+    resolvedAt: timestamp("resolved_at"),
+    resolvedBy: varchar("resolved_by", { length: 50 }), // 'manual_dashboard', 'shopify_tag_removed', 'auto_merged'
+    lineItems: jsonb("line_items").$type<
+      Array<{
+        id: string;
+        sku: string | null;
+        title: string;
+        quantity: number;
+        price: string;
+      }>
+    >(),
+  },
+  (table) => ({
+    shopOrderUnique: uniqueIndex("orders_shop_order_idx").on(
+      table.shopDomain,
+      table.shopifyOrderId
+    ),
+    shopEmailCreatedAtIdx: index("orders_shop_email_created_at_idx").on(
+      table.shopDomain,
+      table.customerEmail,
+      table.createdAt
+    ),
+    shopCreatedAtIdx: index("orders_shop_created_at_idx").on(
+      table.shopDomain,
+      table.createdAt
+    ),
+  })
+);
 
 // Detection settings table - stores configuration for duplicate detection
 export const detectionSettings = pgTable("detection_settings", {

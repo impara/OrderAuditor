@@ -131,7 +131,7 @@
 - **Matching Criteria**:
   - Email matching (50 points)
   - Phone matching (50 points, normalized)
-  - Address matching (45 points full, 25 points partial)
+  - Address matching (50 points full, 25 points partial)
   - Name matching (20 points, supporting evidence)
   - SKU matching (configurable)
 - **Threshold**: 70+ points required for flagging

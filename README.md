@@ -348,8 +348,8 @@ The system calculates a confidence score (0-100 points) based on:
 
 - **Email Match** (50 points): Same customer email
 - **Phone Match** (50 points): Same customer phone number (normalized for format differences)
-- **Address Match** (45 or 25 points): Similar shipping address
-  - Full match (street + city + zip): 45 points
+- **Address Match** (50 or 25 points): Similar shipping address
+  - Full match (street + city + zip): 50 points
   - Partial match (street + city OR street + zip): 25 points
   - Missing addresses are automatically skipped (no penalty for digital products)
 - **Name Match** (20 points): Same customer name (case-insensitive, supporting evidence only)
@@ -363,7 +363,7 @@ The system calculates a confidence score (0-100 points) based on:
 - **Examples**:
   - Email + Name: 50 + 20 = 70 points → Flagged ✓
   - Phone + Name: 50 + 20 = 70 points → Flagged ✓
-  - Address + Name: 45 + 20 = 65 points → NOT flagged (below threshold)
+  - Address + Name: 50 + 20 = 70 points -> Flagged
   - Email only: 50 points → NOT flagged (needs name match to reach 70)
 
 ### Threshold
@@ -535,7 +535,7 @@ SMTP_FROM=your-email@gmail.com
 
 ## Known Limitations
 
-- **Address-only matching**: Address matching alone (45 points) + Name (20 points) = 65 points, which is below the 70-point threshold. Email or phone matching must be enabled for duplicate detection to work.
+- **Address-only matching**: Exact address (50 points) + Name (20 points) reaches the 70-point threshold. Address without a matching name will not be flagged by itself.
 - **Email/Phone-only matching**: Email or phone alone (50 points) requires a name match (20 points) to reach the 70-point threshold. Orders with only email/phone matches (no name) will not be flagged.
 - Single detection settings profile (no multi-store support yet)
 - Average resolution time in dashboard stats is currently a placeholder value

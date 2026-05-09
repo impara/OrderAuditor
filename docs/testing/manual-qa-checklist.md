@@ -70,7 +70,7 @@
     - Toggle matching criteria:
       - Enable/disable email matching (50 points)
       - Enable/disable phone matching (50 points)
-      - Enable/disable address matching (45 points for full match, 25 for partial)
+      - Enable/disable address matching (50 points for full match, 25 for partial)
     - Note: Missing addresses are automatically skipped (no penalty for digital products)
     - Save settings
 
@@ -111,7 +111,7 @@
 17. Test address matching:
 
     - Create orders with:
-      - Exact same address (street + city + zip) - should score 45 points
+      - Exact same address (street + city + zip) - should score 50 points
       - Same street + city but different zip - should score 25 points (partial match)
       - Same street + zip but different city - should score 25 points (partial match)
     - Verify detection behavior matches scoring rules
@@ -150,7 +150,7 @@
 - Default detection settings are auto-created on first webhook
 - Time window: Default 24 hours (configurable)
 - Matching criteria: Email, Phone, Address (all enabled by default)
-- Scoring: Email 50pts, Phone 50pts, Address 45pts (full) or 25pts (partial), Name 20pts
+- Scoring: Email 50pts, Phone 50pts, Address 50pts (full) or 25pts (partial), Name 20pts
 - Confidence threshold: 70 points (not configurable in UI, but can be verified in detection logic)
 - Tag name: `Merge_Review_Candidate` (automatically applied to flagged orders)
 
@@ -158,7 +158,7 @@
 
 - Orders are flagged when confidence score >= 70 points
 - Missing data (addresses, phone numbers) is automatically skipped
-- Scoring is transparent: Email 50, Phone 50, Address 45/25, Name 20
+- Scoring is transparent: Email 50, Phone 50, Address 50/25, Name 20
 - Dashboard auto-refreshes every 30 seconds
 - Settings are persisted and applied to all new orders
 - Both manual and automatic resolution methods work correctly

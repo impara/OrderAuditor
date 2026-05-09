@@ -66,7 +66,7 @@ async function runVerification() {
   }
 
   // Scenario 2: Email + Full Address + Name match
-  // Expectation: Email (50) + Full Address (45) + Name (20) = 115 points (capped at 100)
+  // Expectation: Email (50) + Full Address (50) + Name (20) = 120 points (capped at 100)
   console.log("\n--- Scenario 2: Email + Full Address + Name Match ---");
   const newOrderWithAddress = {
     customerEmail: "test@example.com",
@@ -89,7 +89,7 @@ async function runVerification() {
   console.log(`Confidence: ${matchScenario2?.confidence ?? "null"}`);
   console.log(`Reason: ${matchScenario2?.reason ?? "null"}`);
   console.log(
-    `Expected: 100 (capped from Email 50 + Address 45 + Name 20 = 115)`
+    `Expected: 100 (capped from Email 50 + Address 50 + Name 20 = 120)`
   );
 
   if (matchScenario2 && matchScenario2.confidence >= 70) {
@@ -98,9 +98,9 @@ async function runVerification() {
     console.log("❌ FAIL: Should have been >= 70 confidence");
   }
 
-  // Scenario 3: Address-only mode (won't flag without additional criteria)
-  // Expectation: Full Address (45) only = 45 points → NOT flagged (below 70 threshold)
-  // This demonstrates that address-only detection requires email/phone to be enabled
+  // Scenario 3: Address-only mode without name support
+  // Expectation: Full Address (50) only = 50 points -> NOT flagged (below 70 threshold)
+  // This demonstrates that address-only detection requires supporting evidence to flag
   console.log("\n--- Scenario 3: Address-Only Mode (No Email/Phone) ---");
   const settingsAddressOnly = {
     matchEmail: false,
@@ -128,7 +128,7 @@ async function runVerification() {
 
   console.log(`Confidence: ${matchScenario3?.confidence ?? "null"}`);
   console.log(`Reason: ${matchScenario3?.reason ?? "null"}`);
-  console.log(`Expected: 45 (Address only, below 70 threshold)`);
+  console.log(`Expected: 50 (Address only, below 70 threshold)`);
 
   if (matchScenario3 && matchScenario3.confidence < 70) {
     console.log("✅ PASS: Correctly NOT flagged (confidence < 70)");

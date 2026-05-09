@@ -46,6 +46,39 @@ export class DuplicateDetectionService {
     );
 
     let existingOrders: Order[] = [];
+    let ordersInWindow: Order[] | null = null;
+    const addCandidateOrders = (candidateOrders: Order[]) => {
+      for (const order of candidateOrders) {
+        if (!existingOrders.find((existing) => existing.id === order.id)) {
+          existingOrders.push(order);
+        }
+      }
+    };
+    const loadOrdersInWindow = async (reason: string) => {
+      if (ordersInWindow) {
+        return ordersInWindow;
+      }
+
+      logger.debug(
+        `[DuplicateDetection] Loading time-window candidate orders for ${reason}`
+      );
+
+      ordersInWindow = await db
+        .select()
+        .from(orders)
+        .where(
+          and(
+            eq(orders.shopDomain, shopDomain),
+            gte(orders.createdAt, timeThreshold)
+          )
+        );
+
+      logger.debug(
+        `[DuplicateDetection] Found ${ordersInWindow.length} orders in time window`
+      );
+
+      return ordersInWindow;
+    };
 
     if (settings.matchEmail && newOrder.customerEmail) {
       logger.debug(
@@ -64,7 +97,7 @@ export class DuplicateDetectionService {
       logger.debug(
         `[DuplicateDetection] Found ${ordersByEmail.length} orders matching email`
       );
-      existingOrders = [...existingOrders, ...ordersByEmail];
+      addCandidateOrders(ordersByEmail);
     } else if (settings.matchEmail && !newOrder.customerEmail) {
       logger.debug(
         `[DuplicateDetection] Email matching enabled but new order has no email. Skipping email-based search.`
@@ -78,17 +111,8 @@ export class DuplicateDetectionService {
         `[DuplicateDetection] Searching for orders with phone: ${newOrder.customerPhone} (normalized: ${normalizedPhone})`
       );
 
-      // Get all orders in time window and filter by normalized phone in memory
-      // This is necessary because SQL doesn't easily support phone normalization
-      const allOrdersInWindow = await db
-        .select()
-        .from(orders)
-        .where(
-          and(
-            eq(orders.shopDomain, shopDomain),
-            gte(orders.createdAt, timeThreshold)
-          )
-        );
+      // Filter in memory because phone normalization is application-specific.
+      const allOrdersInWindow = await loadOrdersInWindow("phone comparison");
 
       const ordersByPhone = allOrdersInWindow.filter((order) => {
         if (!order.customerPhone) return false;
@@ -102,10 +126,45 @@ export class DuplicateDetectionService {
         `[DuplicateDetection] Found ${ordersByPhone.length} orders matching phone (after normalization)`
       );
 
-      for (const order of ordersByPhone) {
-        if (!existingOrders.find((o) => o.id === order.id)) {
-          existingOrders.push(order);
-        }
+      addCandidateOrders(ordersByPhone);
+    }
+
+    if (settings.matchSku) {
+      const newSkus = this.extractSkus(newOrder.lineItems);
+      if (newSkus.length > 0) {
+        const allOrdersInWindow = await loadOrdersInWindow("SKU comparison");
+        const ordersBySku = allOrdersInWindow.filter((order) =>
+          this.hasCommonSku(newSkus, order.lineItems)
+        );
+
+        logger.debug(
+          `[DuplicateDetection] Found ${ordersBySku.length} candidate orders sharing SKU`
+        );
+
+        addCandidateOrders(ordersBySku);
+      } else {
+        logger.debug(
+          `[DuplicateDetection] SKU matching enabled but new order has no SKUs. Skipping SKU candidate search.`
+        );
+      }
+    }
+
+    if (settings.matchAddress) {
+      if (newOrder.shippingAddress) {
+        const allOrdersInWindow = await loadOrdersInWindow("address comparison");
+        const ordersByAddress = allOrdersInWindow.filter((order) =>
+          this.compareAddresses(newOrder.shippingAddress, order.shippingAddress) > 0
+        );
+
+        logger.debug(
+          `[DuplicateDetection] Found ${ordersByAddress.length} candidate orders with matching address`
+        );
+
+        addCandidateOrders(ordersByAddress);
+      } else {
+        logger.debug(
+          `[DuplicateDetection] Address matching enabled but new order has no shipping address. Skipping address candidate search.`
+        );
       }
     }
 
@@ -153,7 +212,7 @@ export class DuplicateDetectionService {
    * Scoring:
    * - Email match: 50 points (strong identifier)
    * - Phone match: 50 points (strong identifier, normalized for format differences)
-   * - Full address match (street + city + zip): 45 points
+   * - Full address match (street + city + zip): 50 points
    * - Partial address match (street + city OR street + zip): 25 points
    * - Name match: 20 points (supporting evidence)
    * - Threshold: 70 points to flag as duplicate
@@ -223,7 +282,7 @@ export class DuplicateDetectionService {
         );
         
         logger.debug(
-          `[DuplicateDetection] Address comparison score: ${addressScore} (45=full match, 25=partial match, 0=no match)`
+          `[DuplicateDetection] Address comparison score: ${addressScore} (50=full match, 25=partial match, 0=no match)`
         );
 
         if (addressScore > 0) {
@@ -324,9 +383,31 @@ export class DuplicateDetectionService {
     return normalized;
   }
 
+  private extractSkus(lineItems: InsertOrder["lineItems"] | Order["lineItems"]): string[] {
+    if (!lineItems || !Array.isArray(lineItems)) {
+      return [];
+    }
+
+    return lineItems
+      .map((item) => item.sku)
+      .filter((sku): sku is string => typeof sku === "string" && sku.trim().length > 0);
+  }
+
+  private hasCommonSku(
+    newSkus: string[],
+    existingLineItems: Order["lineItems"]
+  ): boolean {
+    if (newSkus.length === 0) {
+      return false;
+    }
+
+    const existingSkus = this.extractSkus(existingLineItems);
+    return newSkus.some((sku) => existingSkus.includes(sku));
+  }
+
   /**
    * Compare shipping addresses
-   * Returns 45 points for full match (street + city + zip)
+   * Returns 50 points for full match (street + city + zip)
    * Returns 25 points for partial match (street + city OR street + zip)
    */
   private compareAddresses(addr1: any, addr2: any): number {
@@ -343,7 +424,7 @@ export class DuplicateDetectionService {
 
     // Full match: all three components match
     if (address1Match && cityMatch && zipMatch) {
-      return 45;
+      return 50;
     }
 
     // Partial match: street + (city OR zip)
