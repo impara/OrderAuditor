@@ -478,6 +478,12 @@ SMTP_FROM=your-email@gmail.com
 - **Client Secret** → `SHOPIFY_API_SECRET` (used for both OAuth and webhook verification)
 - `SHOPIFY_WEBHOOK_SECRET` → **NOT NEEDED** (legacy, can be removed)
 
+### Shopify Install Flow
+
+This app currently uses Shopify's authorization-code OAuth flow to create and store the offline session in `shopify_sessions` via `/api/auth/callback`. Keep `use_legacy_install_flow = true` in `shopify.app.toml` and deploy that app config with Shopify CLI.
+
+Do not switch the app config to Shopify-managed install (`use_legacy_install_flow = false`) until the backend has a token exchange path that exchanges the App Bridge session token for an offline access token and stores `offline_<shop>` in `shopify_sessions`.
+
 **For Legacy Custom Apps (Deprecated):**
 
 - `SHOPIFY_WEBHOOK_SECRET` was a separate "API secret key"
