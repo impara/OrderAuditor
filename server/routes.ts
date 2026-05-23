@@ -65,7 +65,7 @@ function validateReturnUrl(returnUrl: string): string {
 
 import { auth, authCallback, verifyRequest, shopify } from "./shopify-auth";
 
-function redirectLegacyInstallLaunch(
+async function redirectLegacyInstallLaunch(
   req: Request,
   res: Response,
   next: NextFunction
@@ -73,7 +73,7 @@ function redirectLegacyInstallLaunch(
   const shopParam = req.query.shop;
   const hostParam = req.query.host;
 
-  if (typeof shopParam !== "string" || typeof hostParam === "string") {
+  if (typeof shopParam !== "string") {
     return next();
   }
 
@@ -83,10 +83,40 @@ function redirectLegacyInstallLaunch(
     return res.status(400).send("Invalid shop parameter");
   }
 
+  if (typeof hostParam === "string") {
+    try {
+      const offlineSessionId = shopify.session.getOfflineId(shop);
+      const session = await shopify.config.sessionStorage.loadSession(
+        offlineSessionId
+      );
+
+      if (session?.accessToken) {
+        return next();
+      }
+    } catch (error) {
+      logger.warn(`[Auth] Failed to check offline session for ${shop}:`, error);
+    }
+  }
+
+  const authUrl = `/api/auth?shop=${encodeURIComponent(shop)}`;
+
+  if (typeof hostParam === "string") {
+    const appUrl = process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
+    const absoluteAuthUrl = new URL(authUrl, appUrl).toString();
+    const exitIframeUrl = `/exitiframe?exitIframe=${encodeURIComponent(
+      absoluteAuthUrl
+    )}`;
+
+    logger.info(
+      `[Auth] Embedded app launched without an offline session; escaping iframe for OAuth: ${shop}`
+    );
+    return res.redirect(exitIframeUrl);
+  }
+
   logger.info(
     `[Auth] App launched without embedded host context; starting OAuth for ${shop}`
   );
-  return res.redirect(`/api/auth?shop=${encodeURIComponent(shop)}`);
+  return res.redirect(authUrl);
 }
 
 function getConfiguredAdminToken(): string | undefined {
@@ -355,6 +385,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       <html>
         <head>
           <meta charset="utf-8">
+          <meta name="shopify-api-key" content="${apiKey}">
           <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
         </head>
         <body>
