@@ -592,15 +592,12 @@ export async function authCallback(req: Request, res: Response) {
       // Don't fail the OAuth flow if charge checking fails
     }
 
-    // Redirect to app with host param
-    const host = req.query.host;
-    const shop = session.shop;
+    const redirectParams = new URLSearchParams({ shop: session.shop });
+    if (typeof req.query.host === "string" && req.query.host.length > 0) {
+      redirectParams.set("host", req.query.host);
+    }
 
-    // Redirect to the embedded app URL
-    // If running locally with ngrok, this might be different, but standard flow is:
-    // https://admin.shopify.com/store/{shop}/apps/{api_key}
-    // But since we are serving the frontend from the same domain, we can redirect to /?shop=...&host=...
-    res.redirect(`/?shop=${shop}&host=${host}`);
+    res.redirect(`/?${redirectParams.toString()}`);
   } catch (e: any) {
     logger.error(`Failed to complete auth callback: ${e.message}`);
     res.status(500).send(e.message);

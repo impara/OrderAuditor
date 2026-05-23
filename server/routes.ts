@@ -65,6 +65,30 @@ function validateReturnUrl(returnUrl: string): string {
 
 import { auth, authCallback, verifyRequest, shopify } from "./shopify-auth";
 
+function redirectLegacyInstallLaunch(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  const shopParam = req.query.shop;
+  const hostParam = req.query.host;
+
+  if (typeof shopParam !== "string" || typeof hostParam === "string") {
+    return next();
+  }
+
+  const shop = shopify.utils.sanitizeShop(shopParam, true);
+  if (!shop) {
+    logger.warn(`[Auth] Invalid shop parameter on app launch: ${shopParam}`);
+    return res.status(400).send("Invalid shop parameter");
+  }
+
+  logger.info(
+    `[Auth] App launched without embedded host context; starting OAuth for ${shop}`
+  );
+  return res.redirect(`/api/auth?shop=${encodeURIComponent(shop)}`);
+}
+
 function getConfiguredAdminToken(): string | undefined {
   return process.env.INTERNAL_ADMIN_TOKEN || process.env.ADMIN_API_TOKEN;
 }
@@ -292,6 +316,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Auth Routes
   app.get("/api/auth", auth);
   app.get("/api/auth/callback", authCallback);
+
+  // Shopify legacy install launches hit the configured application_url with a
+  // shop parameter before embedded App Bridge context exists. Start OAuth here
+  // so the SPA does not stall on the "Missing Shopify Context" screen.
+  app.get("/", redirectLegacyInstallLaunch);
 
   // Exitiframe route for OAuth redirects in embedded apps
   // This route is used to break out of the Shopify admin iframe when re-authentication is needed
