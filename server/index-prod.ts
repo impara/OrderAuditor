@@ -61,6 +61,7 @@ export async function serveStatic(app: Express, _server: Server) {
         ? ""
         : process.env.SHOPIFY_API_KEY || process.env.VITE_SHOPIFY_API_KEY || "";
       html = html.replace("__SHOPIFY_API_KEY__", apiKey);
+      html = html.replace("__APP_URL__", process.env.APP_URL || "");
       if (isInternalAdminRoute) {
         html = html.replace(
           '<script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>',

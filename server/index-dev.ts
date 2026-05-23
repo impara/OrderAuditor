@@ -56,6 +56,7 @@ export async function setupVite(app: Express, server: Server) {
         ? ""
         : process.env.SHOPIFY_API_KEY || process.env.VITE_SHOPIFY_API_KEY || "";
       template = template.replace("__SHOPIFY_API_KEY__", apiKey);
+      template = template.replace("__APP_URL__", process.env.APP_URL || "");
       if (isInternalAdminRoute) {
         template = template.replace(
           '<script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>',

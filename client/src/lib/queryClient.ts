@@ -18,6 +18,27 @@ function isValidToken(token: unknown): token is string {
   return typeof token === "string" && token.length > 0 && token !== "null";
 }
 
+function getAppUrl(): string {
+  const configuredUrl = document
+    .querySelector<HTMLMetaElement>('meta[name="app-url"]')
+    ?.content?.replace(/\/$/, "");
+
+  return configuredUrl || window.location.origin;
+}
+
+function toAppUrl(url: string): string {
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    return url;
+  }
+
+  const path = url.startsWith("/") ? url : `/${url}`;
+  return `${getAppUrl()}${path}`;
+}
+
+function openTopLevel(url: string): void {
+  window.open(url, "_top");
+}
+
 // Helper to get fresh session token using App Bridge v4
 async function getAuthToken(): Promise<string> {
   // DEVELOPMENT BYPASS
@@ -82,17 +103,10 @@ async function throwIfResNotOk(res: Response) {
           
           isShowingReinstallPrompt = true;
           
-          // Use exitiframe pattern to break out of iframe
-          // This navigates the iframe to a page that handles the top-level redirect
-          // It avoids the "popup" experience by performing a standard navigation
-          const installUrl = data.installUrl.startsWith("http") 
-             ? data.installUrl 
-             : `${window.location.origin}${data.installUrl}`;
-             
-          const exitiframeUrl = `${window.location.origin}/exitiframe?exitIframe=${encodeURIComponent(installUrl)}`;
-          
-          console.log(`[Auth] Navigating to exitiframe: ${exitiframeUrl}`);
-          window.location.href = exitiframeUrl;
+          const installUrl = toAppUrl(data.installUrl);
+
+          console.log(`[Auth] Opening install URL in top frame: ${installUrl}`);
+          openTopLevel(installUrl);
           
           return new Promise(() => {}); // Pause execution
         }
@@ -109,23 +123,10 @@ async function throwIfResNotOk(res: Response) {
           isRedirectingToAuth = true;
           console.log(`[Auth] Redirecting to auth for shop: ${data.shop}`);
 
-          // Construct the auth URL with exitiframe parameter
-          // The exitiframe=1 parameter tells App Bridge to break out of the iframe
-          // This is the Shopify-recommended way to handle OAuth redirects in embedded apps
-          const authUrl = `${window.location.origin}/api/auth?shop=${data.shop}`;
-          const exitiframeUrl = `${window.location.origin}/exitiframe?exitIframe=${encodeURIComponent(authUrl)}`;
+          const authUrl = toAppUrl(`/api/auth?shop=${data.shop}`);
 
-          // For embedded apps (App Bridge v4), use exitiframe redirect pattern
-          // This automatically breaks out of the iframe and redirects to OAuth
-          // The App Bridge script in index.html handles this automatically
-          if (window.shopify && window.shopify.environment?.embedded) {
-            console.log("[Auth] Using exitiframe pattern for OAuth redirect in embedded app");
-            window.location.href = exitiframeUrl;
-          } else {
-            // Not embedded - direct navigation to auth URL
-            console.log("[Auth] Using direct navigation for non-embedded context");
-            window.location.href = authUrl;
-          }
+          console.log(`[Auth] Opening OAuth URL in top frame: ${authUrl}`);
+          openTopLevel(authUrl);
           
           return new Promise(() => {}); // Pause execution while redirecting
         }

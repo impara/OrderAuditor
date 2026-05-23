@@ -391,17 +391,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         </head>
         <body>
           <script>
-            // Break out of iframe and redirect to OAuth URL
-            // Attempt to use App Bridge first as it is the most reliable way in new Shopify Admin
-            if (window.shopify && window.shopify.open) {
-                try {
-                    // App Bridge open with _top target handles the breakout
-                    window.shopify.open(${JSON.stringify(exitIframe)}, "_top");
-                } catch (e) {
-                    console.error("App Bridge open failed:", e);
-                    fallbackRedirect();
-                }
-            } else {
+            // App Bridge v4 hooks into the browser open() API for top-frame
+            // navigation from embedded app routes.
+            try {
+                window.open(${JSON.stringify(exitIframe)}, "_top");
+            } catch (e) {
+                console.error("Top-frame open failed:", e);
                 fallbackRedirect();
             }
 
