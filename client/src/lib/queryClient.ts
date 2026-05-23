@@ -89,7 +89,7 @@ async function throwIfResNotOk(res: Response) {
              ? data.installUrl 
              : `${window.location.origin}${data.installUrl}`;
              
-          const exitiframeUrl = `/exitiframe?exitIframe=${encodeURIComponent(installUrl)}`;
+          const exitiframeUrl = `${window.location.origin}/exitiframe?exitIframe=${encodeURIComponent(installUrl)}`;
           
           console.log(`[Auth] Navigating to exitiframe: ${exitiframeUrl}`);
           window.location.href = exitiframeUrl;
@@ -113,7 +113,7 @@ async function throwIfResNotOk(res: Response) {
           // The exitiframe=1 parameter tells App Bridge to break out of the iframe
           // This is the Shopify-recommended way to handle OAuth redirects in embedded apps
           const authUrl = `${window.location.origin}/api/auth?shop=${data.shop}`;
-          const exitiframeUrl = `/exitiframe?exitIframe=${encodeURIComponent(authUrl)}`;
+          const exitiframeUrl = `${window.location.origin}/exitiframe?exitIframe=${encodeURIComponent(authUrl)}`;
 
           // For embedded apps (App Bridge v4), use exitiframe redirect pattern
           // This automatically breaks out of the iframe and redirects to OAuth

@@ -103,9 +103,10 @@ async function redirectLegacyInstallLaunch(
   if (typeof hostParam === "string") {
     const appUrl = process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
     const absoluteAuthUrl = new URL(authUrl, appUrl).toString();
-    const exitIframeUrl = `/exitiframe?exitIframe=${encodeURIComponent(
-      absoluteAuthUrl
-    )}`;
+    const exitIframeUrl = new URL(
+      `/exitiframe?exitIframe=${encodeURIComponent(absoluteAuthUrl)}`,
+      appUrl
+    ).toString();
 
     logger.info(
       `[Auth] Embedded app launched without an offline session; escaping iframe for OAuth: ${shop}`
