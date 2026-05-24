@@ -5,7 +5,7 @@ FROM nginx:alpine
 RUN rm -rf /usr/share/nginx/html/*
 
 # Copy static files (HTML + assets)
-COPY index.html blog.html privacy.html /usr/share/nginx/html/
+COPY index.html blog.html privacy.html robots.txt sitemap.xml /usr/share/nginx/html/
 COPY assets/ /usr/share/nginx/html/assets/
 
 EXPOSE 80

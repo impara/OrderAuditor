@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://duplicateguard.amertech.online/sitemap.xml
