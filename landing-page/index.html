@@ -143,6 +143,9 @@
         .footer-links { display: flex; gap: 24px; margin-top: 16px; flex-wrap: wrap; }
         .footer-links a:hover { color: var(--primary); text-decoration: underline; }
         .footer-inner { width: 100%; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 24px; }
+        .nav-links { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+        .nav-links a:not(.btn) { color: var(--text-sub); font-weight: 600; font-size: 0.95rem; }
+        .nav-links a:not(.btn):hover { color: var(--primary); }
         
         /* Social Proof Banner */
         .social-proof-banner { padding: 20px 0; background: var(--bg-light); border-bottom: 1px solid var(--border); text-align: center; font-size: 0.95rem; color: var(--text-sub); }
@@ -169,14 +172,18 @@
                 <img src="/assets/logo.png" alt="Duplicate Guard Logo">
                 Duplicate Guard
             </div>
-            <a
-                href="https://apps.shopify.com/duplicate-guard"
-                class="btn"
-                style="padding: 10px 20px; font-size: 0.9rem;"
-                onclick="gtag('event', 'shopify_install_click', {location: 'header'});"
-            >
-                Protect My Store
-            </a>
+            <div class="nav-links">
+                <a href="/shopify-duplicate-order-checker.html">Duplicate order checker</a>
+                <a href="/blog.html">Blog</a>
+                <a
+                    href="https://apps.shopify.com/duplicate-guard"
+                    class="btn"
+                    style="padding: 10px 20px; font-size: 0.9rem;"
+                    onclick="gtag('event', 'shopify_install_click', {location: 'header'});"
+                >
+                    Protect My Store
+                </a>
+            </div>
         </div>
     </header>
 
@@ -264,7 +271,9 @@
                 </div>
             </div>
             <div class="text-center mt-4">
-                <a href="/blog.html" style="color: var(--primary); font-weight: 600; text-decoration: underline;">Read our full article: Stop the Drop Chaos →</a>
+                <a href="/shopify-duplicate-order-checker.html" style="color: var(--primary); font-weight: 600; text-decoration: underline;">New guide: Shopify duplicate order checker →</a>
+                <br>
+                <a href="/blog.html" style="color: var(--primary); font-weight: 600; text-decoration: underline; display: inline-block; margin-top: 10px;">Read our full article: Stop the Drop Chaos →</a>
             </div>
         </div>
     </section>
@@ -507,6 +516,7 @@
                     <p style="margin: 0; font-size: 0.875rem;">Automated order protection for Shopify.</p>
                 </div>
                 <div class="footer-links">
+                    <a href="/shopify-duplicate-order-checker.html">Duplicate order checker</a>
                     <a href="/blog.html">Blog</a>
                     <a href="/privacy.html">Privacy Policy</a>
                     <a href="mailto:info@amertech.online">Support</a>
