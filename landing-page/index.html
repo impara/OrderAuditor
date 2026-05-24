@@ -94,7 +94,7 @@
         
         /* Sections */
         header { padding: 20px 0; background: var(--white); position: sticky; top: 0; z-index: 100; border-bottom: 1px solid var(--border); }
-        .logo { font-weight: 700; font-size: 1.25rem; color: var(--text-main); display: flex; align-items: center; gap: 8px; }
+        .logo { font-weight: 700; font-size: 1.25rem; color: var(--text-main); display: flex; align-items: center; gap: 8px; flex-shrink: 0; white-space: nowrap; }
         .logo img { height: 32px; width: auto; }
         
         .hero { padding: 100px 0 80px; background: radial-gradient(circle at top center, #f1f8f5 0%, #ffffff 70%); }
@@ -143,9 +143,10 @@
         .footer-links { display: flex; gap: 24px; margin-top: 16px; flex-wrap: wrap; }
         .footer-links a:hover { color: var(--primary); text-decoration: underline; }
         .footer-inner { width: 100%; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 24px; }
-        .nav-links { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+        .nav-links { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; justify-content: flex-end; }
         .nav-links a:not(.btn) { color: var(--text-sub); font-weight: 600; font-size: 0.95rem; }
         .nav-links a:not(.btn):hover { color: var(--primary); }
+        .nav-links .btn { color: var(--white); white-space: nowrap; }
         
         /* Social Proof Banner */
         .social-proof-banner { padding: 20px 0; background: var(--bg-light); border-bottom: 1px solid var(--border); text-align: center; font-size: 0.95rem; color: var(--text-sub); }
@@ -158,6 +159,10 @@
             .grid-2, .grid-3 { grid-template-columns: 1fr; }
             .pricing-card { margin-bottom: 24px; }
             .trust-signals { flex-wrap: wrap; justify-content: center; }
+            header .container { flex-direction: column; align-items: flex-start; gap: 14px; }
+            .nav-links { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 12px 18px; justify-content: stretch; align-items: center; }
+            .nav-links a:not(.btn) { font-size: 0.95rem; }
+            .nav-links .btn { grid-column: 1 / -1; width: 100%; text-align: center; padding: 12px 16px !important; font-size: 1rem !important; }
             .footer-inner { flex-direction: column; align-items: flex-start; }
             .footer-links { margin-top: 8px; }
         }
