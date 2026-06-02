@@ -4,13 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- Google tag (gtag.js) for GA4 + Google Ads -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-PEDH1P2YQG"></script>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-PEHD1P2YQG"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
-      gtag('config', 'G-PEDH1P2YQG');
+      gtag('config', 'G-PEHD1P2YQG');
       gtag('config', 'AW-1059962761');
+      function trackDuplicateGuardAppStoreClick(location, element){
+        if (typeof gtag !== 'function') return;
+        gtag('event', 'app_store_click', {
+          app: 'duplicate_guard',
+          location: location,
+          page_path: window.location.pathname,
+          cta_text: element ? element.textContent.trim() : ''
+        });
+        gtag('event', 'shopify_install_click', {location: location});
+      }
     </script>
     <title>Order Merger Alternative for Shopify | Review Before You Combine</title>
     <meta name="description" content="Looking for an Order Merger alternative? Duplicate Guard flags duplicate-looking Shopify orders before fulfillment so merchants can review before merging, canceling, or shipping.">
@@ -133,7 +143,7 @@
                 <a href="/shopify-duplicate-order-checker.html">Duplicate order checker</a>
                 <a href="/order-merger-alternative.html">Order Merger alternative</a>
                 <a href="/blog.html">Blog</a>
-                <a href="https://apps.shopify.com/duplicate-guard" class="btn" onclick="gtag('event', 'shopify_install_click', {location: 'order_merger_alternative_header'});">Install on Shopify</a>
+                <a href="https://apps.shopify.com/duplicate-guard" class="btn" onclick="trackDuplicateGuardAppStoreClick('order_merger_alternative_header', this);">Install on Shopify</a>
             </nav>
         </div>
     </header>
@@ -270,7 +280,7 @@
         <div class="cta-box">
             <h2>Review duplicate-looking orders before you merge or ship</h2>
             <p>Duplicate Guard flags suspiciously similar Shopify orders before fulfillment so your team can review the context and decide what should happen next.</p>
-            <a href="https://apps.shopify.com/duplicate-guard" class="btn" onclick="gtag('event', 'shopify_install_click', {location: 'order_merger_alternative_cta'});">Install Duplicate Guard on Shopify</a>
+            <a href="https://apps.shopify.com/duplicate-guard" class="btn" onclick="trackDuplicateGuardAppStoreClick('order_merger_alternative_cta', this);">Install Duplicate Guard on Shopify</a>
         </div>
     </main>
 

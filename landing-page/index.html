@@ -5,17 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="google-site-verification" content="O4-k04comryHYUDVjLLnEe23MjUNS8N5uizZ_y0e1bE" />
     <!-- Google tag (gtag.js) for GA4 + Google Ads -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-PEDH1P2YQG"></script>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-PEHD1P2YQG"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
 
       // GA4 property for Duplicate Guard
-      gtag('config', 'G-PEDH1P2YQG');
+      gtag('config', 'G-PEHD1P2YQG');
 
       // Google Ads conversion tag
       gtag('config', 'AW-1059962761');
+      function trackDuplicateGuardAppStoreClick(location, element){
+        if (typeof gtag !== 'function') return;
+        gtag('event', 'app_store_click', {
+          app: 'duplicate_guard',
+          location: location,
+          page_path: window.location.pathname,
+          cta_text: element ? element.textContent.trim() : ''
+        });
+        gtag('event', 'shopify_install_click', {location: location});
+      }
     </script>
     <title>Duplicate Guard - Stop Shopify Duplicate Orders</title>
     <meta name="description" content="Automatically detect and flag duplicate orders in Shopify. Save money on shipping and improve customer satisfaction.">
@@ -185,7 +195,7 @@
                     href="https://apps.shopify.com/duplicate-guard"
                     class="btn"
                     style="padding: 10px 20px; font-size: 0.9rem;"
-                    onclick="gtag('event', 'shopify_install_click', {location: 'header'});"
+                    onclick="trackDuplicateGuardAppStoreClick('header', this);"
                 >
                     Protect My Store
                 </a>
@@ -207,7 +217,7 @@
                 <a
                     href="https://apps.shopify.com/duplicate-guard"
                     class="btn"
-                    onclick="gtag('event', 'shopify_install_click', {location: 'hero'});"
+                    onclick="trackDuplicateGuardAppStoreClick('hero', this);"
                 >
                     Start Catching Duplicates — Free
                 </a>
@@ -413,7 +423,7 @@
                         href="https://apps.shopify.com/duplicate-guard"
                         class="btn btn-outline"
                         style="width: 100%; text-align: center;"
-                        onclick="gtag('event', 'shopify_install_click', {location: 'pricing_free'});"
+                        onclick="trackDuplicateGuardAppStoreClick('pricing_free', this);"
                     >
                         Start Free
                     </a>
@@ -449,7 +459,7 @@
                         href="https://apps.shopify.com/duplicate-guard"
                         class="btn"
                         style="width: 100%; text-align: center;"
-                        onclick="gtag('event', 'shopify_install_click', {location: 'pricing_pro'});"
+                        onclick="trackDuplicateGuardAppStoreClick('pricing_pro', this);"
                     >
                         Protect My Store
                     </a>
@@ -503,7 +513,7 @@
             <a
                 href="https://apps.shopify.com/duplicate-guard"
                 class="btn"
-                onclick="gtag('event', 'shopify_install_click', {location: 'cta_section'});"
+                onclick="trackDuplicateGuardAppStoreClick('cta_section', this);"
             >
                 Start Free on Shopify
             </a>

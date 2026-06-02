@@ -3,13 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=AW-1059962761"></script>
+    <!-- Google tag (gtag.js) for GA4 + Google Ads -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-PEHD1P2YQG"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
+      gtag('config', 'G-PEHD1P2YQG');
       gtag('config', 'AW-1059962761');
+      function trackDuplicateGuardAppStoreClick(location, element){
+        if (typeof gtag !== 'function') return;
+        gtag('event', 'app_store_click', {
+          app: 'duplicate_guard',
+          location: location,
+          page_path: window.location.pathname,
+          cta_text: element ? element.textContent.trim() : ''
+        });
+        gtag('event', 'shopify_install_click', {location: location});
+      }
     </script>
     <title>Privacy Policy - Duplicate Guard</title>
     <style>
