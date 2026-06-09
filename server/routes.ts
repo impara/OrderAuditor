@@ -77,7 +77,7 @@ async function redirectLegacyInstallLaunch(
     return next();
   }
 
-  const shop = shopify.utils.sanitizeShop(shopParam, true);
+  const shop = shopify.utils.sanitizeShop(shopParam, false);
   if (!shop) {
     logger.warn(`[Auth] Invalid shop parameter on app launch: ${shopParam}`);
     return res.status(400).send("Invalid shop parameter");
