@@ -184,6 +184,45 @@ Please review these orders in your Shopify admin.
   }
 
   /**
+   * Render a single label/value field for the order comparison columns.
+   * `matched` adds a small badge highlighting that the value matches the other order.
+   */
+  private emailField(
+    label: string,
+    value: string,
+    options?: { strong?: boolean; matched?: boolean; mono?: boolean; last?: boolean }
+  ): string {
+    const matchBadge = options?.matched
+      ? ` <span style="display: inline-block; background-color: #fef3c7; color: #92400e; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.5px; vertical-align: middle;">match</span>`
+      : "";
+    const fontFamily = options?.mono
+      ? "font-family: 'SF Mono', 'Roboto Mono', Menlo, Consolas, monospace;"
+      : "";
+    const weight = options?.strong ? "font-weight: 600;" : "";
+    const size = options?.strong ? "15px" : "14px";
+
+    return `
+                    <div style="${options?.last ? "" : "margin-bottom: 14px;"}">
+                      <span style="font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 2px;">${label}</span>
+                      <span style="font-size: ${size}; color: #1e293b; ${weight} ${fontFamily} word-break: break-word;">${value}</span>${matchBadge}
+                    </div>`;
+  }
+
+  /**
+   * Human-readable gap between two order timestamps, e.g. "12 minutes apart".
+   */
+  private formatTimeGap(a: Date | string, b: Date | string): string {
+    const ms = Math.abs(new Date(a).getTime() - new Date(b).getTime());
+    const minutes = Math.round(ms / 60000);
+    if (minutes < 1) return "less than a minute apart";
+    if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} apart`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} apart`;
+    const days = Math.round(hours / 24);
+    return `${days} day${days === 1 ? "" : "s"} apart`;
+  }
+
+  /**
    * Format HTML email body with professional styling
    */
   private formatEmailHtml(shopDomain: string, data: NotificationData): string {
@@ -195,14 +234,41 @@ Please review these orders in your Shopify admin.
     const confidenceColor = confidenceLevel === 'high' ? '#dc2626' : confidenceLevel === 'medium' ? '#f59e0b' : '#22c55e';
     const confidenceBgColor = confidenceLevel === 'high' ? '#fef2f2' : confidenceLevel === 'medium' ? '#fffbeb' : '#f0fdf4';
     const confidenceLabel = confidenceLevel === 'high' ? 'High Risk' : confidenceLevel === 'medium' ? 'Medium Risk' : 'Low Risk';
+    const confidenceWidth = Math.max(0, Math.min(100, data.confidence));
 
     // Format dates
-    const orderDate = new Date(data.order.createdAt).toLocaleDateString('en-US', {
+    const dateFormat: Intl.DateTimeFormatOptions = {
       year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-    });
-    const matchDate = new Date(data.duplicateOf.createdAt).toLocaleDateString('en-US', {
-      year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-    });
+    };
+    const orderDate = new Date(data.order.createdAt).toLocaleDateString('en-US', dateFormat);
+    const matchDate = new Date(data.duplicateOf.createdAt).toLocaleDateString('en-US', dateFormat);
+    const timeGap = this.formatTimeGap(data.order.createdAt, data.duplicateOf.createdAt);
+
+    // Highlight the fields that actually overlap between the two orders
+    const emailsMatch =
+      !!data.order.customerEmail &&
+      data.order.customerEmail === data.duplicateOf.customerEmail;
+    const namesMatch =
+      !!data.order.customerName &&
+      data.order.customerName === data.duplicateOf.customerName;
+    const totalsMatch =
+      data.order.totalPrice === data.duplicateOf.totalPrice &&
+      data.order.currency === data.duplicateOf.currency;
+
+    const preheader = `Order ${data.order.orderNumber} looks like a duplicate of ${data.duplicateOf.orderNumber} (${data.confidence}% confidence) — placed ${timeGap}.`;
+
+    const orderColumn = (order: Order) =>
+      [
+        this.emailField("Order Number", order.orderNumber, { strong: true, mono: true }),
+        this.emailField("Customer", order.customerName || "Unknown", { matched: namesMatch }),
+        this.emailField("Email", order.customerEmail || "Unknown", { matched: emailsMatch }),
+        this.emailField("Total", `${order.currency} ${order.totalPrice}`, { strong: true, matched: totalsMatch }),
+        this.emailField(
+          "Created",
+          order === data.order ? orderDate : matchDate,
+          { last: true }
+        ),
+      ].join("");
 
     return `
 <!DOCTYPE html>
@@ -210,153 +276,161 @@ Please review these orders in your Shopify admin.
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
   <title>Duplicate Order Alert</title>
 </head>
-<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6; line-height: 1.6;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f3f4f6;">
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f1f5f9; line-height: 1.6;">
+  <!-- Inbox preview text (hidden in the email body) -->
+  <div style="display: none; max-height: 0; overflow: hidden; mso-hide: all;">
+    ${preheader}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;
+  </div>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#f1f5f9" style="background-color: #f1f5f9;">
     <tr>
-      <td style="padding: 40px 20px;">
-        <table role="presentation" width="100%" style="max-width: 640px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-          
-          <!-- Header -->
+      <td style="padding: 40px 16px;">
+        <table role="presentation" width="100%" style="max-width: 640px; margin: 0 auto;">
+
+          <!-- Brand line -->
           <tr>
-            <td style="background: linear-gradient(135deg, #1e293b 0%, #334155 100%); padding: 32px 40px; text-align: center;">
-              <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">
-                🚨 Duplicate Order Detected
-              </h1>
-              <p style="margin: 8px 0 0; color: #94a3b8; font-size: 14px;">
-                Duplicate Guard Alert for ${shopDomain}
-              </p>
+            <td style="padding: 0 8px 12px; text-align: center;">
+              <span style="font-size: 13px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 2px;">🛡️ Duplicate Guard</span>
             </td>
           </tr>
-          
-          <!-- Confidence Badge -->
+
           <tr>
-            <td style="padding: 24px 40px 16px;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+            <td>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#ffffff" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08); border: 1px solid #e2e8f0;">
+
+                <!-- Header -->
                 <tr>
-                  <td style="background-color: ${confidenceBgColor}; border: 2px solid ${confidenceColor}; border-radius: 8px; padding: 16px; text-align: center;">
-                    <span style="font-size: 14px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Confidence Score</span>
-                    <div style="margin: 8px 0;">
-                      <span style="font-size: 36px; font-weight: 700; color: ${confidenceColor};">${data.confidence}%</span>
-                    </div>
-                    <span style="display: inline-block; background-color: ${confidenceColor}; color: #ffffff; font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 20px; text-transform: uppercase;">
-                      ${confidenceLabel}
+                  <td bgcolor="#1e293b" style="background: linear-gradient(135deg, #0f172a 0%, #334155 100%); background-color: #1e293b; padding: 32px 40px; text-align: center;">
+                    <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 700; letter-spacing: -0.3px;">
+                      Possible Duplicate Order
+                    </h1>
+                    <p style="margin: 12px 0 0;">
+                      <span style="display: inline-block; background-color: rgba(255, 255, 255, 0.12); color: #cbd5e1; font-size: 13px; padding: 4px 14px; border-radius: 20px;">
+                        ${shopDomain}
+                      </span>
+                    </p>
+                  </td>
+                </tr>
+
+                <!-- Confidence summary -->
+                <tr>
+                  <td style="padding: 28px 40px 8px;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="${confidenceBgColor}" style="background-color: ${confidenceBgColor}; border: 1px solid ${confidenceColor}; border-radius: 10px;">
+                      <tr>
+                        <td style="padding: 18px 20px;">
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                            <tr>
+                              <td style="vertical-align: middle;">
+                                <span style="font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; display: block;">Confidence</span>
+                                <span style="font-size: 32px; font-weight: 800; color: ${confidenceColor}; line-height: 1.2;">${data.confidence}%</span>
+                              </td>
+                              <td style="vertical-align: middle; text-align: right;">
+                                <span style="display: inline-block; background-color: ${confidenceColor}; color: #ffffff; font-size: 12px; font-weight: 700; padding: 6px 14px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.5px;">
+                                  ${confidenceLabel}
+                                </span>
+                              </td>
+                            </tr>
+                          </table>
+                          <!-- Confidence bar -->
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top: 12px;">
+                            <tr>
+                              <td bgcolor="#e2e8f0" style="background-color: #e2e8f0; border-radius: 4px; height: 8px; font-size: 0; line-height: 0;">
+                                <table role="presentation" width="${confidenceWidth}%" cellspacing="0" cellpadding="0">
+                                  <tr>
+                                    <td bgcolor="${confidenceColor}" style="background-color: ${confidenceColor}; border-radius: 4px; height: 8px; font-size: 0; line-height: 0;">&nbsp;</td>
+                                  </tr>
+                                </table>
+                              </td>
+                            </tr>
+                          </table>
+                          <p style="margin: 12px 0 0; font-size: 13px; color: #475569;">
+                            <strong style="color: #1e293b;">Why:</strong> ${data.matchReason}
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <!-- Time gap chip -->
+                <tr>
+                  <td style="padding: 16px 40px; text-align: center;">
+                    <span style="display: inline-block; background-color: #f8fafc; border: 1px solid #e2e8f0; color: #475569; font-size: 13px; padding: 6px 16px; border-radius: 20px;">
+                      ⏱ Orders placed <strong style="color: #1e293b;">${timeGap}</strong>
                     </span>
                   </td>
                 </tr>
+
+                <!-- Order Comparison -->
+                <tr>
+                  <td style="padding: 0 40px;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden;">
+                      <tr>
+                        <td width="50%" bgcolor="#fef2f2" style="background-color: #fef2f2; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0;">
+                          <span style="font-size: 11px; color: #dc2626; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">⚠️ Flagged Order</span>
+                        </td>
+                        <td width="50%" bgcolor="#f0f9ff" style="background-color: #f0f9ff; padding: 12px 16px; border-bottom: 1px solid #e2e8f0;">
+                          <span style="font-size: 11px; color: #0369a1; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">🔗 Matches With</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td width="50%" style="padding: 18px 16px; border-right: 1px solid #e2e8f0; vertical-align: top;">
+${orderColumn(data.order)}
+                        </td>
+                        <td width="50%" style="padding: 18px 16px; vertical-align: top;">
+${orderColumn(data.duplicateOf)}
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <!-- Action Buttons -->
+                <tr>
+                  <td style="padding: 28px 40px 32px;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                      <tr>
+                        <td width="50%" style="padding-right: 8px;">
+                          <a href="${orderUrl}" target="_blank" style="display: block; background-color: #dc2626; color: #ffffff; text-decoration: none; text-align: center; padding: 14px 20px; border-radius: 8px; font-size: 14px; font-weight: 700;">
+                            Review Flagged Order
+                          </a>
+                        </td>
+                        <td width="50%" style="padding-left: 8px;">
+                          <a href="${matchOrderUrl}" target="_blank" style="display: block; background-color: #ffffff; color: #1e293b; border: 2px solid #1e293b; text-decoration: none; text-align: center; padding: 12px 20px; border-radius: 8px; font-size: 14px; font-weight: 700;">
+                            View Matched Order
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <!-- Footer -->
+                <tr>
+                  <td bgcolor="#f8fafc" style="background-color: #f8fafc; padding: 24px 40px; border-top: 1px solid #e2e8f0;">
+                    <p style="margin: 0 0 8px; font-size: 13px; color: #64748b; text-align: center;">
+                      You're receiving this because email alerts are enabled for <strong style="color: #475569;">${shopDomain}</strong>.
+                    </p>
+                    <p style="margin: 0; font-size: 12px; color: #94a3b8; text-align: center;">
+                      Manage your notification settings in the <a href="https://${shopDomain}/admin/apps/order-auditor" style="color: #0369a1; text-decoration: none; font-weight: 600;">Duplicate Guard app</a>.
+                    </p>
+                  </td>
+                </tr>
+
               </table>
             </td>
           </tr>
-          
-          <!-- Match Reason -->
+
+          <!-- Sub-footer -->
           <tr>
-            <td style="padding: 0 40px 24px;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-                <tr>
-                  <td style="background-color: #f8fafc; border-radius: 8px; padding: 12px 16px; text-align: center;">
-                    <span style="font-size: 13px; color: #64748b;">Match Reason: </span>
-                    <span style="font-size: 13px; color: #1e293b; font-weight: 600;">${data.matchReason}</span>
-                  </td>
-                </tr>
-              </table>
+            <td style="padding: 16px 8px 0; text-align: center;">
+              <span style="font-size: 12px; color: #94a3b8;">Duplicate Guard — duplicate order protection for Shopify</span>
             </td>
           </tr>
-          
-          <!-- Order Comparison -->
-          <tr>
-            <td style="padding: 0 40px;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
-                <tr>
-                  <td width="50%" style="background-color: #fef2f2; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0;">
-                    <span style="font-size: 11px; color: #dc2626; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">⚠️ Flagged Order</span>
-                  </td>
-                  <td width="50%" style="background-color: #f0f9ff; padding: 12px 16px; border-bottom: 1px solid #e2e8f0;">
-                    <span style="font-size: 11px; color: #0369a1; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">🔗 Matches With</span>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding: 16px; border-right: 1px solid #e2e8f0; vertical-align: top;">
-                    <div style="margin-bottom: 12px;">
-                      <span style="font-size: 12px; color: #64748b; display: block;">Order Number</span>
-                      <span style="font-size: 16px; color: #1e293b; font-weight: 600;">${data.order.orderNumber}</span>
-                    </div>
-                    <div style="margin-bottom: 12px;">
-                      <span style="font-size: 12px; color: #64748b; display: block;">Customer</span>
-                      <span style="font-size: 14px; color: #1e293b;">${data.order.customerName || 'Unknown'}</span>
-                    </div>
-                    <div style="margin-bottom: 12px;">
-                      <span style="font-size: 12px; color: #64748b; display: block;">Email</span>
-                      <span style="font-size: 14px; color: #1e293b;">${data.order.customerEmail}</span>
-                    </div>
-                    <div style="margin-bottom: 12px;">
-                      <span style="font-size: 12px; color: #64748b; display: block;">Total</span>
-                      <span style="font-size: 16px; color: #1e293b; font-weight: 600;">${data.order.currency} ${data.order.totalPrice}</span>
-                    </div>
-                    <div>
-                      <span style="font-size: 12px; color: #64748b; display: block;">Created</span>
-                      <span style="font-size: 13px; color: #64748b;">${orderDate}</span>
-                    </div>
-                  </td>
-                  <td style="padding: 16px; vertical-align: top;">
-                    <div style="margin-bottom: 12px;">
-                      <span style="font-size: 12px; color: #64748b; display: block;">Order Number</span>
-                      <span style="font-size: 16px; color: #1e293b; font-weight: 600;">${data.duplicateOf.orderNumber}</span>
-                    </div>
-                    <div style="margin-bottom: 12px;">
-                      <span style="font-size: 12px; color: #64748b; display: block;">Customer</span>
-                      <span style="font-size: 14px; color: #1e293b;">${data.duplicateOf.customerName || 'Unknown'}</span>
-                    </div>
-                    <div style="margin-bottom: 12px;">
-                      <span style="font-size: 12px; color: #64748b; display: block;">Email</span>
-                      <span style="font-size: 14px; color: #1e293b;">${data.duplicateOf.customerEmail}</span>
-                    </div>
-                    <div style="margin-bottom: 12px;">
-                      <span style="font-size: 12px; color: #64748b; display: block;">Total</span>
-                      <span style="font-size: 16px; color: #1e293b; font-weight: 600;">${data.duplicateOf.currency} ${data.duplicateOf.totalPrice}</span>
-                    </div>
-                    <div>
-                      <span style="font-size: 12px; color: #64748b; display: block;">Created</span>
-                      <span style="font-size: 13px; color: #64748b;">${matchDate}</span>
-                    </div>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-          
-          <!-- Action Buttons -->
-          <tr>
-            <td style="padding: 32px 40px;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-                <tr>
-                  <td width="50%" style="padding-right: 8px;">
-                    <a href="${orderUrl}" target="_blank" style="display: block; background-color: #dc2626; color: #ffffff; text-decoration: none; text-align: center; padding: 14px 20px; border-radius: 8px; font-size: 14px; font-weight: 600;">
-                      View Flagged Order
-                    </a>
-                  </td>
-                  <td width="50%" style="padding-left: 8px;">
-                    <a href="${matchOrderUrl}" target="_blank" style="display: block; background-color: #1e293b; color: #ffffff; text-decoration: none; text-align: center; padding: 14px 20px; border-radius: 8px; font-size: 14px; font-weight: 600;">
-                      View Matched Order
-                    </a>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-          
-          <!-- Footer -->
-          <tr>
-            <td style="background-color: #f8fafc; padding: 24px 40px; border-top: 1px solid #e2e8f0;">
-              <p style="margin: 0 0 8px; font-size: 13px; color: #64748b; text-align: center;">
-                This alert was sent because a potential duplicate order was detected in your store.
-              </p>
-              <p style="margin: 0; font-size: 12px; color: #94a3b8; text-align: center;">
-                Manage your notification settings in the <a href="https://${shopDomain}/admin/apps/order-auditor" style="color: #0369a1; text-decoration: none;">Duplicate Guard app</a>.
-              </p>
-            </td>
-          </tr>
-          
+
         </table>
       </td>
     </tr>
