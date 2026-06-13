@@ -61,11 +61,18 @@ export default function Support() {
         promptVersion: searchParams.get("promptVersion") || undefined,
     };
     const isReviewPromptFeedback = supportMetadata.source === "review_prompt";
+    const isCustomerDataAccessRequest = supportMetadata.source === "customer_data_access";
     const [formData, setFormData] = useState<SupportFormData>({
         requestType: "support",
-        subject: isReviewPromptFeedback ? "Feedback about Duplicate Guard" : "",
-        description: "",
-        priority: "normal",
+        subject: isReviewPromptFeedback
+            ? "Feedback about Duplicate Guard"
+            : isCustomerDataAccessRequest
+                ? "Customer data access check"
+                : "",
+        description: isCustomerDataAccessRequest
+            ? "Duplicate Guard is processing orders, but customer email is missing. Please check whether customer data access is available for my store."
+            : "",
+        priority: isCustomerDataAccessRequest ? "high" : "normal",
     });
 
     // Get subscription info for context
@@ -113,9 +120,15 @@ export default function Support() {
     const resetForm = () => {
         setFormData({
             requestType: "support",
-            subject: isReviewPromptFeedback ? "Feedback about Duplicate Guard" : "",
-            description: "",
-            priority: "normal",
+            subject: isReviewPromptFeedback
+                ? "Feedback about Duplicate Guard"
+                : isCustomerDataAccessRequest
+                    ? "Customer data access check"
+                    : "",
+            description: isCustomerDataAccessRequest
+                ? "Duplicate Guard is processing orders, but customer email is missing. Please check whether customer data access is available for my store."
+                : "",
+            priority: isCustomerDataAccessRequest ? "high" : "normal",
         });
         setSubmitted(false);
     };
@@ -169,6 +182,17 @@ export default function Support() {
                         </p>
                         <p className="text-sm text-muted-foreground">
                             Tell us what felt missing or frustrating and we&apos;ll use it to improve Duplicate Guard.
+                        </p>
+                    </div>
+                )}
+
+                {isCustomerDataAccessRequest && (
+                    <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-950/20">
+                        <p className="text-sm font-medium text-foreground">
+                            We&apos;ll verify customer data access for your store.
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                            The form is pre-filled with the details we need to check your setup.
                         </p>
                     </div>
                 )}

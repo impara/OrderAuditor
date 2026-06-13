@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
-import { AlertCircle, TrendingUp, TrendingDown, DollarSign, Clock, Flag, Package, MapPin, Mail, Phone, Calendar, X, Menu, ChevronRight } from "lucide-react";
+import { AlertCircle, TrendingUp, TrendingDown, DollarSign, Clock, Flag, Package, MapPin, Mail, Phone, Calendar, X, Menu, ChevronRight, CheckCircle2 } from "lucide-react";
 import type { Order, DashboardStats } from "@shared/schema";
 import { format } from "date-fns";
 import { useState } from "react";
@@ -18,7 +18,7 @@ import { Link, useLocation } from "wouter";
 import { Header } from "@/components/Header";
 import { QuotaWarningBanner } from "@/components/QuotaWarningBanner";
 import { ReviewPromptBanner } from "@/components/ReviewPromptBanner";
-import { OnboardingChecklist } from "@/components/OnboardingChecklist";
+import { OnboardingChecklist, isOnboardingFullyHealthy, type OnboardingStatus } from "@/components/OnboardingChecklist";
 
 
 function StatsCard({
@@ -72,16 +72,65 @@ function ConfidenceBadge({ confidence }: { confidence: number }) {
   return <Badge variant="secondary" className="whitespace-nowrap" data-testid="badge-confidence-low">Low ({confidence}%)</Badge>;
 }
 
-function EmptyState() {
+function MonitoringActiveBanner({
+  status,
+  stats,
+}: {
+  status?: OnboardingStatus;
+  stats?: DashboardStats;
+}) {
+  if (!status || !isOnboardingFullyHealthy(status)) return null;
+
+  const ordersCheckedLabel =
+    status.totalOrdersProcessed === 1
+      ? "1 order checked"
+      : `${status.totalOrdersProcessed} orders checked`;
+  const duplicateLabel = stats
+    ? stats.totalFlagged === 1
+      ? "1 duplicate flagged"
+      : `${stats.totalFlagged} duplicates flagged`
+    : null;
+  const activitySegments = [
+    ordersCheckedLabel,
+    duplicateLabel,
+    "monitoring new orders",
+  ].filter(Boolean);
+
+  return (
+    <Card className="mb-6 border-green-200 bg-green-50/70 dark:border-green-900/50 dark:bg-green-950/20">
+      <CardContent className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <CheckCircle2 className="h-5 w-5 shrink-0 text-green-600" />
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Monitoring active</h2>
+            <p className="text-xs text-muted-foreground">
+              {activitySegments.join(" | ")}
+            </p>
+          </div>
+        </div>
+        <Badge variant="secondary" className="w-fit text-xs">
+          Live
+        </Badge>
+      </CardContent>
+    </Card>
+  );
+}
+
+function EmptyState({ ordersChecked }: { ordersChecked?: number }) {
+  const hasCheckedOrders = typeof ordersChecked === "number" && ordersChecked > 0;
+  const emptyStateCopy = hasCheckedOrders
+    ? `${ordersChecked} ${ordersChecked === 1 ? "order" : "orders"} checked so far. That's good. We're watching new orders as they arrive.`
+    : "Waiting for your first order. We'll check it automatically when it arrives.";
+
   return (
     <Card className="mt-4 border-dashed">
       <CardContent className="flex flex-col items-center justify-center py-16 px-4">
         <div className="rounded-full bg-muted p-4 mb-4">
           <Package className="h-8 w-8 text-muted-foreground" />
         </div>
-        <h3 className="text-lg font-semibold mb-2">No duplicate orders detected</h3>
+        <h3 className="text-lg font-semibold mb-2">No duplicates yet</h3>
         <p className="text-sm text-muted-foreground text-center max-w-md mb-4">
-          Your detection rules are running. We'll notify you when duplicates are found.
+          {emptyStateCopy}
         </p>
         <Button variant="outline" asChild data-testid="button-adjust-settings">
           <a href={`/settings${window.location.search}`}>Adjust Detection Settings</a>
@@ -445,6 +494,11 @@ export default function Dashboard() {
     refetchInterval: 30000,
   });
 
+  const { data: onboardingStatus } = useQuery<OnboardingStatus>({
+    queryKey: ["/api/onboarding/status"],
+    refetchInterval: 30000,
+  });
+
   const { data: orders, isLoading: ordersLoading } = useQuery<Order[]>({
     queryKey: ['/api/orders/flagged'],
     refetchInterval: 30000,
@@ -456,6 +510,7 @@ export default function Dashboard() {
 
       <main className="container mx-auto px-4 sm:px-6 py-6">
         <OnboardingChecklist />
+        <MonitoringActiveBanner status={onboardingStatus} stats={stats} />
         <QuotaWarningBanner />
         <ReviewPromptBanner />
         <div className="flex flex-col lg:flex-row gap-6">
@@ -469,14 +524,14 @@ export default function Dashboard() {
             ) : orders && orders.length > 0 ? (
               <FlaggedOrdersTable orders={orders} />
             ) : (
-              <EmptyState />
+              <EmptyState ordersChecked={onboardingStatus?.totalOrdersProcessed} />
             )}
           </div>
 
           <div className="w-full lg:w-80 order-1 lg:order-2">
             {statsLoading ? (
               <div className="grid grid-cols-2 lg:flex lg:flex-col gap-3">
-                {[1, 2, 3, 4].map((i) => (
+                {[1, 2, 3, 4, 5].map((i) => (
                   <Card key={i}>
                     <CardContent className="p-6">
                       <Skeleton className="h-20 w-full" />
@@ -492,6 +547,11 @@ export default function Dashboard() {
                   icon={AlertCircle}
                   trend={stats.totalFlaggedTrend}
                   trendLabel="vs last 7d"
+                />
+                <StatsCard
+                  title="Orders Checked"
+                  value={onboardingStatus?.totalOrdersProcessed ?? "-"}
+                  icon={Package}
                 />
                 <StatsCard
                   title="Potential Value"

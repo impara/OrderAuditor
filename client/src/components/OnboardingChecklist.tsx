@@ -1,11 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle2, AlertTriangle, Clock, Shield, Webhook, Settings, Loader2 } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Clock, Shield, Webhook, Settings, Loader2, LifeBuoy } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
 
-interface OnboardingStatus {
+export interface OnboardingStatus {
   appInstalled: boolean;
   webhooksReceived: boolean;
   lastWebhookReceivedAt: string | null;
@@ -28,6 +28,16 @@ interface OnboardingStatus {
     quotaLimit: number;
     quotaPercent: number;
   };
+}
+
+export function isOnboardingFullyHealthy(status?: OnboardingStatus) {
+  return !!(
+    status &&
+    status.webhooksReceived &&
+    status.totalOrdersProcessed > 0 &&
+    !status.piiAccessLikelyBlocked &&
+    status.detectionConfigured
+  );
 }
 
 interface StatusItemProps {
@@ -80,12 +90,7 @@ export function OnboardingChecklist() {
   });
 
   // Don't show if stable: orders are flowing AND no PII issues AND webhooks working
-  const isFullyHealthy =
-    status &&
-    status.webhooksReceived &&
-    status.totalOrdersProcessed > 0 &&
-    !status.piiAccessLikelyBlocked &&
-    status.detectionConfigured;
+  const isFullyHealthy = isOnboardingFullyHealthy(status);
 
   if (isLoading) {
     return (
@@ -104,6 +109,9 @@ export function OnboardingChecklist() {
   if (!status) return null;
 
   const search = window.location.search;
+  const supportParams = new URLSearchParams(search);
+  supportParams.set("source", "customer_data_access");
+  const supportPath = `/support?${supportParams.toString()}`;
 
   // Determine webhook status
   const webhookStatus = status.webhooksReceived ? "ok" : "warning";
@@ -125,7 +133,7 @@ export function OnboardingChecklist() {
   // PII access
   const piiStatus = status.piiAccessLikelyBlocked ? "warning" : "ok";
   const piiDetail = status.piiAccessLikelyBlocked
-    ? "Orders are arriving but customer email is missing. This blocks email-based duplicate detection. Enable Protected Customer Data access in your Shopify Partner Dashboard."
+    ? "Some customer fields are not available yet, so email-based duplicate detection may be limited. Contact support and we'll check this store's access/setup."
     : "Customer data is accessible — email-based matching is operational.";
 
   // Detection config
@@ -213,12 +221,9 @@ export function OnboardingChecklist() {
                 asChild
                 data-testid="button-fix-pii-access"
               >
-                <a
-                  href="https://partners.shopify.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Open Partner Dashboard ↗
+                <a href={supportPath}>
+                  <LifeBuoy className="h-3.5 w-3.5 mr-1" />
+                  Contact Support
                 </a>
               </Button>
             ) : undefined
