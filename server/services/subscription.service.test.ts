@@ -352,4 +352,50 @@ describe("SubscriptionService — free tier limit constant regression", () => {
       expect.objectContaining({ status: "cancelled" })
     );
   });
+
+  it("pauses paid subscription on FROZEN webhook instead of cancelling", async () => {
+    getSubscription.mockResolvedValue(
+      makeSub({
+        tier: "paid",
+        status: "active",
+        shopifyChargeId: "32111198375",
+      })
+    );
+    updateSubscription.mockResolvedValue(
+      makeSub({ tier: "paid", status: "frozen", shopifyChargeId: "32111198375" })
+    );
+
+    await subscriptionService.syncAppSubscriptionWebhook(
+      "test.myshopify.com",
+      {
+        status: "FROZEN",
+        admin_graphql_api_id: "gid://shopify/AppSubscription/32111198375",
+      }
+    );
+
+    expect(updateSubscription).toHaveBeenCalledWith(
+      "test.myshopify.com",
+      expect.objectContaining({
+        tier: "paid",
+        status: "frozen",
+        orderLimit: -1,
+        shopifyChargeId: "32111198375",
+      })
+    );
+  });
+
+  it("denies quota while subscription is frozen", async () => {
+    getSubscription.mockResolvedValue(
+      makeSub({
+        tier: "paid",
+        status: "frozen",
+        orderLimit: -1,
+      })
+    );
+
+    const result = await subscriptionService.checkQuota("test.myshopify.com");
+
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("paused");
+  });
 });

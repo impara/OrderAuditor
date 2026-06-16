@@ -223,6 +223,7 @@ function SubscriptionPage() {
 
   const isPaid = subscription.tier === "paid";
   const isComplimentary = subscription.status === "complimentary";
+  const isFrozen = subscription.status === "frozen";
   const isUnlimited = subscription.orderLimit === -1;
   const usagePercentage = isUnlimited
     ? 0
@@ -261,15 +262,23 @@ function SubscriptionPage() {
                   variant={isPaid ? "default" : "secondary"}
                   className={isComplimentary ? "bg-emerald-600 hover:bg-emerald-600" : ""}
                 >
-                  {isComplimentary ? "Complimentary" : isPaid ? "Paid" : "Free"}
+                  {isComplimentary
+                    ? "Complimentary"
+                    : isFrozen
+                      ? "Paused"
+                      : isPaid
+                        ? "Paid"
+                        : "Free"}
                 </Badge>
               </div>
               <CardDescription>
                 {isComplimentary
                   ? "Unlimited access granted by Duplicate Guard"
-                  : isPaid
-                    ? "$7.99/month - Unlimited duplicates"
-                    : "Free - 30 duplicates/month"}
+                  : isFrozen
+                    ? "Paused while your Shopify store subscription is frozen"
+                    : isPaid
+                      ? "$7.99/month - Unlimited duplicates"
+                      : "Free - 30 duplicates/month"}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -406,6 +415,10 @@ function SubscriptionPage() {
                       ) : subscription.status === "cancelled" ? (
                         <div className="w-full text-center p-2 border border-yellow-500/50 bg-yellow-500/10 rounded text-sm text-yellow-600 dark:text-yellow-400">
                           Cancels on {periodEnd?.toLocaleDateString()}
+                        </div>
+                      ) : isFrozen ? (
+                        <div className="w-full text-center p-2 border border-sky-500/50 bg-sky-500/10 rounded text-sm text-sky-700 dark:text-sky-400">
+                          Paused while your store is closed or frozen. Detection resumes when Shopify reactivates billing.
                         </div>
                       ) : (
                         <Button

@@ -136,6 +136,14 @@ function PlanBadge({ shop }: { shop: InternalShop }) {
     );
   }
 
+  if (shop.status === "frozen") {
+    return (
+      <Badge className="bg-sky-600 text-white hover:bg-sky-600">
+        Frozen
+      </Badge>
+    );
+  }
+
   if (shop.tier === "paid") {
     if (shop.status !== "active") {
       return <Badge variant="secondary">Paid {shop.status}</Badge>;

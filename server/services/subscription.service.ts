@@ -64,6 +64,15 @@ export class SubscriptionService {
       }
     }
 
+    if (subscription.status === "frozen") {
+      return {
+        allowed: false,
+        reason:
+          "Duplicate Guard is paused while your Shopify subscription is frozen (for example, when the store is closed). It will resume automatically when Shopify reactivates the subscription.",
+        subscription,
+      };
+    }
+
     // Check quota
     // -1 means unlimited (paid tier)
     if (subscription.orderLimit === -1) {
@@ -132,6 +141,32 @@ export class SubscriptionService {
   }
 
   /**
+   * Pause paid access while Shopify has the subscription in FROZEN state
+   * (e.g. store closed). Does not cancel billing or downgrade tier.
+   */
+  async freezePaidSubscription(
+    shopDomain: string,
+    shopifyChargeId?: string | number | null
+  ): Promise<Subscription> {
+    const updates: {
+      status: "frozen";
+      tier: "paid";
+      orderLimit: number;
+      shopifyChargeId?: string;
+    } = {
+      status: "frozen",
+      tier: "paid",
+      orderLimit: -1,
+    };
+
+    if (shopifyChargeId != null && shopifyChargeId !== "") {
+      updates.shopifyChargeId = String(shopifyChargeId);
+    }
+
+    return storage.updateSubscription(shopDomain, updates);
+  }
+
+  /**
    * Sync local subscription state from app_subscriptions/update webhook payload.
    */
   async syncAppSubscriptionWebhook(
@@ -151,8 +186,27 @@ export class SubscriptionService {
       return;
     }
 
+    if (webhookStatus === "FROZEN") {
+      if (
+        local.shopifyChargeId &&
+        webhookChargeId &&
+        local.shopifyChargeId !== webhookChargeId
+      ) {
+        logger.info(
+          `[Subscription] Ignoring FROZEN webhook for ${shopDomain} because it does not match active charge ${local.shopifyChargeId}`
+        );
+        return;
+      }
+
+      logger.info(
+        `[Subscription] Pausing ${shopDomain} for frozen Shopify subscription`
+      );
+      await this.freezePaidSubscription(shopDomain, webhookChargeId);
+      return;
+    }
+
     if (
-      ["CANCELLED", "FROZEN", "DECLINED", "EXPIRED"].includes(webhookStatus)
+      ["CANCELLED", "DECLINED", "EXPIRED"].includes(webhookStatus)
     ) {
       if (
         !shouldProcessAppSubscriptionTermination(
