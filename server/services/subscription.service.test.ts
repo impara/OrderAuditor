@@ -217,8 +217,6 @@ describe("SubscriptionService — free tier limit constant regression", () => {
     );
   });
 
-  // --- cancelSubscription: consistent free limit ----------------------------
-
   it("immediately downgrades to FREE_TIER_ORDER_LIMIT when no active paid period", async () => {
     const freeSub = makeSub({ tier: "free" }); // no paid period
     getSubscription.mockResolvedValue(freeSub);
@@ -256,5 +254,102 @@ describe("SubscriptionService — free tier limit constant regression", () => {
     // orderLimit should NOT be changed to free tier
     const calledWith = updateSubscription.mock.calls[0][1];
     expect(calledWith).not.toHaveProperty("orderLimit", FREE_TIER_ORDER_LIMIT);
+  });
+
+  it("stores shopifyChargeId when activating paid subscription", async () => {
+    getSubscription.mockResolvedValue(makeSub());
+    updateSubscription.mockResolvedValue(
+      makeSub({ tier: "paid", shopifyChargeId: "37757518115" })
+    );
+
+    await subscriptionService.activatePaidSubscription(
+      "test.myshopify.com",
+      37757518115
+    );
+
+    expect(updateSubscription).toHaveBeenCalledWith(
+      "test.myshopify.com",
+      expect.objectContaining({
+        tier: "paid",
+        status: "active",
+        orderLimit: -1,
+        shopifyChargeId: "37757518115",
+      })
+    );
+  });
+
+  it("ignores stale EXPIRED webhook when another charge is active", async () => {
+    getSubscription.mockResolvedValue(
+      makeSub({
+        tier: "paid",
+        status: "active",
+        shopifyChargeId: "37757518115",
+      })
+    );
+
+    await subscriptionService.syncAppSubscriptionWebhook(
+      "test.myshopify.com",
+      {
+        status: "EXPIRED",
+        admin_graphql_api_id: "gid://shopify/AppSubscription/37757485347",
+      }
+    );
+
+    expect(updateSubscription).not.toHaveBeenCalled();
+  });
+
+  it("stores charge id and activates on ACTIVE webhook", async () => {
+    getSubscription.mockResolvedValue(makeSub());
+    updateSubscription.mockResolvedValue(
+      makeSub({
+        tier: "paid",
+        status: "active",
+        shopifyChargeId: "37757518115",
+      })
+    );
+
+    await subscriptionService.syncAppSubscriptionWebhook(
+      "test.myshopify.com",
+      {
+        status: "ACTIVE",
+        admin_graphql_api_id: "gid://shopify/AppSubscription/37757518115",
+      }
+    );
+
+    expect(updateSubscription).toHaveBeenCalledWith(
+      "test.myshopify.com",
+      expect.objectContaining({
+        tier: "paid",
+        status: "active",
+        shopifyChargeId: "37757518115",
+      })
+    );
+  });
+
+  it("cancels when CANCELLED webhook matches stored charge id", async () => {
+    getSubscription.mockResolvedValue(
+      makeSub({
+        tier: "paid",
+        status: "active",
+        shopifyChargeId: "37757518115",
+        currentBillingPeriodEnd: FUTURE,
+      })
+    );
+    updateSubscription.mockResolvedValue(
+      makeSub({ tier: "paid", status: "cancelled" })
+    );
+
+    await subscriptionService.syncAppSubscriptionWebhook(
+      "test.myshopify.com",
+      {
+        status: "CANCELLED",
+        admin_graphql_api_id: "gid://shopify/AppSubscription/37757518115",
+      }
+    );
+
+    expect(updateSubscription).toHaveBeenCalledWith(
+      "test.myshopify.com",
+      expect.objectContaining({ status: "cancelled" })
+    );
   });
 });

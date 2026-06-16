@@ -1374,22 +1374,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           `[Webhook] Received app_subscriptions/update for ${shopDomain}. Status: ${subscription.status}`
         );
 
-        // Sync local subscription state
-        if (
-          ["CANCELLED", "FROZEN", "DECLINED", "EXPIRED"].includes(
-            subscription.status
-          )
-        ) {
-          logger.info(
-            `[Webhook] Subscription ${subscription.status} for ${shopDomain}. Processing cancellation.`
-          );
-          await subscriptionService.cancelSubscription(shopDomain);
-        } else if (subscription.status === "ACTIVE") {
-          logger.info(
-            `[Webhook] Subscription ACTIVE for ${shopDomain}. Ensuring paid tier.`
-          );
-          await subscriptionService.updateTier(shopDomain, "paid", -1);
-        }
+        await subscriptionService.syncAppSubscriptionWebhook(
+          shopDomain,
+          subscription
+        );
 
         res.json({ success: true });
       } catch (error) {
@@ -2137,6 +2125,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (existingCharges.hasActiveCharge && existingCharges.activeCharge) {
         logger.info(
           `[Subscription] Store already has active charge ${existingCharges.activeCharge.id}`
+        );
+        await subscriptionService.activatePaidSubscription(
+          shop,
+          existingCharges.activeCharge.id
         );
         return res.json({
           success: true,

@@ -1,4 +1,8 @@
 import { storage, FREE_TIER_ORDER_LIMIT } from "../storage";
+import {
+  parseAppSubscriptionChargeId,
+  shouldProcessAppSubscriptionTermination,
+} from "../utils/app-subscription";
 import { logger } from "../utils/logger";
 import type { Subscription } from "@shared/schema";
 
@@ -100,6 +104,76 @@ export class SubscriptionService {
       subscription = await storage.initializeSubscription(shopDomain);
     }
     return subscription;
+  }
+
+  /**
+   * Activate paid subscription and persist the Shopify charge ID when known.
+   */
+  async activatePaidSubscription(
+    shopDomain: string,
+    shopifyChargeId?: string | number | null
+  ): Promise<Subscription> {
+    const updates: {
+      tier: "paid";
+      status: "active";
+      orderLimit: number;
+      shopifyChargeId?: string;
+    } = {
+      tier: "paid",
+      status: "active",
+      orderLimit: -1,
+    };
+
+    if (shopifyChargeId != null && shopifyChargeId !== "") {
+      updates.shopifyChargeId = String(shopifyChargeId);
+    }
+
+    return storage.updateSubscription(shopDomain, updates);
+  }
+
+  /**
+   * Sync local subscription state from app_subscriptions/update webhook payload.
+   */
+  async syncAppSubscriptionWebhook(
+    shopDomain: string,
+    appSubscription: Record<string, unknown>
+  ): Promise<void> {
+    const webhookStatus = String(appSubscription.status || "");
+    const webhookChargeId = parseAppSubscriptionChargeId(appSubscription);
+    const local = await this.getSubscription(shopDomain);
+
+    logger.info(
+      `[Subscription] Webhook ${webhookStatus} for ${shopDomain}. webhookChargeId=${webhookChargeId ?? "unknown"} storedChargeId=${local.shopifyChargeId ?? "none"}`
+    );
+
+    if (webhookStatus === "ACTIVE") {
+      await this.activatePaidSubscription(shopDomain, webhookChargeId);
+      return;
+    }
+
+    if (
+      ["CANCELLED", "FROZEN", "DECLINED", "EXPIRED"].includes(webhookStatus)
+    ) {
+      if (
+        !shouldProcessAppSubscriptionTermination(
+          webhookChargeId,
+          local.shopifyChargeId,
+          local.status,
+          local.tier,
+          webhookStatus
+        )
+      ) {
+        logger.info(
+          `[Subscription] Ignoring ${webhookStatus} webhook for ${shopDomain} because it does not match active charge ${local.shopifyChargeId ?? "none"}`
+        );
+        return;
+      }
+
+      logger.info(
+        `[Subscription] Processing ${webhookStatus} webhook for ${shopDomain}`
+      );
+      await this.cancelSubscription(shopDomain);
+    }
   }
 
   /**

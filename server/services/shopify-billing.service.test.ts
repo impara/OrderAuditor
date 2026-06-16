@@ -13,15 +13,17 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 // ---------------------------------------------------------------------------
 // Hoist storage + subscriptionService mocks
 // ---------------------------------------------------------------------------
-const { cancelSubscription, updateTier } = vi.hoisted(() => ({
+const { cancelSubscription, updateTier, activatePaidSubscription } = vi.hoisted(() => ({
   cancelSubscription: vi.fn(),
   updateTier: vi.fn(),
+  activatePaidSubscription: vi.fn(),
 }));
 
 vi.mock("./subscription.service", () => ({
   subscriptionService: {
     cancelSubscription,
     updateTier,
+    activatePaidSubscription,
   },
 }));
 
@@ -109,6 +111,7 @@ describe("ShopifyBillingService — double cancellation regression", () => {
       })
     );
     updateTier.mockResolvedValue({});
+    activatePaidSubscription.mockResolvedValue({});
 
     const result = await service.activateCharge(
       "test.myshopify.com",
@@ -117,7 +120,11 @@ describe("ShopifyBillingService — double cancellation regression", () => {
     );
 
     expect(result).toBe(true);
-    expect(updateTier).toHaveBeenCalledWith("test.myshopify.com", "paid", -1);
+    expect(activatePaidSubscription).toHaveBeenCalledWith(
+      "test.myshopify.com",
+      42
+    );
+    expect(updateTier).not.toHaveBeenCalled();
   });
 
   it("does NOT upgrade subscription when charge activation fails", async () => {
@@ -131,6 +138,7 @@ describe("ShopifyBillingService — double cancellation regression", () => {
 
     expect(result).toBe(false);
     expect(updateTier).not.toHaveBeenCalled();
+    expect(activatePaidSubscription).not.toHaveBeenCalled();
   });
 
   // -------------------------------------------------------------------------
@@ -139,7 +147,7 @@ describe("ShopifyBillingService — double cancellation regression", () => {
 
   it("skips real Shopify API call in bypass mode and upgrades subscription", async () => {
     vi.stubEnv("SHOPIFY_BILLING_BYPASS", "true");
-    updateTier.mockResolvedValue({});
+    activatePaidSubscription.mockResolvedValue({});
 
     const result = await service.activateCharge(
       "test.myshopify.com",
@@ -149,6 +157,10 @@ describe("ShopifyBillingService — double cancellation regression", () => {
 
     expect(result).toBe(true);
     expect(mockFetch).not.toHaveBeenCalled(); // no real API call
-    expect(updateTier).toHaveBeenCalledWith("test.myshopify.com", "paid", -1);
+    expect(activatePaidSubscription).toHaveBeenCalledWith(
+      "test.myshopify.com",
+      12345
+    );
+    expect(updateTier).not.toHaveBeenCalled();
   });
 });
