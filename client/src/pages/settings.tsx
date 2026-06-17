@@ -395,7 +395,7 @@ export default function Settings() {
                           <FormControl>
                             <Input
                               type="email"
-                              placeholder="admin@example.com"
+                              placeholder="e.g. store@yourdomain.com"
                               {...field}
                               value={field.value || ""}
                               disabled={!isPaid}

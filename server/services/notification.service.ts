@@ -315,9 +315,9 @@ Please review these orders in your Shopify admin.
                       Possible Duplicate Order
                     </h1>
                     <p style="margin: 12px 0 0;">
-                      <span style="display: inline-block; background-color: rgba(255, 255, 255, 0.12); color: #cbd5e1; font-size: 13px; padding: 4px 14px; border-radius: 20px;">
+                      <a href="https://${shopDomain}/admin" style="display: inline-block; background-color: rgba(255, 255, 255, 0.18); color: #f8fafc !important; font-size: 13px; padding: 6px 14px; border-radius: 20px; text-decoration: none; font-weight: 600; border: 1px solid rgba(255, 255, 255, 0.25);">
                         ${shopDomain}
-                      </span>
+                      </a>
                     </p>
                   </td>
                 </tr>
