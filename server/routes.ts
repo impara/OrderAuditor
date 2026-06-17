@@ -63,7 +63,15 @@ function validateReturnUrl(returnUrl: string): string {
   }
 }
 
-import { auth, authCallback, verifyRequest, shopify } from "./shopify-auth";
+import {
+  auth,
+  authCallback,
+  verifyRequest,
+  shopify,
+  getOfflineAccessToken,
+  forceRefreshOfflineToken,
+  storeSessionWithRetry,
+} from "./shopify-auth";
 
 async function redirectLegacyInstallLaunch(
   req: Request,
@@ -91,6 +99,36 @@ async function redirectLegacyInstallLaunch(
       );
 
       if (session?.accessToken) {
+        // Fallback migration: if this shop is still on a non-expiring offline
+        // token (no refresh token), migrate it to an expiring token in the
+        // background. Fire-and-forget so we never block the app launch.
+        if (!session.refreshToken) {
+          void (async () => {
+            try {
+              const { session: migrated } =
+                await shopify.auth.migrateToExpiringToken({
+                  shop,
+                  nonExpiringOfflineAccessToken: session.accessToken!,
+                });
+              // The exchange revokes the old non-expiring token immediately, so
+              // we MUST persist the new refresh token or the shop is stranded.
+              const stored = await storeSessionWithRetry(migrated);
+              if (stored) {
+                logger.info(
+                  `[Auth] Migrated ${shop} to an expiring offline token on app launch`
+                );
+              } else {
+                logger.error(
+                  `[Auth] CRITICAL: Migrated ${shop} to an expiring token but failed to persist it. The shop may need to reinstall.`
+                );
+              }
+            } catch (error: any) {
+              logger.warn(
+                `[Auth] On-launch token migration failed for ${shop}: ${error?.message}`
+              );
+            }
+          })();
+        }
         return next();
       }
     } catch (error) {
@@ -935,41 +973,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
         errorMessage.includes("authentication failed") ||
         errorMessage.includes("Invalid API key or access token");
 
-      // If it's an auth error, auto-clear the invalid session and trigger re-auth
+      // If it's an auth error, first try to refresh an expiring offline token
+      // (the token may have been retired/rotated). Only if refresh is not
+      // possible do we clear the session and force a full re-auth.
+      let refreshed = false;
       if (isAuthError) {
         const shop = res.locals.shopify?.shop;
-        logger.warn(
-          `[API] Authentication failed for shop ${shop}. Clearing invalid session.`
-        );
 
-        // Auto-clear the invalid session (only if shop is defined)
         if (shop) {
           try {
-            const { shopify } = await import("./shopify-auth.js");
-            const offlineSessionId = shopify.session.getOfflineId(shop);
-            await shopify.config.sessionStorage.deleteSession(offlineSessionId);
-            logger.info(
-              `[API] Deleted invalid session ${offlineSessionId}. Triggering re-authentication...`
-            );
+            refreshed = await forceRefreshOfflineToken(shop);
           } catch (err) {
-            logger.error(`[API] Failed to delete invalid session:`, err);
+            logger.error(`[API] Error attempting token refresh:`, err);
+          }
+
+          if (refreshed) {
             logger.info(
-              `[API] Session deletion failed, but still triggering re-authentication...`
+              `[API] Refreshed offline token for shop ${shop} after auth failure. Client can retry.`
             );
+          } else {
+            logger.warn(
+              `[API] Authentication failed for shop ${shop} and refresh was not possible. Clearing invalid session.`
+            );
+            try {
+              const offlineSessionId = shopify.session.getOfflineId(shop);
+              await shopify.config.sessionStorage.deleteSession(
+                offlineSessionId
+              );
+              logger.info(
+                `[API] Deleted invalid session ${offlineSessionId}. Triggering re-authentication...`
+              );
+            } catch (err) {
+              logger.error(`[API] Failed to delete invalid session:`, err);
+              logger.info(
+                `[API] Session deletion failed, but still triggering re-authentication...`
+              );
+            }
           }
         } else {
           logger.error(`[API] Cannot clear session: shop domain is undefined`);
         }
       }
 
+      // If we refreshed the token, signal a transient retry of the SAME request
+      // (retryRequest) rather than re-auth (retryAuth), so the client does not
+      // bounce the merchant through OAuth for a token we already rotated.
       res.status(isAuthError ? 401 : 500).json({
         error: "Failed to check webhook status",
         details: errorMessage,
-        retryAuth: isAuthError, // Client checks for this flag to trigger re-auth
-        requiresReinstall: isAuthError, // Keep for backwards compatibility
+        retryRequest: isAuthError && refreshed, // Client should retry the request once
+        retryAuth: isAuthError && !refreshed, // Only trigger re-auth if refresh failed
+        requiresReinstall: isAuthError && !refreshed, // Only force reinstall if refresh failed
         shop: res.locals.shopify?.shop,
         message: isAuthError
-          ? "The access token is invalid. Redirecting to re-authenticate..."
+          ? refreshed
+            ? "The access token was refreshed. Please retry the request."
+            : "The access token is invalid. Redirecting to re-authenticate..."
           : "An error occurred while checking webhook status.",
       });
     }
@@ -1461,16 +1520,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }, Customer email in payload: ${!!shopifyOrder.customer?.email}`
         );
 
-        // Load session to get access token
+        // Load session to get a fresh access token (refreshing expiring tokens
+        // as needed). The worker also re-resolves the token at processing time,
+        // so this is a best-effort hint passed along with the job.
         let accessToken = "";
         if (shopDomain) {
           try {
-            const offlineSessionId = shopify.session.getOfflineId(shopDomain);
-            const session = await shopify.config.sessionStorage.loadSession(
-              offlineSessionId
-            );
-            if (session?.accessToken) {
-              accessToken = session.accessToken;
+            const token = await getOfflineAccessToken(shopDomain);
+            if (token) {
+              accessToken = token;
             } else {
               logger.warn(
                 `[Webhook] ⚠️ Could not load offline session for ${shopDomain}. API calls will fail.`

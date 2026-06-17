@@ -78,6 +78,60 @@ async function getAuthToken(): Promise<string> {
   }
 }
 
+// Reads a response body as JSON without consuming the original response.
+async function readJsonSafe(res: Response): Promise<any | null> {
+  try {
+    return await res.clone().json();
+  } catch {
+    return null;
+  }
+}
+
+// Builds request headers with a fresh App Bridge session token (when available).
+async function buildAuthHeaders(
+  base: Record<string, string> = {}
+): Promise<Record<string, string>> {
+  const headers: Record<string, string> = { ...base };
+  try {
+    const token = await getAuthToken();
+    if (isValidToken(token)) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+  } catch (e) {
+    console.error("[Auth] Failed to get session token:", e);
+  }
+  return headers;
+}
+
+// Performs a fetch and, if the server signals `retryRequest` (it refreshed an
+// expiring offline token server-side), retries the SAME request exactly once
+// with a fresh session token instead of bouncing through OAuth.
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  baseHeaders: Record<string, string> = {}
+): Promise<Response> {
+  let res = await fetch(url, {
+    ...init,
+    headers: await buildAuthHeaders(baseHeaders),
+  });
+
+  if (res.status === 401) {
+    const data = await readJsonSafe(res);
+    if (data?.retryRequest) {
+      console.log(
+        "[Auth] Server refreshed the offline token; retrying request once"
+      );
+      res = await fetch(url, {
+        ...init,
+        headers: await buildAuthHeaders(baseHeaders),
+      });
+    }
+  }
+
+  return res;
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     // Clone the response before reading it
@@ -158,28 +212,19 @@ export async function apiRequest(
   data?: unknown | undefined
 ): Promise<Response> {
   // console.log("[Auth apiRequest] Called for:", method, url);
-  const headers: Record<string, string> = data
+  const baseHeaders: Record<string, string> = data
     ? { "Content-Type": "application/json" }
     : {};
 
-  // Get session token - only attach when valid (never send Bearer null)
-  try {
-    const token = await getAuthToken();
-    if (isValidToken(token)) {
-      headers["Authorization"] = `Bearer ${token}`;
-    } else {
-      console.warn("[Auth apiRequest] No valid session token, request may 401");
-    }
-  } catch (e) {
-    console.error("[Auth apiRequest] Failed to get session token:", e);
-  }
-
-  const res = await fetch(url, {
-    method,
-    headers,
-    body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
-  });
+  const res = await fetchWithRetry(
+    url,
+    {
+      method,
+      body: data ? JSON.stringify(data) : undefined,
+      credentials: "include",
+    },
+    baseHeaders
+  );
 
   await throwIfResNotOk(res);
   return res;
@@ -192,20 +237,7 @@ export const getQueryFn: <T>(options: {
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
     // console.log("[Auth Query] queryFn CALLED for:", queryKey.join("/"));
-    const headers: Record<string, string> = {};
-
-    // Get session token - only attach when valid (never send Bearer null)
-    try {
-      const token = await getAuthToken();
-      if (isValidToken(token)) {
-        headers["Authorization"] = `Bearer ${token}`;
-      }
-    } catch (e) {
-      console.error("[Auth Query] Failed to get session token:", e);
-    }
-
-    const res = await fetch(queryKey.join("/") as string, {
-      headers,
+    const res = await fetchWithRetry(queryKey.join("/") as string, {
       credentials: "include",
     });
 

@@ -5,7 +5,7 @@ import { duplicateDetectionService } from "./duplicate-detection.service";
 import { notificationService } from "./notification.service";
 import { subscriptionService } from "./subscription.service";
 import { storage } from "../storage";
-import { shopify } from "../shopify-auth";
+import { getOfflineAccessToken } from "../shopify-auth";
 
 interface OrderCreateJobData {
   shopDomain: string;
@@ -52,7 +52,7 @@ export class WebhookProcessorService {
    * Logic extracted from previous synchronous handler
    */
   public async processOrderCreate(data: OrderCreateJobData): Promise<void> {
-    const { shopDomain, payload: shopifyOrder, deliveryId, accessToken: providedAccessToken } = data;
+    const { shopDomain, payload: shopifyOrder, deliveryId } = data;
     const orderId = shopifyOrder.id;
     const webhookTopic = data.webhookTopic || "orders/create";
     const deliveryRecord = {
@@ -76,19 +76,23 @@ export class WebhookProcessorService {
         await storage.markWebhookDeliveryProcessing(deliveryRecord);
       }
 
-      // 1. Get Access Token
-      let accessToken = providedAccessToken;
-      if (!accessToken) {
-        // Try to load from session if not provided in job data
-        try {
-          const offlineSessionId = shopify.session.getOfflineId(shopDomain);
-          const session = await shopify.config.sessionStorage.loadSession(offlineSessionId);
-          if (session?.accessToken) {
-            accessToken = session.accessToken;
-          }
-        } catch (error) {
-          logger.warn(`[WebhookProcessor] Failed to load session for ${shopDomain}:`, error);
-        }
+      // 1. Get a fresh Access Token.
+      // For expiring offline tokens we must resolve (and possibly refresh) the
+      // token at processing time: the token captured when the job was enqueued
+      // may have expired before the worker picks it up.
+      //
+      // We deliberately do NOT fall back to the token captured at enqueue time.
+      // If the offline token is expired and cannot be refreshed (or the session
+      // is missing), we throw so pg-boss retries the job rather than calling the
+      // Admin API with a token we already know is invalid.
+      let accessToken: string | undefined;
+      try {
+        accessToken = (await getOfflineAccessToken(shopDomain)) ?? undefined;
+      } catch (error) {
+        logger.warn(
+          `[WebhookProcessor] Failed to load/refresh session for ${shopDomain}:`,
+          error
+        );
       }
 
       if (!accessToken) {

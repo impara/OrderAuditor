@@ -38,6 +38,7 @@ const mocks = vi.hoisted(() => ({
       },
     },
   },
+  getOfflineAccessToken: vi.fn(),
   logger: {
     info: vi.fn(),
     warn: vi.fn(),
@@ -68,6 +69,7 @@ vi.mock("./subscription.service", () => ({
 
 vi.mock("../shopify-auth", () => ({
   shopify: mocks.shopify,
+  getOfflineAccessToken: mocks.getOfflineAccessToken,
 }));
 
 vi.mock("../utils/logger", () => ({
@@ -156,6 +158,7 @@ describe("WebhookProcessorService.processOrderCreate idempotency", () => {
     mocks.shopify.config.sessionStorage.loadSession.mockResolvedValue({
       accessToken: "shpat_loaded_token",
     });
+    mocks.getOfflineAccessToken.mockResolvedValue("shpat_loaded_token");
   });
 
   it("does not treat an existing webhook delivery row as a completed order", async () => {
@@ -224,6 +227,7 @@ describe("WebhookProcessorService.processOrderCreate idempotency", () => {
 
   it("throws when no access token is available so pg-boss can retry", async () => {
     mocks.shopify.config.sessionStorage.loadSession.mockResolvedValue(null);
+    mocks.getOfflineAccessToken.mockResolvedValue(null);
 
     await expect(
       webhookProcessor.processOrderCreate({

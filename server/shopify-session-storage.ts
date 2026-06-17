@@ -50,6 +50,10 @@ export class PostgresSessionStorage implements SessionStorage {
           scope: session.scope,
           expires: session.expires ? new Date(session.expires) : undefined,
           accessToken: session.accessToken,
+          refreshToken: session.refreshToken,
+          refreshTokenExpires: session.refreshTokenExpires
+            ? new Date(session.refreshTokenExpires)
+            : undefined,
           userId: session.onlineAccessInfo?.associated_user.id.toString(),
           firstName: session.onlineAccessInfo?.associated_user.first_name,
           lastName: session.onlineAccessInfo?.associated_user.last_name,
@@ -69,6 +73,10 @@ export class PostgresSessionStorage implements SessionStorage {
             scope: session.scope,
             expires: session.expires ? new Date(session.expires) : undefined,
             accessToken: session.accessToken,
+            refreshToken: session.refreshToken,
+            refreshTokenExpires: session.refreshTokenExpires
+              ? new Date(session.refreshTokenExpires)
+              : undefined,
             userId: session.onlineAccessInfo?.associated_user.id.toString(),
             firstName: session.onlineAccessInfo?.associated_user.first_name,
             lastName: session.onlineAccessInfo?.associated_user.last_name,
@@ -121,6 +129,10 @@ export class PostgresSessionStorage implements SessionStorage {
         scope: row.scope || undefined,
         expires: row.expires ? new Date(row.expires) : undefined,
         accessToken: row.accessToken || undefined,
+        refreshToken: row.refreshToken || undefined,
+        refreshTokenExpires: row.refreshTokenExpires
+          ? new Date(row.refreshTokenExpires)
+          : undefined,
       });
 
       if (row.userId) {
@@ -213,6 +225,10 @@ export class PostgresSessionStorage implements SessionStorage {
           scope: row.scope || undefined,
           expires: row.expires ? new Date(row.expires) : undefined,
           accessToken: row.accessToken || undefined,
+          refreshToken: row.refreshToken || undefined,
+          refreshTokenExpires: row.refreshTokenExpires
+            ? new Date(row.refreshTokenExpires)
+            : undefined,
         });
 
         // Rehydrate onlineAccessInfo if user data exists

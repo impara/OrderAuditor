@@ -4,6 +4,7 @@ import {
   ApiVersion,
   BillingInterval,
   DeliveryMethod,
+  Session,
 } from "@shopify/shopify-api";
 import { PostgresSessionStorage } from "./shopify-session-storage";
 import { Request, Response, NextFunction } from "express";
@@ -59,6 +60,186 @@ shopify.webhooks.addHandlers({
 
 export { shopify };
 
+// Preemptive refresh buffer: refresh the access token if it expires within this window.
+const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // 5 minutes
+
+// De-dupes concurrent refreshes for the same shop (the webhook worker runs with teamSize: 5).
+const refreshInFlight = new Map<string, Promise<Session | undefined>>();
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Persists a session, retrying on failure. `storeSession` returns false (rather
+ * than throwing) on a DB write failure, so callers that rotate tokens MUST treat
+ * a false/failed result as a hard failure: a rotated refresh token that is not
+ * persisted is effectively lost (Shopify has already invalidated the previous one).
+ *
+ * Returns true only when the session is confirmed stored.
+ */
+export async function storeSessionWithRetry(
+  session: Session,
+  attempts = 3
+): Promise<boolean> {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const stored = await shopify.config.sessionStorage!.storeSession(session);
+      if (stored) {
+        return true;
+      }
+      logger.error(
+        `[Auth] storeSession returned false for shop ${session.shop} (attempt ${attempt}/${attempts})`
+      );
+    } catch (error: any) {
+      logger.error(
+        `[Auth] storeSession threw for shop ${session.shop} (attempt ${attempt}/${attempts}): ${error?.message}`
+      );
+    }
+    if (attempt < attempts) {
+      await sleep(250 * attempt); // simple linear backoff
+    }
+  }
+  return false;
+}
+
+/**
+ * Loads the offline session for a shop and, for expiring tokens, transparently
+ * refreshes the access token (with a 5 minute buffer) before returning it.
+ *
+ * - Legacy non-expiring tokens (no refreshToken) are returned as-is.
+ * - Expiring tokens that are still valid are returned as-is.
+ * - Near-expiry-but-still-valid tokens are refreshed; if the refresh (or its
+ *   persistence) fails, the still-valid current session is returned so the
+ *   in-flight request can proceed.
+ * - Truly expired tokens that cannot be refreshed (or persisted) return
+ *   `undefined` so callers (background jobs especially) treat it as "no usable
+ *   token" rather than calling the Admin API with a token we know is dead.
+ */
+export async function getValidOfflineSession(
+  shop: string
+): Promise<Session | undefined> {
+  const offlineSessionId = shopify.session.getOfflineId(shop);
+  const session = await shopify.config.sessionStorage.loadSession(
+    offlineSessionId
+  );
+
+  if (!session || !session.accessToken) {
+    return undefined;
+  }
+
+  // Legacy non-expiring offline token: nothing to refresh.
+  if (!session.refreshToken) {
+    return session;
+  }
+
+  // Expiring token that is still valid (outside the refresh buffer): use as-is.
+  if (!session.isExpired(TOKEN_REFRESH_BUFFER_MS)) {
+    return session;
+  }
+
+  // Token is expired or about to expire: refresh, de-duping concurrent callers.
+  const existing = refreshInFlight.get(shop);
+  if (existing) {
+    return existing;
+  }
+
+  const refreshPromise = (async (): Promise<Session | undefined> => {
+    try {
+      logger.info(`[Auth] Refreshing expiring offline token for shop: ${shop}`);
+      const { session: refreshed } = await shopify.auth.refreshToken({
+        shop,
+        refreshToken: session.refreshToken!,
+      });
+
+      // Only report success once the rotated token is definitely persisted.
+      const stored = await storeSessionWithRetry(refreshed);
+      if (!stored) {
+        throw new Error(
+          "Failed to persist refreshed session after retries (rotated refresh token may be lost)"
+        );
+      }
+
+      logger.info(`[Auth] ✅ Refreshed offline token for shop: ${shop}`);
+      return refreshed;
+    } catch (error: any) {
+      logger.error(
+        `[Auth] Failed to refresh offline token for shop ${shop}: ${error?.message}`
+      );
+      // If the current access token is still valid right now (we refresh with a
+      // buffer ahead of expiry), let this request proceed with it. If it is
+      // already expired, signal "no usable token" so background jobs retry and
+      // HTTP requests fall through to re-auth.
+      if (!session.isExpired()) {
+        return session;
+      }
+      return undefined;
+    } finally {
+      refreshInFlight.delete(shop);
+    }
+  })();
+
+  refreshInFlight.set(shop, refreshPromise);
+  return refreshPromise;
+}
+
+/**
+ * Convenience wrapper returning just the (possibly refreshed) offline access token.
+ */
+export async function getOfflineAccessToken(
+  shop: string
+): Promise<string | null> {
+  const session = await getValidOfflineSession(shop);
+  return session?.accessToken ?? null;
+}
+
+/**
+ * Forces a refresh of the offline access token regardless of its expiry, used
+ * reactively when an Admin API call returns 401 with a token we believed valid
+ * (e.g. the token was retired by a parallel refresh, or rotation edge cases).
+ *
+ * Returns true if a new token was obtained and persisted. Returns false if the
+ * shop has no refresh token (legacy non-expiring) or the refresh failed (e.g.
+ * the refresh token itself has expired), in which case the caller should fall
+ * back to clearing the session and re-authenticating.
+ */
+export async function forceRefreshOfflineToken(shop: string): Promise<boolean> {
+  const offlineSessionId = shopify.session.getOfflineId(shop);
+  const session = await shopify.config.sessionStorage.loadSession(
+    offlineSessionId
+  );
+
+  if (!session?.refreshToken) {
+    return false;
+  }
+
+  try {
+    logger.info(
+      `[Auth] Force-refreshing offline token for shop ${shop} after auth failure`
+    );
+    const { session: refreshed } = await shopify.auth.refreshToken({
+      shop,
+      refreshToken: session.refreshToken,
+    });
+
+    // Only report success once the rotated token is definitely persisted;
+    // otherwise the caller should clear the session and re-auth.
+    const stored = await storeSessionWithRetry(refreshed);
+    if (!stored) {
+      logger.error(
+        `[Auth] Force-refresh obtained a new token for ${shop} but failed to persist it`
+      );
+      return false;
+    }
+
+    logger.info(`[Auth] ✅ Force-refresh succeeded for shop: ${shop}`);
+    return true;
+  } catch (error: any) {
+    logger.warn(
+      `[Auth] Force-refresh failed for shop ${shop}: ${error?.message}`
+    );
+    return false;
+  }
+}
+
 export async function auth(req: Request, res: Response) {
   try {
     if (!req.query.shop) {
@@ -111,6 +292,7 @@ export async function authCallback(req: Request, res: Response) {
     const callback = await shopify.auth.callback({
       rawRequest: req,
       rawResponse: res,
+      expiring: true, // Request an expiring offline token (access token + rotating refresh token)
     });
 
     const { session } = callback;
@@ -124,9 +306,10 @@ export async function authCallback(req: Request, res: Response) {
       `[AuthCallback] Session details - ID: ${session.id}, token prefix: ${tokenPrefix}, length: ${tokenLength}`
     );
 
-    // Validate token type based on response structure
-    const isActuallyOfflineToken =
-      !session.onlineAccessInfo?.associated_user && !session.expires;
+    // Validate token type based on response structure.
+    // NOTE: expiring offline tokens DO set `expires`, so we must not treat the
+    // presence of `expires` as an "online" signal. Offline == not online.
+    const isActuallyOfflineToken = !session.isOnline;
 
     logger.debug(
       `[AuthCallback] Token validation - Prefix: ${tokenPrefix}, isOffline: ${isActuallyOfflineToken}`
@@ -657,9 +840,8 @@ export async function verifyRequest(
     // The offline session ID is usually "offline_{shop}"
     const offlineSessionId = shopify.session.getOfflineId(shop);
     logger.debug(`[Auth] Looking for offline session: ${offlineSessionId}`);
-    const session = await shopify.config.sessionStorage.loadSession(
-      offlineSessionId
-    );
+    // Loads the offline session and transparently refreshes expiring tokens.
+    const session = await getValidOfflineSession(shop);
 
     if (!session || !session.accessToken) {
       logger.error(`[Auth] No offline session found for shop ${shop}`);

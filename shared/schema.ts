@@ -119,6 +119,8 @@ export const shopifySessions = pgTable("shopify_sessions", {
   scope: text("scope"),
   expires: timestamp("expires"),
   accessToken: text("access_token"), // Changed from varchar to text to support full-length tokens (Shopify tokens can be 40+ chars)
+  refreshToken: text("refresh_token"), // Expiring offline tokens: rotating refresh token used to obtain new access tokens
+  refreshTokenExpires: timestamp("refresh_token_expires"), // When the refresh token expires (~90 days, rotates on each refresh)
   userId: varchar("user_id"), // Shopify user ID (can be big int, storing as string for safety)
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
