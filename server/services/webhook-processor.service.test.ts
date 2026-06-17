@@ -225,6 +225,33 @@ describe("WebhookProcessorService.processOrderCreate idempotency", () => {
     });
   });
 
+  it("sends quota exceeded notification when quota blocks processing at 100%", async () => {
+    mocks.subscriptionService.checkQuota.mockResolvedValue({
+      allowed: false,
+      reason: "Monthly order limit (50) reached. Please upgrade to continue processing orders.",
+      subscription: {
+        orderLimit: 50,
+        monthlyOrderCount: 50,
+        quotaExceededNotifiedAt: null,
+        currentBillingPeriodStart: new Date("2026-06-01T00:00:00.000Z"),
+      },
+    });
+
+    await expect(
+      webhookProcessor.processOrderCreate(baseJobData)
+    ).resolves.toBeUndefined();
+
+    expect(mocks.notificationService.sendQuotaExceededNotification).toHaveBeenCalledWith(
+      "test.myshopify.com",
+      expect.objectContaining({
+        orderLimit: 50,
+        monthlyOrderCount: 50,
+      })
+    );
+    expect(mocks.storage.createOrder).not.toHaveBeenCalled();
+    expect(mocks.storage.markWebhookDeliveryProcessed).toHaveBeenCalled();
+  });
+
   it("throws when no access token is available so pg-boss can retry", async () => {
     mocks.shopify.config.sessionStorage.loadSession.mockResolvedValue(null);
     mocks.getOfflineAccessToken.mockResolvedValue(null);

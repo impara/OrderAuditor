@@ -185,7 +185,7 @@ export class ShopifyBillingService {
       logger.warn(
         `[ShopifyBilling] BYPASS MODE ENABLED: Skipping active charge check for ${shopDomain}. Upgrading subscription immediately.`
       );
-      await subscriptionService.activatePaidSubscription(shopDomain, chargeId);
+      await subscriptionService.activatePaidSubscription(shopDomain, chargeId, accessToken);
       return true;
     }
 
@@ -216,7 +216,7 @@ export class ShopifyBillingService {
         return false;
       }
 
-      await subscriptionService.activatePaidSubscription(shopDomain, chargeId);
+      await subscriptionService.activatePaidSubscription(shopDomain, chargeId, accessToken);
 
       logger.info(
         `[ShopifyBilling] Activated charge ${chargeId} and upgraded subscription`

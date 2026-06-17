@@ -122,7 +122,8 @@ describe("ShopifyBillingService — double cancellation regression", () => {
     expect(result).toBe(true);
     expect(activatePaidSubscription).toHaveBeenCalledWith(
       "test.myshopify.com",
-      42
+      42,
+      "shpat_testtoken"
     );
     expect(updateTier).not.toHaveBeenCalled();
   });
@@ -159,7 +160,8 @@ describe("ShopifyBillingService — double cancellation regression", () => {
     expect(mockFetch).not.toHaveBeenCalled(); // no real API call
     expect(activatePaidSubscription).toHaveBeenCalledWith(
       "test.myshopify.com",
-      12345
+      12345,
+      "shpat_testtoken"
     );
     expect(updateTier).not.toHaveBeenCalled();
   });

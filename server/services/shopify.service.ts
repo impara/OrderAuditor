@@ -617,6 +617,43 @@ export class ShopifyService {
   }
 
   /**
+   * Fetch the shop's contact email from the Admin API (works with offline tokens).
+   */
+  async getShopContactEmail(
+    shopDomain: string,
+    accessToken: string
+  ): Promise<string | null> {
+    if (!this.validateCredentials(shopDomain, accessToken)) {
+      return null;
+    }
+
+    try {
+      const url = `${this.getBaseApiUrl(shopDomain)}/shop.json`;
+      const response = await fetch(url, {
+        headers: {
+          "X-Shopify-Access-Token": accessToken,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        logger.warn(
+          `[Shopify] Failed to fetch shop contact email: ${response.status}`
+        );
+        return null;
+      }
+
+      const data = await response.json();
+      const shop = data.shop;
+      const email = shop?.email || shop?.customer_email;
+      return typeof email === "string" && email.trim() ? email.trim() : null;
+    } catch (error) {
+      logger.error("[Shopify] Error fetching shop contact email:", error);
+      return null;
+    }
+  }
+
+  /**
    * Delete a webhook by ID
    */
   async deleteWebhook(

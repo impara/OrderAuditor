@@ -53,6 +53,7 @@ export class SubscriptionService {
           status: "active",
           orderLimit: FREE_TIER_ORDER_LIMIT,
           monthlyOrderCount: 0,
+          quotaExceededNotifiedAt: null,
           currentBillingPeriodStart: periodStart,
           currentBillingPeriodEnd: periodEnd,
         });
@@ -120,7 +121,8 @@ export class SubscriptionService {
    */
   async activatePaidSubscription(
     shopDomain: string,
-    shopifyChargeId?: string | number | null
+    shopifyChargeId?: string | number | null,
+    accessToken?: string
   ): Promise<Subscription> {
     const updates: {
       tier: "paid";
@@ -137,7 +139,22 @@ export class SubscriptionService {
       updates.shopifyChargeId = String(shopifyChargeId);
     }
 
-    return storage.updateSubscription(shopDomain, updates);
+    const subscription = await storage.updateSubscription(shopDomain, updates);
+
+    try {
+      const { notificationService } = await import("./notification.service");
+      await notificationService.prefillMerchantNotificationEmail(
+        shopDomain,
+        accessToken
+      );
+    } catch (error) {
+      logger.warn(
+        `[Subscription] Failed to pre-fill notification email for ${shopDomain}:`,
+        error
+      );
+    }
+
+    return subscription;
   }
 
   /**

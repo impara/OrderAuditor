@@ -391,6 +391,7 @@ export class DatabaseStorage implements IStorage {
 
     return this.updateSubscription(shopDomain, {
       monthlyOrderCount: 0,
+      quotaExceededNotifiedAt: null,
       currentBillingPeriodStart: periodStart,
       currentBillingPeriodEnd: periodEnd,
     });

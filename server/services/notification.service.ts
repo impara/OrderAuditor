@@ -2,6 +2,7 @@ import { logger } from "../utils/logger";
 import type { DetectionSettings, Order, Subscription } from "@shared/schema";
 import { subscriptionService } from "./subscription.service";
 import { storage } from "../storage";
+import { shopifyService } from "./shopify.service";
 import nodemailer from "nodemailer";
 
 interface NotificationData {
@@ -19,24 +20,24 @@ export class NotificationService {
     shopDomain: string,
     settings: DetectionSettings,
     data: NotificationData
-  ): Promise<void> {
+  ): Promise<boolean> {
     // Check if subscription allows notifications (Paid tier only)
     try {
       const subscription = await subscriptionService.getSubscription(shopDomain);
       if (subscription?.tier !== "paid") {
         logger.debug("[Notification] Free tier subscription, skipping notifications (Premium feature)");
-        return;
+        return false;
       }
     } catch (error) {
       logger.error("[Notification] Failed to check subscription status:", error);
       // Fail safe: don't send if we can't verify subscription
-      return;
+      return false;
     }
 
     // Check if notifications are enabled
     if (!settings.enableNotifications) {
       logger.debug("[Notification] Notifications disabled, skipping");
-      return;
+      return false;
     }
 
     // Check if confidence meets threshold
@@ -44,7 +45,7 @@ export class NotificationService {
       logger.debug(
         `[Notification] Confidence ${data.confidence}% below threshold ${settings.notificationThreshold}%, skipping`
       );
-      return;
+      return false;
     }
 
     const promises: Promise<void>[] = [];
@@ -61,8 +62,14 @@ export class NotificationService {
       promises.push(this.sendSlackNotification(shopDomain, settings.slackWebhookUrl, data));
     }
 
+    if (promises.length === 0) {
+      logger.debug("[Notification] No notification channels configured, skipping");
+      return false;
+    }
+
     // Wait for all notifications to complete (don't fail if one fails)
     await Promise.allSettled(promises);
+    return true;
   }
 
   /**
@@ -513,14 +520,51 @@ ${orderColumn(data.duplicateOf)}
   }
 
   /**
-   * Send notification when quota is exceeded (100% limit reached)
-   * This is sent to all users (including free tier) as it's critical business info
+   * Pre-fill notification email for paid shops when missing.
+   * Does not enable notifications — merchants opt in from Settings to conserve Mailgun quota.
+   */
+  async prefillMerchantNotificationEmail(
+    shopDomain: string,
+    accessToken?: string
+  ): Promise<void> {
+    const settings = await storage.getSettings(shopDomain);
+    if (settings?.notificationEmail?.trim()) {
+      return;
+    }
+
+    const email = await this.resolveMerchantContactEmail(shopDomain, accessToken);
+    if (!email) {
+      logger.debug(
+        `[Notification] No merchant email to pre-fill for ${shopDomain}`
+      );
+      return;
+    }
+
+    await storage.updateSettings(shopDomain, {
+      notificationEmail: email,
+    });
+    logger.info(
+      `[Notification] Pre-filled notification email for ${shopDomain} (${email}); notifications remain off until enabled in Settings`
+    );
+  }
+
+  /**
+   * Send notification when quota is exceeded (100% limit reached).
+   * Sent once per billing period to conserve Mailgun quota on the free plan.
    */
   async sendQuotaExceededNotification(
     shopDomain: string,
     subscription: Subscription
   ): Promise<void> {
     try {
+      if (subscription.orderLimit === -1) {
+        return;
+      }
+
+      if (subscription.monthlyOrderCount < subscription.orderLimit) {
+        return;
+      }
+
       // Check if we already sent notification this billing period
       if (subscription.quotaExceededNotifiedAt) {
         const notifiedAt = new Date(subscription.quotaExceededNotifiedAt);
@@ -534,38 +578,46 @@ ${orderColumn(data.duplicateOf)}
         }
       }
 
-      // Get shop owner email from Shopify session
-      const session = await this.getShopOwnerEmail(shopDomain);
-      if (!session) {
-        logger.warn(`[Notification] No session found for ${shopDomain}, cannot send quota notification`);
+      const email = await this.resolveMerchantContactEmail(shopDomain);
+      if (!email) {
+        logger.warn(`[Notification] No merchant email found for ${shopDomain}, cannot send quota notification`);
         return;
       }
 
-      // Send email notification
-      await this.sendQuotaExceededEmail(shopDomain, session, subscription);
+      const sent = await this.sendQuotaExceededEmail(shopDomain, email, subscription);
+      if (!sent) {
+        return;
+      }
 
-      // Mark as notified
+      // Mark as notified only after a successful send
       await storage.updateSubscription(shopDomain, {
         quotaExceededNotifiedAt: new Date(),
       });
 
-      logger.info(`[Notification] Sent quota exceeded notification to ${session} for ${shopDomain}`);
+      logger.info(`[Notification] Sent quota exceeded notification to ${email} for ${shopDomain}`);
     } catch (error) {
       logger.error(`[Notification] Failed to send quota exceeded notification for ${shopDomain}:`, error);
     }
   }
 
   /**
-   * Get shop owner email from Shopify session
+   * Resolve merchant contact email: settings, session, then Shopify shop API.
    */
-  private async getShopOwnerEmail(shopDomain: string): Promise<string | null> {
+  async resolveMerchantContactEmail(
+    shopDomain: string,
+    accessToken?: string
+  ): Promise<string | null> {
     try {
+      const settings = await storage.getSettings(shopDomain);
+      if (settings?.notificationEmail?.trim()) {
+        return settings.notificationEmail.trim();
+      }
+
       const { shopifySessions } = await import("@shared/schema");
       const { db } = await import("../db");
       const { eq, and } = await import("drizzle-orm");
 
-      // Get offline session for the shop (has access token and possibly email)
-      const [session] = await db
+      const [offlineSession] = await db
         .select()
         .from(shopifySessions)
         .where(
@@ -576,20 +628,49 @@ ${orderColumn(data.duplicateOf)}
         )
         .limit(1);
 
-      if (session?.email) {
-        return session.email;
+      if (offlineSession?.email?.trim()) {
+        return offlineSession.email.trim();
       }
 
-      // Fallback: try to get email from any online session
-      const [onlineSession] = await db
+      const token =
+        accessToken ||
+        offlineSession?.accessToken ||
+        (await this.getOfflineAccessTokenForShop(shopDomain));
+
+      if (token) {
+        const shopEmail = await shopifyService.getShopContactEmail(
+          shopDomain,
+          token
+        );
+        if (shopEmail) {
+          return shopEmail;
+        }
+      }
+
+      const [anySession] = await db
         .select()
         .from(shopifySessions)
         .where(eq(shopifySessions.shop, shopDomain))
         .limit(1);
 
-      return onlineSession?.email || null;
+      return anySession?.email?.trim() || null;
     } catch (error) {
-      logger.error(`[Notification] Failed to get shop owner email for ${shopDomain}:`, error);
+      logger.error(`[Notification] Failed to resolve merchant email for ${shopDomain}:`, error);
+      return null;
+    }
+  }
+
+  private async getOfflineAccessTokenForShop(
+    shopDomain: string
+  ): Promise<string | null> {
+    try {
+      const { getOfflineAccessToken } = await import("../shopify-auth");
+      return (await getOfflineAccessToken(shopDomain)) ?? null;
+    } catch (error) {
+      logger.debug(
+        `[Notification] Could not load offline access token for ${shopDomain}:`,
+        error
+      );
       return null;
     }
   }
@@ -601,7 +682,7 @@ ${orderColumn(data.duplicateOf)}
     shopDomain: string,
     email: string,
     subscription: Subscription
-  ): Promise<void> {
+  ): Promise<boolean> {
     const smtpHost = process.env.SMTP_HOST || "smtp.gmail.com";
     const smtpPort = parseInt(process.env.SMTP_PORT || "587");
     const smtpUser = process.env.SMTP_USER;
@@ -610,7 +691,7 @@ ${orderColumn(data.duplicateOf)}
 
     if (!smtpUser || !smtpPassword) {
       logger.warn("[Notification] SMTP credentials not configured, skipping quota exceeded email");
-      return;
+      return false;
     }
 
     const transporter = nodemailer.createTransport({
@@ -724,6 +805,8 @@ Thank you for using Duplicate Guard!
       text: textBody,
       html: htmlBody,
     });
+
+    return true;
   }
 
   /**

@@ -278,7 +278,7 @@ function SubscriptionPage() {
                     ? "Paused while your Shopify store subscription is frozen"
                     : isPaid
                       ? "$7.99/month - Unlimited duplicates"
-                      : "Free - 30 duplicates/month"}
+                      : "Free - 50 duplicates/month"}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -363,7 +363,7 @@ function SubscriptionPage() {
                   <ul className="space-y-2 text-sm">
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-primary" />
-                      <span>30 duplicates/month</span>
+                      <span>50 duplicates/month</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-primary" />

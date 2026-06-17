@@ -47,6 +47,12 @@ vi.mock("../storage", () => ({
   FREE_TIER_ORDER_LIMIT: 50,
 }));
 
+vi.mock("./notification.service", () => ({
+  notificationService: {
+    prefillMerchantNotificationEmail: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 
 import { subscriptionService } from "./subscription.service";
 

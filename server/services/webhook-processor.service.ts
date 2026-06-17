@@ -120,9 +120,23 @@ export class WebhookProcessorService {
       // 1.6 Check Subscription Quota
       const quota = await subscriptionService.checkQuota(shopDomain);
       if (!quota.allowed) {
-        // Log at info (not warn) — the warn fires once when the limit is first hit
-        // and the email notification is sent. Subsequent orders log at info to
-        // reduce noise in Dozzle for stores that are already over their quota.
+        if (
+          quota.subscription.orderLimit !== -1 &&
+          quota.subscription.monthlyOrderCount >= quota.subscription.orderLimit
+        ) {
+          try {
+            await notificationService.sendQuotaExceededNotification(
+              shopDomain,
+              quota.subscription
+            );
+          } catch (error) {
+            logger.warn(
+              `[WebhookProcessor] Failed to send quota exceeded notification for ${shopDomain}:`,
+              error
+            );
+          }
+        }
+
         logger.info(`[WebhookProcessor] Quota exceeded for shop ${shopDomain}: ${quota.reason}. Skipping processing.`);
         await recordProcessedDelivery();
         return;
@@ -227,7 +241,7 @@ export class WebhookProcessorService {
             // Let's fetch settings first
             const settings = await storage.getSettings(shopDomain);
             if (settings) {
-                await notificationService.sendNotifications(shopDomain, settings, {
+                const notificationSent = await notificationService.sendNotifications(shopDomain, settings, {
                     order: {
                         ...shopifyOrder,
                         orderNumber: shopifyOrder.order_number?.toString() || shopifyOrder.id.toString(),
@@ -242,7 +256,9 @@ export class WebhookProcessorService {
                     confidence: detectionResult.confidence,
                     matchReason: detectionResult.matchReason
                 });
-                 logger.info(`[WebhookProcessor] Sent notification for order ${orderId}`);
+                if (notificationSent) {
+                  logger.info(`[WebhookProcessor] Sent notification for order ${orderId}`);
+                }
             }
         } catch (error) {
           logger.error(`[WebhookProcessor] Failed to send notification for order ${orderId}:`, error);

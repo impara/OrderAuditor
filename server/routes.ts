@@ -2186,7 +2186,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
         await subscriptionService.activatePaidSubscription(
           shop,
-          existingCharges.activeCharge.id
+          existingCharges.activeCharge.id,
+          accessToken
         );
         return res.json({
           success: true,
