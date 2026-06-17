@@ -645,7 +645,9 @@ export class ShopifyService {
 
       const data = await response.json();
       const shop = data.shop;
-      const email = shop?.email || shop?.customer_email;
+      // Prefer customer_email (Settings → Store contact details) over shop.email
+      // (owner account — often admin@example.com on dev stores).
+      const email = shop?.customer_email || shop?.email;
       return typeof email === "string" && email.trim() ? email.trim() : null;
     } catch (error) {
       logger.error("[Shopify] Error fetching shop contact email:", error);
