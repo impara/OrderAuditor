@@ -52,6 +52,18 @@ describe("shouldProcessAppSubscriptionTermination", () => {
     ).toBe(false);
   });
 
+  it("ignores EXPIRED webhook for complimentary shop without stored charge id", () => {
+    expect(
+      shouldProcessAppSubscriptionTermination(
+        "36600709436",
+        null,
+        "complimentary",
+        "paid",
+        "EXPIRED"
+      )
+    ).toBe(false);
+  });
+
   it("processes CANCELLED webhook for the active charge", () => {
     expect(
       shouldProcessAppSubscriptionTermination(

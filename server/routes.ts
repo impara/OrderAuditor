@@ -1252,6 +1252,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           tier: "paid",
           status: "complimentary",
           orderLimit: -1,
+          shopifyChargeId: null,
           currentBillingPeriodStart: now,
           currentBillingPeriodEnd: periodEnd,
           quotaExceededNotifiedAt: null,

@@ -39,7 +39,19 @@ export function shouldProcessAppSubscriptionTermination(
       return false;
     }
 
-    if (localTier === "paid" && localStatus === "active") {
+    // Pending charges that were never approved expire after ~48h. Ignore
+    // those webhooks when we never stored a charge ID (complimentary, free,
+    // or abandoned upgrade flows).
+    if (webhookStatus === "EXPIRED" && !storedChargeId) {
+      return false;
+    }
+
+    if (
+      localTier === "paid" &&
+      (localStatus === "active" ||
+        localStatus === "complimentary" ||
+        localStatus === "frozen")
+    ) {
       return false;
     }
   }
