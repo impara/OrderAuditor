@@ -1,5 +1,6 @@
 import { logger } from "../utils/logger";
 import { subscriptionService } from "./subscription.service";
+import { fetchWithRetry, fetchBillingWithRetry } from "../utils/fetch-with-retry";
 
 interface ShopifyRecurringCharge {
   id: number;
@@ -190,11 +191,20 @@ export class ShopifyBillingService {
     }
 
     try {
+      const existingCharge = await this.getCharge(shopDomain, accessToken, chargeId);
+      if (existingCharge?.status === "ACTIVE") {
+        await subscriptionService.activatePaidSubscription(shopDomain, chargeId, accessToken);
+        logger.info(
+          `[ShopifyBilling] Charge ${chargeId} already active; synced subscription`
+        );
+        return true;
+      }
+
       const url = `${this.getBaseApiUrl(
         shopDomain
       )}/recurring_application_charges/${chargeId}/activate.json`;
 
-      const response = await fetch(url, {
+      const response = await fetchBillingWithRetry(url, {
         method: "POST",
         headers: {
           "X-Shopify-Access-Token": accessToken,
@@ -205,6 +215,8 @@ export class ShopifyBillingService {
             id: chargeId,
           },
         }),
+        confirmedIdempotent: true,
+        label: `activateCharge(${shopDomain}, ${chargeId})`,
       });
 
       if (!response.ok) {
@@ -213,6 +225,24 @@ export class ShopifyBillingService {
           `[ShopifyBilling] Failed to activate charge: ${response.status}`,
           errorText
         );
+
+        const chargeAfterFailure = await this.getCharge(
+          shopDomain,
+          accessToken,
+          chargeId
+        );
+        if (chargeAfterFailure?.status === "ACTIVE") {
+          await subscriptionService.activatePaidSubscription(
+            shopDomain,
+            chargeId,
+            accessToken
+          );
+          logger.info(
+            `[ShopifyBilling] Charge ${chargeId} became active after retry/read-after-write`
+          );
+          return true;
+        }
+
         return false;
       }
 
@@ -245,12 +275,13 @@ export class ShopifyBillingService {
         shopDomain
       )}/recurring_application_charges/${chargeId}.json`;
 
-      const response = await fetch(url, {
+      const response = await fetchWithRetry(url, {
         method: "GET",
         headers: {
           "X-Shopify-Access-Token": accessToken,
           "Content-Type": "application/json",
         },
+        label: `getCharge(${shopDomain}, ${chargeId})`,
       });
 
       if (!response.ok) {
@@ -282,12 +313,13 @@ export class ShopifyBillingService {
         shopDomain
       )}/recurring_application_charges.json`;
 
-      const response = await fetch(url, {
+      const response = await fetchWithRetry(url, {
         method: "GET",
         headers: {
           "X-Shopify-Access-Token": accessToken,
           "Content-Type": "application/json",
         },
+        label: `listCharges(${shopDomain})`,
       });
 
       if (!response.ok) {
@@ -370,12 +402,14 @@ export class ShopifyBillingService {
         shopDomain
       )}/recurring_application_charges/${chargeId}.json`;
 
-      const response = await fetch(url, {
+      const response = await fetchWithRetry(url, {
         method: "DELETE",
         headers: {
           "X-Shopify-Access-Token": accessToken,
           "Content-Type": "application/json",
         },
+        idempotent: true,
+        label: `cancelCharge(${shopDomain}, ${chargeId})`,
       });
 
       if (!response.ok) {

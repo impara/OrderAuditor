@@ -18,6 +18,7 @@ export class QueueService {
   private static instance: QueueService;
   private boss: PgBoss | null = null;
   private isReady: boolean = false;
+  private workerRegistered: boolean = false;
   private ensuredQueues = new Set<string>();
 
   private constructor() {}
@@ -27,6 +28,18 @@ export class QueueService {
       QueueService.instance = new QueueService();
     }
     return QueueService.instance;
+  }
+
+  public getReady(): boolean {
+    return this.isReady;
+  }
+
+  public isWorkerRegistered(): boolean {
+    return this.workerRegistered;
+  }
+
+  public markWorkerRegistered(): void {
+    this.workerRegistered = true;
   }
 
   /**
@@ -44,7 +57,12 @@ export class QueueService {
         throw new Error("DATABASE_URL not set");
       }
 
-      this.boss = new PgBoss(connectionString);
+      const maxPool = parseInt(process.env.PGBOSS_POOL_MAX || "5", 10);
+
+      this.boss = new PgBoss({
+        connectionString,
+        max: maxPool,
+      });
       
       this.boss.on("error", (error) => {
         logger.error("[Queue] pg-boss error:", error);
@@ -53,7 +71,7 @@ export class QueueService {
       await this.boss.start();
       this.isReady = true;
       this.ensuredQueues.clear();
-      logger.info("[Queue] Queue service initialized and started");
+      logger.info(`[Queue] Queue service initialized and started (pool max: ${maxPool})`);
     } catch (error) {
       logger.error("[Queue] Failed to initialize queue service:", error);
       throw error;
@@ -63,10 +81,15 @@ export class QueueService {
   /**
    * Stop the queue system
    */
-  public async stop(): Promise<void> {
+  public async stop(options: PgBoss.StopOptions = {}): Promise<void> {
     if (this.boss) {
-      await this.boss.stop();
+      await this.boss.stop({
+        graceful: true,
+        wait: true,
+        ...options,
+      });
       this.isReady = false;
+      this.workerRegistered = false;
       this.boss = null;
       this.ensuredQueues.clear();
       logger.info("[Queue] Queue service stopped");
@@ -156,16 +179,12 @@ export class QueueService {
               logger.info(`[Queue] Job ${job?.id} completed successfully`);
             } catch (error) {
               logger.error(`[Queue] Job ${job?.id} failed:`, error);
-              // Re-throw to let pg-boss handle retry logic
-              // Note: If treating as batch, failing one might be tricky if we want others to succeed.
-              // But pg-boss usually tracks them individually if returned as array?
-              // Actually, if we throw here, pg-boss v10 might fail the whole batch?
-              // Let's assume throwing fails the job.
               throw error;
             }
         }
       });
-      
+
+      this.workerRegistered = true;
       logger.info(`[Queue] Worker registered for ${queueName}`);
     } catch (error) {
       logger.error(`[Queue] Failed to register worker for ${queueName}:`, error);
@@ -178,19 +197,18 @@ export class QueueService {
    */
   public async getHealthStats(): Promise<any> {
     if (!this.boss || !this.isReady) {
-      return { status: "stopped" };
+      return { status: "stopped", workerRegistered: this.workerRegistered };
     }
 
     try {
-      // We can query internal pg-boss tables if needed, but for now returned basic status
-      // A more comprehensive check would query pgboss.job table
       return {
         status: "active",
+        workerRegistered: this.workerRegistered,
         queues: Object.values(QUEUES)
       };
     } catch (error) {
       logger.error("[Queue] Failed to get health stats:", error);
-      return { status: "error", error: String(error) };
+      return { status: "error", error: String(error), workerRegistered: this.workerRegistered };
     }
   }
 }

@@ -3,6 +3,14 @@ import { queueService, QUEUES } from "../services/queue.service";
 import { webhookProcessor } from "../services/webhook-processor.service";
 import { logger } from "../utils/logger";
 
+function getWorkerConcurrency(): number {
+  const parsed = parseInt(process.env.WEBHOOK_WORKER_CONCURRENCY || "5", 10);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return 5;
+  }
+  return parsed;
+}
+
 export class WebhookWorker {
   private static instance: WebhookWorker;
 
@@ -20,9 +28,9 @@ export class WebhookWorker {
    */
   public async start(): Promise<void> {
     try {
-      logger.info("[Worker] Starting webhook worker...");
+      const concurrency = getWorkerConcurrency();
+      logger.info(`[Worker] Starting webhook worker (concurrency: ${concurrency})...`);
 
-      // Register handler for orders/create
       await queueService.process(
         QUEUES.ORDERS_CREATE,
         async (job) => {
@@ -30,8 +38,8 @@ export class WebhookWorker {
           await webhookProcessor.processOrderCreate(data);
         },
         {
-          teamSize: 5, // Process up to 5 jobs concurrently
-          teamConcurrency: 5,
+          teamSize: concurrency,
+          teamConcurrency: concurrency,
         }
       );
 

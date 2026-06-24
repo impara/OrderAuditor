@@ -27,6 +27,7 @@ export const orders = pgTable(
     customerEmail: text("customer_email"),
     customerName: text("customer_name"),
     customerPhone: text("customer_phone"),
+    customerPhoneNormalized: text("customer_phone_normalized"),
     shippingAddress: jsonb("shipping_address").$type<{
       address1?: string;
       address2?: string;
@@ -68,6 +69,14 @@ export const orders = pgTable(
     shopCreatedAtIdx: index("orders_shop_created_at_idx").on(
       table.shopDomain,
       table.createdAt
+    ),
+    shopPhoneNormalizedCreatedAtIdx: index(
+      "orders_shop_phone_norm_created_at_idx"
+    ).on(table.shopDomain, table.customerPhoneNormalized, table.createdAt),
+    shopFlaggedAtIdx: index("orders_shop_flagged_at_idx").on(
+      table.shopDomain,
+      table.isFlagged,
+      table.flaggedAt
     ),
   })
 );
@@ -203,6 +212,7 @@ export const insertOrderSchema = createInsertSchema(orders).omit({
   id: true,
   resolvedAt: true,
   resolvedBy: true,
+  customerPhoneNormalized: true,
 });
 
 export const insertDetectionSettingsSchema = createInsertSchema(

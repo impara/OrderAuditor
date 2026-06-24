@@ -1,0 +1,2 @@
+-- Baseline migration: production schema already exists before Drizzle migrate adoption.
+-- This migration is intentionally empty and records the starting point only.

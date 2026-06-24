@@ -31,12 +31,13 @@ COPY package.json package-lock.json ./
 # Install production dependencies
 RUN npm ci --only=production && npm cache clean --force
 
-# Install drizzle-kit and TypeScript for database schema push (needed in production)
+# Install drizzle-kit and TypeScript for database migrations (needed in production deploy one-off)
 RUN npm install drizzle-kit@^0.31.7 typescript@^5.6.3 --no-save && npm cache clean --force
 
 # Copy built files from builder stage
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/shared ./shared
+COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
 COPY --from=builder /app/tsconfig.json ./tsconfig.json
 
@@ -55,7 +56,7 @@ EXPOSE 5000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:5000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+  CMD node -e "require('http').get('http://localhost:5000/api/ready', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)}).on('error', () => process.exit(1))"
 
 # Start the application
 CMD ["node", "dist/index.js"]

@@ -5,6 +5,7 @@ services:
     image: postgres:16-alpine
     container_name: duplicate-guard-db-prod
     restart: unless-stopped
+    command: ["postgres", "-c", "max_connections=200"]
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -31,8 +32,13 @@ services:
       PORT: 5000
       LOG_LEVEL: ${LOG_LEVEL:-info}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      DB_POOL_MAX: ${DB_POOL_MAX:-20}
-      DB_POOL_MIN: ${DB_POOL_MIN:-5}
+      # Connection budget (single host, blue+green overlap):
+      # (DB_POOL_MAX + PGBOSS_POOL_MAX) * 2 <= postgres max_connections (200)
+      DB_POOL_MAX: ${DB_POOL_MAX:-15}
+      DB_POOL_MIN: ${DB_POOL_MIN:-2}
+      PGBOSS_POOL_MAX: ${PGBOSS_POOL_MAX:-5}
+      WEBHOOK_WORKER_CONCURRENCY: ${WEBHOOK_WORKER_CONCURRENCY:-5}
+      SHUTDOWN_TIMEOUT_MS: ${SHUTDOWN_TIMEOUT_MS:-25000}
       SHOPIFY_SHOP_DOMAIN: ${SHOPIFY_SHOP_DOMAIN}
       SHOPIFY_API_KEY: ${SHOPIFY_API_KEY}
       SHOPIFY_API_SECRET: ${SHOPIFY_API_SECRET}
@@ -57,10 +63,11 @@ services:
       - "5000:5000" # host -> container
     depends_on:
       - postgres
+    stop_grace_period: 30s
     networks:
       - duplicate-guard-network
     healthcheck:
-      test: [ "CMD", "node", "-e", "require('http').get('http://localhost:5000/api/health', r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))" ]
+      test: [ "CMD", "node", "-e", "require('http').get('http://localhost:5000/api/ready', r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -77,8 +84,13 @@ services:
       PORT: 5000
       LOG_LEVEL: ${LOG_LEVEL:-info}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      DB_POOL_MAX: ${DB_POOL_MAX:-20}
-      DB_POOL_MIN: ${DB_POOL_MIN:-5}
+      # Connection budget (single host, blue+green overlap):
+      # (DB_POOL_MAX + PGBOSS_POOL_MAX) * 2 <= postgres max_connections (200)
+      DB_POOL_MAX: ${DB_POOL_MAX:-15}
+      DB_POOL_MIN: ${DB_POOL_MIN:-2}
+      PGBOSS_POOL_MAX: ${PGBOSS_POOL_MAX:-5}
+      WEBHOOK_WORKER_CONCURRENCY: ${WEBHOOK_WORKER_CONCURRENCY:-5}
+      SHUTDOWN_TIMEOUT_MS: ${SHUTDOWN_TIMEOUT_MS:-25000}
       SHOPIFY_SHOP_DOMAIN: ${SHOPIFY_SHOP_DOMAIN}
       SHOPIFY_API_KEY: ${SHOPIFY_API_KEY}
       SHOPIFY_API_SECRET: ${SHOPIFY_API_SECRET}
@@ -102,10 +114,11 @@ services:
     ports: [] # inactive until promoted
     depends_on:
       - postgres
+    stop_grace_period: 30s
     networks:
       - duplicate-guard-network
     healthcheck:
-      test: [ "CMD", "node", "-e", "require('http').get('http://localhost:5000/api/health', r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))" ]
+      test: [ "CMD", "node", "-e", "require('http').get('http://localhost:5000/api/ready', r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))" ]
       interval: 10s
       timeout: 5s
       retries: 5

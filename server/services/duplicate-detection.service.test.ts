@@ -14,7 +14,9 @@ function buildQueryStub(rows: any[]) {
   const stub: any = {
     from: vi.fn().mockReturnThis(),
     where: vi.fn().mockReturnThis(),
+    orderBy: vi.fn().mockReturnThis(),
     limit: vi.fn().mockReturnThis(),
+    offset: vi.fn().mockReturnThis(),
     then: (resolve: (value: any[]) => void) => Promise.resolve(rows).then(resolve),
   };
   return stub;

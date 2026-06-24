@@ -3,35 +3,10 @@ import "./instrument";
 import fs from "node:fs";
 import path from "node:path";
 import { type Server } from "node:http";
-import { execSync } from "node:child_process";
 
 import express, { type Express } from "express";
 import runApp from "./app";
-
-/**
- * Push database schema changes when enabled.
- * Blue/green deploys should run this as a separate one-off deployment step
- * before starting the inactive app container.
- */
-async function pushDatabaseSchema(): Promise<void> {
-  if (process.env.RUN_SCHEMA_PUSH === "false") {
-    console.log("[Startup] Skipping database schema push (RUN_SCHEMA_PUSH=false)");
-    return;
-  }
-
-  console.log("[Startup] Pushing database schema...");
-  
-  try {
-    execSync("npx drizzle-kit push --force", {
-      stdio: "inherit",
-      env: process.env,
-    });
-    console.log("[Startup] Database schema push completed successfully");
-  } catch (error) {
-    console.error("[Startup] Database schema push failed:", error);
-    process.exit(1);
-  }
-}
+import { setupGracefulShutdown } from "./shutdown";
 
 export async function serveStatic(app: Express, _server: Server) {
   const distPath = path.resolve(import.meta.dirname, "public");
@@ -80,18 +55,14 @@ import { queueService } from "./services/queue.service";
 import { webhookWorker } from "./workers/webhook-worker";
 
 (async () => {
-  // Push database schema before starting the app unless disabled by deployment.
-  await pushDatabaseSchema();
-  
-  // Initialize queue system
-  try {
-    await queueService.initialize();
-    await webhookWorker.start();
-  } catch (error) {
-    console.error("[Startup] Failed to initialize queue system:", error);
-    // Depending on criticality, we might want to exit or continue with reduced functionality
-    // process.exit(1); 
-  }
+  // Schema migrations run as a one-off step in deploy.sh (npm run db:migrate).
 
-  await runApp(serveStatic);
-})();
+  await queueService.initialize();
+  await webhookWorker.start();
+
+  const server = await runApp(serveStatic);
+  setupGracefulShutdown(server);
+})().catch((error) => {
+  console.error("[Startup] Fatal error:", error);
+  process.exit(1);
+});

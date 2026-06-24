@@ -29,7 +29,9 @@ import {
   or,
   inArray,
   isNotNull,
+  count,
 } from "drizzle-orm";
+import { normalizePhoneNumber } from "./utils/phone";
 
 /** Single source of truth for the free-tier duplicate order cap */
 export const FREE_TIER_ORDER_LIMIT = 50;
@@ -41,7 +43,10 @@ export interface IStorage {
     shopDomain: string,
     shopifyOrderId: string
   ): Promise<Order | undefined>;
-  getFlaggedOrders(shopDomain: string): Promise<Order[]>;
+  getFlaggedOrders(
+    shopDomain: string,
+    options?: { limit?: number; offset?: number }
+  ): Promise<{ orders: Order[]; total: number; limit: number; offset: number }>;
   createOrder(order: InsertOrder): Promise<Order>;
   updateOrder(
     shopDomain: string,
@@ -135,16 +140,53 @@ export class DatabaseStorage implements IStorage {
     return order || undefined;
   }
 
-  async getFlaggedOrders(shopDomain: string): Promise<Order[]> {
-    return await db
+  async getFlaggedOrders(
+    shopDomain: string,
+    options: { limit?: number; offset?: number } = {}
+  ): Promise<{ orders: Order[]; total: number; limit: number; offset: number }> {
+    const requestedLimit = Number.isFinite(options.limit) ? options.limit! : 50;
+    const requestedOffset = Number.isFinite(options.offset) ? options.offset! : 0;
+    const limit = Math.min(Math.max(Math.trunc(requestedLimit), 1), 200);
+    const offset = Math.max(Math.trunc(requestedOffset), 0);
+
+    const whereClause = and(
+      eq(orders.isFlagged, true),
+      eq(orders.shopDomain, shopDomain)
+    );
+
+    const [totalResult] = await db
+      .select({ total: count() })
+      .from(orders)
+      .where(whereClause);
+
+    const flaggedOrders = await db
       .select()
       .from(orders)
-      .where(and(eq(orders.isFlagged, true), eq(orders.shopDomain, shopDomain)))
-      .orderBy(desc(orders.flaggedAt));
+      .where(whereClause)
+      .orderBy(desc(orders.flaggedAt))
+      .limit(limit)
+      .offset(offset);
+
+    return {
+      orders: flaggedOrders,
+      total: Number(totalResult?.total ?? 0),
+      limit,
+      offset,
+    };
   }
 
   async createOrder(insertOrder: InsertOrder): Promise<Order> {
-    const [order] = await db.insert(orders).values(insertOrder).returning();
+    const customerPhoneNormalized = insertOrder.customerPhone
+      ? normalizePhoneNumber(insertOrder.customerPhone) || null
+      : null;
+
+    const [order] = await db
+      .insert(orders)
+      .values({
+        ...insertOrder,
+        customerPhoneNormalized,
+      })
+      .returning();
     return order;
   }
 
@@ -707,6 +749,7 @@ export class DatabaseStorage implements IStorage {
         customerEmail: "redacted@example.com",
         customerName: "Redacted",
         customerPhone: null,
+        customerPhoneNormalized: null,
         shippingAddress: null, // Remove shipping address data
       })
       .where(and(...conditions));

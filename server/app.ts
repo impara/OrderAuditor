@@ -99,7 +99,7 @@ app.use((req, res, next) => {
 
 export default async function runApp(
   setup: (app: Express, server: Server) => Promise<void>,
-) {
+): Promise<Server> {
   const server = await registerRoutes(app);
 
   // GlitchTip/Sentry: capture errors and send to GlitchTip (after all routes, before other error middleware)
@@ -121,11 +121,19 @@ export default async function runApp(
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
-    log(`serving on port ${port}`);
+  await new Promise<void>((resolve) => {
+    server.listen(
+      {
+        port,
+        host: "0.0.0.0",
+        reusePort: true,
+      },
+      () => {
+        log(`serving on port ${port}`);
+        resolve();
+      }
+    );
   });
+
+  return server;
 }

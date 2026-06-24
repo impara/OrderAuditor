@@ -11,6 +11,7 @@
     "db:push": "drizzle-kit push",
     "db:push:force": "drizzle-kit push --force",
     "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
     "test:order": "node scripts/create-test-order.js",
     "test:duplicate": "node scripts/create-test-order.js --duplicate",
     "test:duplicate-logic": "tsx scripts/verify-duplicate-logic.ts",

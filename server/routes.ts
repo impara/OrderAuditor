@@ -26,6 +26,8 @@ import {
 } from "@shared/schema";
 import { randomUUID, timingSafeEqual } from "crypto";
 import { logger } from "./utils/logger";
+import { queueService } from "./services/queue.service";
+import { pool } from "./db";
 
 
 /**
@@ -456,39 +458,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     `);
   });
 
-  // Health Check - verifies database connectivity
-  app.get("/api/health", async (_req, res) => {
+  // Liveness - cheap check that the process is running
+  app.get("/api/health", (_req, res) => {
+    res.status(200).json({
+      status: "ok",
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  // Readiness - verifies database connectivity and queue worker availability
+  app.get("/api/ready", async (_req, res) => {
     let dbStatus = false;
     try {
-      // Verify database connectivity with a simple query
-      await storage.getSettings("health-check-probe");
+      await pool.query("SELECT 1");
       dbStatus = true;
     } catch (error) {
-      logger.error("[Health] Database health check failed:", error);
+      logger.error("[Ready] Database readiness check failed:", error);
     }
 
-    const health: {
-      status: string;
-      database: string;
-      timestamp: string;
-      queue: { status: string; [key: string]: any };
-    } = {
-      status: dbStatus ? "healthy" : "unhealthy",
-      database: dbStatus ? "connected" : "disconnected",
-      timestamp: new Date().toISOString(),
-      queue: { status: "unknown" }
-    };
+    const queueReady = queueService.getReady() && queueService.isWorkerRegistered();
+    let queueStats: Record<string, unknown> = { status: "stopped" };
 
     try {
-      const { queueService } = await import("./services/queue.service");
-      const queueStats = await queueService.getHealthStats();
-      health.queue = queueStats;
+      queueStats = await queueService.getHealthStats();
     } catch (error) {
-       logger.warn("Failed to get queue stats:", error);
-       health.queue = { status: "error" };
+      logger.warn("[Ready] Failed to get queue stats:", error);
+      queueStats = { status: "error" };
     }
 
-    res.status(dbStatus ? 200 : 503).json(health);
+    const ready = dbStatus && queueReady;
+
+    res.status(ready ? 200 : 503).json({
+      status: ready ? "ready" : "not_ready",
+      database: dbStatus ? "connected" : "disconnected",
+      queue: queueStats,
+      timestamp: new Date().toISOString(),
+    });
   });
 
   // GlitchTip test route – only throws in development so production cannot be spammed
@@ -511,6 +516,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       path.startsWith("/webhooks/shopify") ||
       path.startsWith("/internal") ||
       path === "/health" ||
+      path === "/ready" ||
       path === "/debug-glitchtip"
     ) {
       next();
@@ -585,11 +591,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/orders/flagged", async (_req: Request, res: Response) => {
+  const parsePaginationParam = (value: unknown): number | undefined => {
+    const rawValue = Array.isArray(value) ? value[0] : value;
+    if (rawValue === undefined || rawValue === "") {
+      return undefined;
+    }
+
+    const parsed = Number.parseInt(String(rawValue), 10);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
+
+  app.get("/api/orders/flagged", async (req: Request, res: Response) => {
     try {
       const { shop } = res.locals.shopify;
-      const orders = await storage.getFlaggedOrders(shop);
-      res.json(orders);
+      const limit = parsePaginationParam(req.query.limit);
+      const offset = parsePaginationParam(req.query.offset);
+      const result = await storage.getFlaggedOrders(shop, { limit, offset });
+      res.json(result);
     } catch (error) {
       logger.error("Error fetching flagged orders:", error);
       res.status(500).json({ error: "Failed to fetch flagged orders" });

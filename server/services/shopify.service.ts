@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { logger } from "../utils/logger";
+import { fetchWithRetry } from "../utils/fetch-with-retry";
 
 interface ShopifyWebhook {
   id: number;
@@ -157,12 +158,13 @@ export class ShopifyService {
         }, prefix: ${accessToken?.substring(0, 10) || "N/A"}...`
       );
 
-      const response = await fetch(url, {
+      const response = await fetchWithRetry(url, {
         method: "GET",
         headers: {
           "X-Shopify-Access-Token": accessToken,
           "Content-Type": "application/json",
         },
+        label: `listWebhooks(${shopDomain})`,
       });
 
       if (!response.ok) {
@@ -468,12 +470,13 @@ export class ShopifyService {
       const url = `${this.getBaseApiUrl(shopDomain)}/orders/${orderId}.json`;
       logger.debug(`[Shopify] Fetching order ${orderId} via API`);
 
-      const response = await fetch(url, {
+      const response = await fetchWithRetry(url, {
         method: "GET",
         headers: {
           "X-Shopify-Access-Token": accessToken,
           "Content-Type": "application/json",
         },
+        label: `getOrder(${shopDomain}, ${orderId})`,
       });
 
       if (!response.ok) {
@@ -551,12 +554,13 @@ export class ShopifyService {
       )}/customers/${customerId}.json`;
       logger.debug(`[Shopify] Fetching customer ${customerId} via API`);
 
-      const response = await fetch(url, {
+      const response = await fetchWithRetry(url, {
         method: "GET",
         headers: {
           "X-Shopify-Access-Token": accessToken,
           "Content-Type": "application/json",
         },
+        label: `getCustomer(${shopDomain}, ${customerId})`,
       });
 
       if (!response.ok) {
@@ -629,11 +633,13 @@ export class ShopifyService {
 
     try {
       const url = `${this.getBaseApiUrl(shopDomain)}/shop.json`;
-      const response = await fetch(url, {
+      const response = await fetchWithRetry(url, {
+        method: "GET",
         headers: {
           "X-Shopify-Access-Token": accessToken,
           "Content-Type": "application/json",
         },
+        label: `getShopContactEmail(${shopDomain})`,
       });
 
       if (!response.ok) {
@@ -673,12 +679,14 @@ export class ShopifyService {
       )}/webhooks/${webhookId}.json`;
       logger.info(`[Shopify] Deleting webhook ID: ${webhookId}`);
 
-      const response = await fetch(url, {
+      const response = await fetchWithRetry(url, {
         method: "DELETE",
         headers: {
           "X-Shopify-Access-Token": accessToken,
           "Content-Type": "application/json",
         },
+        idempotent: true,
+        label: `deleteWebhook(${shopDomain}, ${webhookId})`,
       });
 
       if (!response.ok) {
@@ -715,7 +723,7 @@ export class ShopifyService {
     const url = `${this.getBaseApiUrl(shopDomain)}/orders/${orderId}.json`;
 
     try {
-      const response = await fetch(url, {
+      const response = await fetchWithRetry(url, {
         method: "PUT",
         headers: {
           "X-Shopify-Access-Token": accessToken,
@@ -727,6 +735,8 @@ export class ShopifyService {
             tags: tags.join(", "),
           },
         }),
+        idempotent: true,
+        label: `tagOrder(${shopDomain}, ${orderId})`,
       });
 
       if (!response.ok) {
@@ -755,12 +765,13 @@ export class ShopifyService {
     try {
       // First, get the current order to see existing tags
       const url = `${this.getBaseApiUrl(shopDomain)}/orders/${orderId}.json`;
-      const getResponse = await fetch(url, {
+      const getResponse = await fetchWithRetry(url, {
         method: "GET",
         headers: {
           "X-Shopify-Access-Token": accessToken,
           "Content-Type": "application/json",
         },
+        label: `removeOrderTag:get(${shopDomain}, ${orderId})`,
       });
 
       if (!getResponse.ok) {
@@ -779,7 +790,7 @@ export class ShopifyService {
       );
 
       // Update the order with the new tags
-      const updateResponse = await fetch(url, {
+      const updateResponse = await fetchWithRetry(url, {
         method: "PUT",
         headers: {
           "X-Shopify-Access-Token": accessToken,
@@ -791,6 +802,8 @@ export class ShopifyService {
             tags: updatedTags.join(", "),
           },
         }),
+        idempotent: true,
+        label: `removeOrderTag:put(${shopDomain}, ${orderId})`,
       });
 
       if (!updateResponse.ok) {

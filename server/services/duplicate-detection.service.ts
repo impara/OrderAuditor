@@ -1,15 +1,36 @@
 import { db } from "../db";
 import { storage } from "../storage";
-import { orders, detectionSettings, auditLogs } from "@shared/schema";
-import { eq, and, gte, sql } from "drizzle-orm";
+import { orders, detectionSettings } from "@shared/schema";
+import { eq, and, gte, desc } from "drizzle-orm";
 import type { Order, InsertOrder } from "@shared/schema";
 import { logger } from "../utils/logger";
+import { normalizePhoneNumber } from "../utils/phone";
+
+const FUZZY_CANDIDATE_LIMIT = parseInt(
+  process.env.DUPLICATE_FUZZY_CANDIDATE_LIMIT || "500",
+  10
+);
 
 interface DuplicateMatch {
   order: Order;
   matchReason: string;
   confidence: number;
 }
+
+type FuzzyCandidateOrder = Pick<
+  Order,
+  | "id"
+  | "shopDomain"
+  | "shopifyOrderId"
+  | "orderNumber"
+  | "customerEmail"
+  | "customerName"
+  | "customerPhone"
+  | "customerPhoneNormalized"
+  | "shippingAddress"
+  | "lineItems"
+  | "createdAt"
+>;
 
 export class DuplicateDetectionService {
   /**
@@ -19,14 +40,12 @@ export class DuplicateDetectionService {
     newOrder: InsertOrder,
     shopDomain: string
   ): Promise<DuplicateMatch | null> {
-    // Filter settings by shopDomain for multi-tenant support
     let [settings] = await db
       .select()
       .from(detectionSettings)
       .where(eq(detectionSettings.shopDomain, shopDomain))
       .limit(1);
 
-    // Initialize settings if missing (e.g., merchant never visited Settings page)
     if (!settings) {
       logger.info(
         `[DuplicateDetection] No settings for shop ${shopDomain}, initializing defaults`
@@ -46,11 +65,11 @@ export class DuplicateDetectionService {
     );
 
     let existingOrders: Order[] = [];
-    let ordersInWindow: Order[] | null = null;
-    const addCandidateOrders = (candidateOrders: Order[]) => {
+    let ordersInWindow: FuzzyCandidateOrder[] | null = null;
+    const addCandidateOrders = (candidateOrders: Array<Order | FuzzyCandidateOrder>) => {
       for (const order of candidateOrders) {
         if (!existingOrders.find((existing) => existing.id === order.id)) {
-          existingOrders.push(order);
+          existingOrders.push(order as Order);
         }
       }
     };
@@ -64,14 +83,34 @@ export class DuplicateDetectionService {
       );
 
       ordersInWindow = await db
-        .select()
+        .select({
+          id: orders.id,
+          shopDomain: orders.shopDomain,
+          shopifyOrderId: orders.shopifyOrderId,
+          orderNumber: orders.orderNumber,
+          customerEmail: orders.customerEmail,
+          customerName: orders.customerName,
+          customerPhone: orders.customerPhone,
+          customerPhoneNormalized: orders.customerPhoneNormalized,
+          shippingAddress: orders.shippingAddress,
+          lineItems: orders.lineItems,
+          createdAt: orders.createdAt,
+        })
         .from(orders)
         .where(
           and(
             eq(orders.shopDomain, shopDomain),
             gte(orders.createdAt, timeThreshold)
           )
+        )
+        .orderBy(desc(orders.createdAt))
+        .limit(FUZZY_CANDIDATE_LIMIT);
+
+      if (ordersInWindow.length >= FUZZY_CANDIDATE_LIMIT) {
+        logger.warn(
+          `[DuplicateDetection] Fuzzy candidate cap (${FUZZY_CANDIDATE_LIMIT}) reached for shop ${shopDomain}. Older matches in the time window may be missed.`
         );
+      }
 
       logger.debug(
         `[DuplicateDetection] Found ${ordersInWindow.length} orders in time window`
@@ -89,7 +128,7 @@ export class DuplicateDetectionService {
         .from(orders)
         .where(
           and(
-            eq(orders.shopDomain, shopDomain), // Filter by shopDomain
+            eq(orders.shopDomain, shopDomain),
             gte(orders.createdAt, timeThreshold),
             eq(orders.customerEmail, newOrder.customerEmail)
           )
@@ -105,28 +144,28 @@ export class DuplicateDetectionService {
     }
 
     if (settings.matchPhone && newOrder.customerPhone) {
-      // Normalize phone number for comparison (remove all non-digit characters except +)
-      const normalizedPhone = this.normalizePhoneNumber(newOrder.customerPhone);
+      const normalizedPhone = normalizePhoneNumber(newOrder.customerPhone);
       logger.debug(
         `[DuplicateDetection] Searching for orders with phone: ${newOrder.customerPhone} (normalized: ${normalizedPhone})`
       );
 
-      // Filter in memory because phone normalization is application-specific.
-      const allOrdersInWindow = await loadOrdersInWindow("phone comparison");
+      if (normalizedPhone) {
+        const ordersByPhone = await db
+          .select()
+          .from(orders)
+          .where(
+            and(
+              eq(orders.shopDomain, shopDomain),
+              gte(orders.createdAt, timeThreshold),
+              eq(orders.customerPhoneNormalized, normalizedPhone)
+            )
+          );
 
-      const ordersByPhone = allOrdersInWindow.filter((order) => {
-        if (!order.customerPhone) return false;
-        const normalizedExisting = this.normalizePhoneNumber(
-          order.customerPhone
+        logger.debug(
+          `[DuplicateDetection] Found ${ordersByPhone.length} orders matching normalized phone`
         );
-        return normalizedExisting === normalizedPhone;
-      });
-
-      logger.debug(
-        `[DuplicateDetection] Found ${ordersByPhone.length} orders matching phone (after normalization)`
-      );
-
-      addCandidateOrders(ordersByPhone);
+        addCandidateOrders(ordersByPhone);
+      }
     }
 
     if (settings.matchSku) {
@@ -206,20 +245,6 @@ export class DuplicateDetectionService {
     return null;
   }
 
-  /**
-   * Calculate match confidence and reason between two orders
-   *
-   * Scoring:
-   * - Email match: 50 points (strong identifier)
-   * - Phone match: 50 points (strong identifier, normalized for format differences)
-   * - Full address match (street + city + zip): 50 points
-   * - Partial address match (street + city OR street + zip): 25 points
-   * - Name match: 20 points (supporting evidence)
-   * - Threshold: 70 points to flag as duplicate
-   *
-   * All criteria are checked "only if present" - missing data is automatically skipped.
-   * This ensures digital products (no shipping address) can still be detected via email/phone.
-   */
   private calculateMatch(
     newOrder: InsertOrder,
     existingOrder: Order,
@@ -228,7 +253,6 @@ export class DuplicateDetectionService {
     let confidence = 0;
     const reasons: string[] = [];
 
-    // Email - check only if enabled AND data exists
     if (
       settings.matchEmail &&
       newOrder.customerEmail &&
@@ -239,69 +263,34 @@ export class DuplicateDetectionService {
       reasons.push("Same email");
     }
 
-    // Phone - check only if enabled AND data exists
     if (settings.matchPhone) {
-      logger.debug(
-        `[DuplicateDetection] Phone match enabled. New order has phone: ${!!newOrder.customerPhone}, Existing order has phone: ${!!existingOrder.customerPhone}`
-      );
-
       if (newOrder.customerPhone && existingOrder.customerPhone) {
-        const normalizedNew = this.normalizePhoneNumber(newOrder.customerPhone);
-        const normalizedExisting = this.normalizePhoneNumber(
-          existingOrder.customerPhone
-        );
+        const normalizedNew = normalizePhoneNumber(newOrder.customerPhone);
+        const normalizedExisting =
+          existingOrder.customerPhoneNormalized ||
+          normalizePhoneNumber(existingOrder.customerPhone);
 
-        logger.debug(
-          `[DuplicateDetection] Phone comparison - New: "${newOrder.customerPhone}" (normalized: "${normalizedNew}") vs Existing: "${existingOrder.customerPhone}" (normalized: "${normalizedExisting}")`
-        );
-
-        if (normalizedNew === normalizedExisting) {
+        if (normalizedNew && normalizedExisting && normalizedNew === normalizedExisting) {
           confidence += 50;
           reasons.push("Same phone");
-          logger.debug(`[DuplicateDetection] Phone match found!`);
-        } else {
-          logger.debug(`[DuplicateDetection] Phone numbers don't match after normalization`);
         }
-      } else {
-        logger.debug(
-          `[DuplicateDetection] Phone match skipped - phone missing on ${!newOrder.customerPhone ? 'new' : 'existing'} order`
-        );
       }
     }
 
-    // Address - check only if enabled AND data exists
     if (settings.matchAddress) {
-      logger.debug(
-        `[DuplicateDetection] Address match enabled. New order has address: ${!!newOrder.shippingAddress}, Existing order has address: ${!!existingOrder.shippingAddress}`
-      );
-
       if (newOrder.shippingAddress && existingOrder.shippingAddress) {
         const addressScore = this.compareAddresses(
           newOrder.shippingAddress,
           existingOrder.shippingAddress
         );
-        
-        logger.debug(
-          `[DuplicateDetection] Address comparison score: ${addressScore} (50=full match, 25=partial match, 0=no match)`
-        );
 
         if (addressScore > 0) {
           confidence += addressScore;
           reasons.push(addressScore >= 45 ? "Same address" : "Similar address");
-          logger.debug(
-            `[DuplicateDetection] Address match! New: "${newOrder.shippingAddress?.address1}, ${newOrder.shippingAddress?.city}, ${newOrder.shippingAddress?.zip}" vs Existing: "${existingOrder.shippingAddress?.address1}, ${existingOrder.shippingAddress?.city}, ${existingOrder.shippingAddress?.zip}"`
-          );
-        } else {
-          logger.debug(`[DuplicateDetection] Addresses don't match`);
         }
-      } else {
-        logger.debug(
-          `[DuplicateDetection] Address match skipped - address missing on ${!newOrder.shippingAddress ? 'new' : 'existing'} order`
-        );
       }
     }
 
-    // Name - always check if data exists (supporting evidence)
     if (newOrder.customerName && existingOrder.customerName) {
       if (
         newOrder.customerName.toLowerCase() ===
@@ -312,12 +301,7 @@ export class DuplicateDetectionService {
       }
     }
 
-    // SKU Match - check only if enabled AND data exists
     if (settings.matchSku) {
-      logger.debug(
-        `[DuplicateDetection] SKU match enabled. New order has lineItems: ${!!newOrder.lineItems}, Existing order has lineItems: ${!!existingOrder.lineItems}`
-      );
-
       if (
         newOrder.lineItems &&
         existingOrder.lineItems &&
@@ -331,10 +315,6 @@ export class DuplicateDetectionService {
           .map((item: any) => item.sku)
           .filter((sku: any) => sku);
 
-        logger.debug(
-          `[DuplicateDetection] New order SKUs: [${newSkus.join(", ")}], Existing order SKUs: [${existingSkus.join(", ")}]`
-        );
-
         const hasCommonSku = newSkus.some((sku: string) =>
           existingSkus.includes(sku)
         );
@@ -342,12 +322,7 @@ export class DuplicateDetectionService {
         if (hasCommonSku) {
           confidence += 50;
           reasons.push("Same SKU purchased");
-          logger.debug(`[DuplicateDetection] SKU match found!`);
-        } else {
-          logger.debug(`[DuplicateDetection] No SKU match found`);
         }
-      } else {
-        logger.debug(`[DuplicateDetection] SKU match skipped - lineItems missing or not arrays`);
       }
     }
 
@@ -355,32 +330,6 @@ export class DuplicateDetectionService {
       reason: reasons.join(", ") || "No significant match",
       confidence: Math.min(100, confidence),
     };
-  }
-
-  /**
-   * Normalize phone number for comparison
-   * Removes all non-digit characters except leading +, then normalizes to E.164-like format
-   */
-  private normalizePhoneNumber(phone: string | null | undefined): string {
-    if (!phone) return "";
-
-    // Remove all non-digit characters except leading +
-    let normalized = phone.trim();
-
-    // If it starts with +, keep it, otherwise remove all non-digits
-    if (normalized.startsWith("+")) {
-      normalized = "+" + normalized.slice(1).replace(/\D/g, "");
-    } else {
-      normalized = normalized.replace(/\D/g, "");
-      // If it's a US number without country code, assume +1
-      if (normalized.length === 10) {
-        normalized = "+1" + normalized;
-      } else if (normalized.length === 11 && normalized.startsWith("1")) {
-        normalized = "+" + normalized;
-      }
-    }
-
-    return normalized;
   }
 
   private extractSkus(lineItems: InsertOrder["lineItems"] | Order["lineItems"]): string[] {
@@ -405,11 +354,6 @@ export class DuplicateDetectionService {
     return newSkus.some((sku) => existingSkus.includes(sku));
   }
 
-  /**
-   * Compare shipping addresses
-   * Returns 50 points for full match (street + city + zip)
-   * Returns 25 points for partial match (street + city OR street + zip)
-   */
   private compareAddresses(addr1: any, addr2: any): number {
     if (!addr1 || !addr2) return 0;
 
@@ -422,35 +366,15 @@ export class DuplicateDetectionService {
       normalizeString(addr1.city) === normalizeString(addr2.city);
     const zipMatch = normalizeString(addr1.zip) === normalizeString(addr2.zip);
 
-    // Full match: all three components match
     if (address1Match && cityMatch && zipMatch) {
       return 50;
     }
 
-    // Partial match: street + (city OR zip)
     if ((address1Match && cityMatch) || (address1Match && zipMatch)) {
       return 25;
     }
 
     return 0;
-  }
-
-  /**
-   * Create audit log entry
-   * Note: This method is not currently used. Use storage.createAuditLog instead.
-   */
-  async createAuditLog(
-    shopDomain: string,
-    orderId: string,
-    action: string,
-    details: any
-  ) {
-    await db.insert(auditLogs).values({
-      shopDomain,
-      orderId,
-      action,
-      details,
-    });
   }
 }
 

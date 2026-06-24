@@ -9,10 +9,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
-import { AlertCircle, TrendingUp, TrendingDown, DollarSign, Clock, Flag, Package, MapPin, Mail, Phone, Calendar, X, Menu, ChevronRight, CheckCircle2 } from "lucide-react";
+import { AlertCircle, TrendingUp, TrendingDown, DollarSign, Clock, Flag, Package, MapPin, Mail, Phone, Calendar, X, Menu, ChevronLeft, ChevronRight, CheckCircle2 } from "lucide-react";
 import type { Order, DashboardStats } from "@shared/schema";
 import { format } from "date-fns";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { Link, useLocation } from "wouter";
 import { Header } from "@/components/Header";
@@ -20,6 +20,7 @@ import { QuotaWarningBanner } from "@/components/QuotaWarningBanner";
 import { ReviewPromptBanner } from "@/components/ReviewPromptBanner";
 import { OnboardingChecklist, isOnboardingFullyHealthy, type OnboardingStatus } from "@/components/OnboardingChecklist";
 
+const FLAGGED_ORDERS_PAGE_SIZE = 50;
 
 function StatsCard({
   title,
@@ -383,7 +384,76 @@ function MobileOrderCard({ order, onClick }: { order: Order; onClick: () => void
   );
 }
 
-function FlaggedOrdersTable({ orders }: { orders: Order[] }) {
+function FlaggedOrdersPagination({
+  total,
+  limit,
+  offset,
+  onPrevious,
+  onNext,
+}: {
+  total: number;
+  limit: number;
+  offset: number;
+  onPrevious: () => void;
+  onNext: () => void;
+}) {
+  const start = total === 0 ? 0 : offset + 1;
+  const end = Math.min(offset + limit, total);
+  const canPrevious = offset > 0;
+  const canNext = offset + limit < total;
+
+  if (total <= limit && offset === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-sm text-muted-foreground">
+        Showing {start}-{end} of {total}
+      </p>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          disabled={!canPrevious}
+          onClick={onPrevious}
+          aria-label="Previous page"
+          data-testid="button-flagged-orders-previous"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          disabled={!canNext}
+          onClick={onNext}
+          aria-label="Next page"
+          data-testid="button-flagged-orders-next"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function FlaggedOrdersTable({
+  orders,
+  total,
+  limit,
+  offset,
+  onPreviousPage,
+  onNextPage,
+}: {
+  orders: Order[];
+  total: number;
+  limit: number;
+  offset: number;
+  onPreviousPage: () => void;
+  onNextPage: () => void;
+}) {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   return (
@@ -477,6 +547,14 @@ function FlaggedOrdersTable({ orders }: { orders: Order[] }) {
         ))}
       </div>
 
+      <FlaggedOrdersPagination
+        total={total}
+        limit={limit}
+        offset={offset}
+        onPrevious={onPreviousPage}
+        onNext={onNextPage}
+      />
+
       {selectedOrder && (
         <OrderDetailsModal
           order={selectedOrder}
@@ -488,7 +566,17 @@ function FlaggedOrdersTable({ orders }: { orders: Order[] }) {
   );
 }
 
+type FlaggedOrdersResponse = {
+  orders: Order[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
 export default function Dashboard() {
+  const [flaggedOrdersPage, setFlaggedOrdersPage] = useState(0);
+  const flaggedOrdersOffset = flaggedOrdersPage * FLAGGED_ORDERS_PAGE_SIZE;
+
   const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
     queryKey: ['/api/dashboard/stats'],
     refetchInterval: 30000,
@@ -499,10 +587,33 @@ export default function Dashboard() {
     refetchInterval: 30000,
   });
 
-  const { data: orders, isLoading: ordersLoading } = useQuery<Order[]>({
-    queryKey: ['/api/orders/flagged'],
+  const { data: flaggedOrdersData, isLoading: ordersLoading } = useQuery<FlaggedOrdersResponse>({
+    queryKey: ['/api/orders/flagged', flaggedOrdersPage],
+    queryFn: async () => {
+      const response = await apiRequest(
+        "GET",
+        `/api/orders/flagged?limit=${FLAGGED_ORDERS_PAGE_SIZE}&offset=${flaggedOrdersOffset}`
+      );
+      return await response.json();
+    },
     refetchInterval: 30000,
   });
+
+  const orders = flaggedOrdersData?.orders ?? [];
+  const totalFlaggedOrders = flaggedOrdersData?.total ?? 0;
+  const currentLimit = flaggedOrdersData?.limit ?? FLAGGED_ORDERS_PAGE_SIZE;
+  const currentOffset = flaggedOrdersData?.offset ?? flaggedOrdersOffset;
+
+  useEffect(() => {
+    if (
+      flaggedOrdersData &&
+      flaggedOrdersData.total > 0 &&
+      flaggedOrdersData.orders.length === 0 &&
+      flaggedOrdersPage > 0
+    ) {
+      setFlaggedOrdersPage((page) => Math.max(page - 1, 0));
+    }
+  }, [flaggedOrdersData, flaggedOrdersPage]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -522,7 +633,16 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
             ) : orders && orders.length > 0 ? (
-              <FlaggedOrdersTable orders={orders} />
+              <FlaggedOrdersTable
+                orders={orders}
+                total={totalFlaggedOrders}
+                limit={currentLimit}
+                offset={currentOffset}
+                onPreviousPage={() =>
+                  setFlaggedOrdersPage((page) => Math.max(page - 1, 0))
+                }
+                onNextPage={() => setFlaggedOrdersPage((page) => page + 1)}
+              />
             ) : (
               <EmptyState ordersChecked={onboardingStatus?.totalOrdersProcessed} />
             )}
