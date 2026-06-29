@@ -228,7 +228,7 @@ describe("WebhookProcessorService.processOrderCreate idempotency", () => {
   it("sends quota exceeded notification when quota blocks processing at 100%", async () => {
     mocks.subscriptionService.checkQuota.mockResolvedValue({
       allowed: false,
-      reason: "Monthly order limit (50) reached. Please upgrade to continue processing orders.",
+      reason: "Monthly duplicate flag limit (50) reached. Upgrade to Unlimited to keep flagging duplicate-looking orders this cycle.",
       subscription: {
         orderLimit: 50,
         monthlyOrderCount: 50,

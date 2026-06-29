@@ -228,7 +228,7 @@ function SubscriptionPage() {
   const usagePercentage = isUnlimited
     ? 0
     : Math.min(100, (subscription.monthlyOrderCount / subscription.orderLimit) * 100);
-  const remainingOrders = isUnlimited
+  const remainingDuplicateFlags = isUnlimited
     ? "Unlimited"
     : Math.max(0, subscription.orderLimit - subscription.monthlyOrderCount);
 
@@ -277,14 +277,14 @@ function SubscriptionPage() {
                   : isFrozen
                     ? "Paused while your Shopify store subscription is frozen"
                     : isPaid
-                      ? "$7.99/month - Unlimited duplicates"
-                      : "Free - 50 duplicates/month"}
+                      ? "$7.99/month - Unlimited duplicate flags"
+                      : "Free - 50 duplicate flags per usage cycle"}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
                 <div className="flex items-center justify-between text-sm mb-1">
-                  <span className="text-muted-foreground">Monthly Usage</span>
+                  <span className="text-muted-foreground">Duplicate flags used</span>
                   <span className="font-medium">
                     {subscription.monthlyOrderCount} / {isUnlimited ? "∞" : subscription.orderLimit}
                   </span>
@@ -304,7 +304,7 @@ function SubscriptionPage() {
                 )}
                 {!isUnlimited && (
                   <p className="text-xs text-muted-foreground mt-2">
-                    {remainingOrders} duplicates remaining this month
+                    {remainingDuplicateFlags} duplicate flags remaining this cycle
                   </p>
                 )}
               </div>
@@ -331,14 +331,14 @@ function SubscriptionPage() {
                     <Alert className="mt-4 border-destructive/50 bg-destructive/10 text-destructive dark:border-destructive">
                       <AlertCircle className="h-4 w-4" />
                       <AlertDescription>
-                        You have reached your monthly limit. Upgrade to continue detecting duplicates.
+                        You've used all free duplicate flags for this cycle. Upgrade to keep tagging and flagging duplicate-looking orders before fulfillment.
                       </AlertDescription>
                     </Alert>
                   ) : usagePercentage >= 90 ? (
                     <Alert className="mt-4">
                       <AlertCircle className="h-4 w-4" />
                       <AlertDescription>
-                        You're approaching your monthly limit. Upgrade to continue detecting duplicates.
+                        You're close to the free duplicate flag limit. Upgrade now to keep flagged-order review uninterrupted.
                       </AlertDescription>
                     </Alert>
                   ) : null}
@@ -363,7 +363,7 @@ function SubscriptionPage() {
                   <ul className="space-y-2 text-sm">
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-primary" />
-                      <span>50 duplicates/month</span>
+                      <span>50 duplicate flags per usage cycle</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-primary" />
@@ -391,7 +391,7 @@ function SubscriptionPage() {
                   <ul className="space-y-2 text-sm">
                     <li className="flex items-center gap-2">
                       <Zap className="h-4 w-4 text-primary" />
-                      <span>Unlimited duplicates</span>
+                      <span>Unlimited duplicate flags</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-primary" />

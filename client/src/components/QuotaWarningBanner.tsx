@@ -46,17 +46,17 @@ export function QuotaWarningBanner() {
                         <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
                         <div>
                             <p className="font-semibold text-destructive">
-                                Duplicate limit reached
+                                Duplicate flag limit reached
                             </p>
                             <p className="text-sm text-muted-foreground">
-                                You've found {subscription.monthlyOrderCount} of {subscription.orderLimit} duplicates this month.
-                                New duplicates won't be flagged until your limit resets{resetDate ? ` on ${resetDate}` : ''}.
+                                You've used {subscription.monthlyOrderCount} of {subscription.orderLimit} duplicate flags this cycle.
+                                New duplicate-looking orders won't be tagged or flagged until reset{resetDate ? ` on ${resetDate}` : ''}. Upgrade to keep protection active.
                             </p>
                         </div>
                     </div>
                     <Button asChild size="sm" className="shrink-0">
                         <Link href={`/subscription${window.location.search}`}>
-                            Upgrade <ArrowRight className="ml-1 h-4 w-4" />
+                            Keep flagging <ArrowRight className="ml-1 h-4 w-4" />
                         </Link>
                     </Button>
                 </div>
@@ -75,11 +75,11 @@ export function QuotaWarningBanner() {
                     <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-500 shrink-0 mt-0.5" />
                     <div>
                         <p className="font-semibold text-yellow-700 dark:text-yellow-500">
-                            Approaching duplicate limit
+                            Approaching duplicate flag limit
                         </p>
                         <p className="text-sm text-muted-foreground">
-                            You've found {subscription.monthlyOrderCount} of {subscription.orderLimit} duplicates this month ({Math.round(usagePercentage)}% used).
-                            {resetDate && ` Resets on ${resetDate}.`}
+                            You've used {subscription.monthlyOrderCount} of {subscription.orderLimit} duplicate flags this cycle ({Math.round(usagePercentage)}% used).
+                            {resetDate && ` Resets on ${resetDate}.`} Upgrade before the limit to keep flagged-order review uninterrupted.
                         </p>
                     </div>
                 </div>

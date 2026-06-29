@@ -704,22 +704,23 @@ ${orderColumn(data.duplicateOf)}
       },
     });
 
-    const subject = `⚠️ Duplicate Guard: Monthly limit reached for ${shopDomain}`;
+    const subject = `⚠️ Duplicate Guard: Duplicate flag limit reached for ${shopDomain}`;
     const appUrl = process.env.APP_URL || `https://${shopDomain}/admin/apps/order-auditor`;
 
     const textBody = `
-Duplicate Guard Monthly Limit Reached
+Duplicate Guard Duplicate Flag Limit Reached
 
-Your store ${shopDomain} has reached the monthly duplicate detection limit of ${subscription.orderLimit} duplicates.
+Your store ${shopDomain} has used the free plan's ${subscription.orderLimit} duplicate flags for this usage cycle.
 
 What this means:
-- New duplicate orders will NOT be flagged until your billing period resets
-- Your orders are still being processed, but duplicates won't be detected
+- Duplicate Guard will keep receiving orders, but new duplicate-looking orders will NOT be tagged or flagged until your usage cycle resets
+- Existing flagged orders remain visible in your dashboard
 
-To continue detecting duplicates:
-- Upgrade to the Unlimited plan: ${appUrl}/subscription
+To keep duplicate protection active:
+- Upgrade to Unlimited so duplicate-looking orders keep getting flagged this cycle: ${appUrl}/subscription
+- Unlimited also includes email/Slack alerts, so your team can review flagged orders before fulfillment
 
-Your billing period will reset on: ${subscription.currentBillingPeriodEnd ? new Date(subscription.currentBillingPeriodEnd).toLocaleDateString() : 'N/A'}
+Your usage cycle resets on: ${subscription.currentBillingPeriodEnd ? new Date(subscription.currentBillingPeriodEnd).toLocaleDateString() : 'N/A'}
 
 Thank you for using Duplicate Guard!
     `.trim();
@@ -741,7 +742,7 @@ Thank you for using Duplicate Guard!
           <tr>
             <td style="background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%); padding: 32px 40px; text-align: center;">
               <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">
-                ⚠️ Monthly Limit Reached
+                ⚠️ Duplicate Flag Limit Reached
               </h1>
               <p style="margin: 8px 0 0; color: #fecaca; font-size: 14px;">
                 Duplicate Guard Alert for ${shopDomain}
@@ -754,19 +755,19 @@ Thank you for using Duplicate Guard!
             <td style="padding: 32px 40px;">
               <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
                 <p style="margin: 0; color: #991b1b; font-size: 14px;">
-                  <strong>You've reached your limit of ${subscription.orderLimit} duplicate detections this month.</strong>
+                  <strong>You've used the free plan's ${subscription.orderLimit} duplicate flags for this usage cycle.</strong>
                 </p>
               </div>
               
               <h2 style="margin: 0 0 16px; font-size: 18px; color: #1e293b;">What this means:</h2>
               <ul style="margin: 0 0 24px; padding-left: 20px; color: #475569;">
-                <li style="margin-bottom: 8px;">New duplicate orders will <strong>not</strong> be flagged</li>
-                <li style="margin-bottom: 8px;">Your orders are still being processed normally</li>
+                <li style="margin-bottom: 8px;">Duplicate Guard will keep receiving orders, but new duplicate-looking orders will <strong>not</strong> be tagged or flagged until reset</li>
+                <li style="margin-bottom: 8px;">Upgrade to keep duplicate flags active for the rest of this cycle</li>
                 <li>Existing flagged orders remain visible in your dashboard</li>
               </ul>
               
               <p style="margin: 0 0 8px; color: #64748b; font-size: 14px;">
-                Your billing period resets on: <strong>${subscription.currentBillingPeriodEnd ? new Date(subscription.currentBillingPeriodEnd).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'N/A'}</strong>
+                Your usage cycle resets on: <strong>${subscription.currentBillingPeriodEnd ? new Date(subscription.currentBillingPeriodEnd).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'N/A'}</strong>
               </p>
             </td>
           </tr>
@@ -775,7 +776,7 @@ Thank you for using Duplicate Guard!
           <tr>
             <td style="padding: 0 40px 32px;">
               <a href="${appUrl}/subscription" target="_blank" style="display: block; background-color: #1e293b; color: #ffffff; text-decoration: none; text-align: center; padding: 16px 24px; border-radius: 8px; font-size: 16px; font-weight: 600;">
-                Upgrade to Unlimited
+                Keep flagging duplicates — Upgrade to Unlimited
               </a>
             </td>
           </tr>

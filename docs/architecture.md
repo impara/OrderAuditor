@@ -156,7 +156,7 @@
 #### Subscription Service
 
 - **Purpose**: Manage subscription tiers and usage quotas
-- **Tiers**: Free (50 duplicates/month), Paid (unlimited)
+- **Tiers**: Free (50 duplicate flags per usage cycle), Paid (unlimited duplicate flags)
 - **Features**: Grace period handling, billing period tracking
 
 #### Shopify Service

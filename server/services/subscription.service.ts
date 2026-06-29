@@ -87,7 +87,7 @@ export class SubscriptionService {
     if (subscription.monthlyOrderCount >= subscription.orderLimit) {
       return {
         allowed: false,
-        reason: `Monthly order limit (${subscription.orderLimit}) reached. Please upgrade to continue processing orders.`,
+        reason: `Monthly duplicate flag limit (${subscription.orderLimit}) reached. Upgrade to Unlimited to keep flagging duplicate-looking orders this cycle.`,
         subscription,
       };
     }

@@ -139,9 +139,9 @@ tsx scripts/test-billing.ts my-test-shop.myshopify.com
 
 **What it tests:**
 
-1. ✅ Free tier initialization (auto-creates subscription with 50 order limit)
+1. ✅ Free tier initialization (auto-creates subscription with 50 duplicate flag limit)
 2. ✅ Quota limits (within limit, at limit, over limit)
-3. ✅ Subscription upgrade (free → paid, unlimited orders)
+3. ✅ Subscription upgrade (free → paid, unlimited duplicate flags)
 4. ✅ Subscription downgrade (paid → free, back to 50 limit)
 5. ✅ Billing service (charge listing)
 6. ✅ Limit hit scenario (end-to-end: 49 → 50 → upgrade → unlimited)

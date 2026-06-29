@@ -230,7 +230,7 @@ Or manually:
 
 ### Phase 3: Subscription & Pricing System ✅
 
-**Test 1: Free Tier Quota (50 orders/month)**
+**Test 1: Free Tier Quota (50 duplicate flags per usage cycle)**
 
 **Steps**:
 
@@ -286,7 +286,7 @@ Or manually:
 
 **Steps**:
 
-1. Set subscription to free tier with 50 order limit
+1. Set subscription to free tier with 50 duplicate flag limit
 2. Manually set `monthlyOrderCount` to 50 in database:
    ```sql
    UPDATE subscriptions SET monthly_order_count = 50 WHERE shopify_shop_domain = 'yourstore.myshopify.com';
