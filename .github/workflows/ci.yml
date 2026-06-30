@@ -29,6 +29,9 @@ jobs:
     - name: Type Check
       run: npm run check
 
+    - name: Landing SEO index check
+      run: npm run landing:seo-index:check
+
     - name: Build
       run: npm run build
 
