@@ -20,3 +20,4 @@ yarn-error.log*
 app-idea.md
 video-description.md
 prod_dump.sql
+__pycache__/

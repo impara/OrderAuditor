@@ -94,7 +94,11 @@ def read_page(path: Path) -> Page:
 
 
 def discover_pages() -> list[Page]:
-    pages = [read_page(path) for path in sorted(ROOT.glob("*.html"))]
+    html_files = [
+        path for path in sorted(ROOT.glob("*.html"))
+        if "<html" in path.read_text(encoding="utf-8", errors="replace").lower()
+    ]
+    pages = [read_page(path) for path in html_files]
     indexable = [page for page in pages if page.is_indexable]
     indexable.sort(key=lambda page: (0 if page.is_home else 1, page.path.name))
     return indexable
