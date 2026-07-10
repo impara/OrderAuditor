@@ -127,6 +127,97 @@ describe("DuplicateDetectionService.findDuplicates", () => {
     });
   });
 
+  it("flags a warm household collision when email and name differ but address and SKU overlap", async () => {
+    const settings = {
+      shopDomain: "test.myshopify.com",
+      timeWindowHours: 24,
+      matchEmail: true,
+      matchPhone: false,
+      matchAddress: true,
+      matchSku: true,
+    };
+
+    const matchingAddress = {
+      address1: "123 Main St",
+      city: "New York",
+      zip: "10001",
+      country: "US",
+    };
+    const existingOrder = buildOrder({
+      customerEmail: "first@example.com",
+      customerName: "Ada Lovelace",
+      shippingAddress: matchingAddress,
+      lineItems: [
+        {
+          id: "line-item-1",
+          sku: "SAMPLE-KIT",
+          title: "Free Sample Kit",
+          quantity: 1,
+          price: "0.00",
+        },
+      ],
+    });
+    const unrelatedOrder = buildOrder({
+      id: "unrelated-order-id",
+      shopifyOrderId: "1000",
+      orderNumber: "#1000",
+      customerEmail: "other@example.com",
+      customerName: "Grace Hopper",
+      shippingAddress: {
+        address1: "999 Side St",
+        city: "New York",
+        zip: "10001",
+        country: "US",
+      },
+      lineItems: [
+        {
+          id: "line-item-0",
+          sku: "OTHER-SKU",
+          title: "Other product",
+          quantity: 1,
+          price: "25.00",
+        },
+      ],
+    });
+
+    mockSelect
+      .mockReturnValueOnce(buildQueryStub([settings]))
+      .mockReturnValueOnce(buildQueryStub([]))
+      .mockReturnValueOnce(buildQueryStub([unrelatedOrder, existingOrder]));
+
+    const result = await service.findDuplicates(
+      {
+        shopDomain: "test.myshopify.com",
+        shopifyOrderId: "1002",
+        orderNumber: "#1002",
+        customerEmail: "second@example.com",
+        customerName: "A. Lovelace",
+        customerPhone: null,
+        shippingAddress: matchingAddress,
+        totalPrice: "0.00",
+        currency: "USD",
+        createdAt: new Date(),
+        isFlagged: false,
+        lineItems: [
+          {
+            id: "line-item-2",
+            sku: "SAMPLE-KIT",
+            title: "Free Sample Kit",
+            quantity: 1,
+            price: "0.00",
+          },
+        ],
+      },
+      "test.myshopify.com"
+    );
+
+    expect(result).toEqual({
+      order: existingOrder,
+      matchReason: "Same address, Same SKU purchased",
+      confidence: 100,
+    });
+  });
+
   it("uses address candidates when address matching is enabled and email/phone are unavailable", async () => {
     const settings = {
       shopDomain: "test.myshopify.com",

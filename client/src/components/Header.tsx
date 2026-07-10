@@ -1,7 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Flag, Menu } from "lucide-react";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
+import { QuotaHeaderBadge } from "@/components/QuotaHeaderBadge";
 
 export function Header() {
     const [location] = useLocation();
@@ -35,25 +36,29 @@ export function Header() {
                         <h1 className="text-lg font-bold tracking-tight">Duplicate Guard</h1>
                     </div>
 
-                    {/* Desktop Nav */}
-                    <nav className="hidden md:flex gap-2">
-                        <NavLinks />
-                    </nav>
+                    <div className="flex items-center gap-2">
+                        <QuotaHeaderBadge />
 
-                    {/* Mobile Nav */}
-                    <div className="md:hidden">
-                        <Sheet>
-                            <SheetTrigger asChild>
-                                <Button variant="ghost" size="icon">
-                                    <Menu className="h-5 w-5" />
-                                </Button>
-                            </SheetTrigger>
-                            <SheetContent side="right">
-                                <div className="flex flex-col gap-4 mt-8">
-                                    <NavLinks />
-                                </div>
-                            </SheetContent>
-                        </Sheet>
+                        {/* Desktop Nav */}
+                        <nav className="hidden md:flex gap-2">
+                            <NavLinks />
+                        </nav>
+
+                        {/* Mobile Nav */}
+                        <div className="md:hidden">
+                            <Sheet>
+                                <SheetTrigger asChild>
+                                    <Button variant="ghost" size="icon">
+                                        <Menu className="h-5 w-5" />
+                                    </Button>
+                                </SheetTrigger>
+                                <SheetContent side="right">
+                                    <div className="flex flex-col gap-4 mt-8">
+                                        <NavLinks />
+                                    </div>
+                                </SheetContent>
+                            </Sheet>
+                        </div>
                     </div>
                 </div>
             </div>

@@ -2,34 +2,21 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, AlertCircle, ArrowRight } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-
-interface Subscription {
-    tier: string;
-    monthlyOrderCount: number;
-    orderLimit: number;
-    currentBillingPeriodEnd: string | null;
-}
+import { getQuotaStatus, type QuotaSubscription } from "@/lib/quotaStatus";
 
 export function QuotaWarningBanner() {
-    const { data: subscription } = useQuery<Subscription>({
+    const { data: subscription } = useQuery<QuotaSubscription>({
         queryKey: ['/api/subscription'],
     });
 
-    // Don't show for paid tier (unlimited)
-    if (!subscription || subscription.tier === "paid" || subscription.orderLimit === -1) {
+    const quotaStatus = getQuotaStatus(subscription);
+    if (quotaStatus.state === "hidden") {
         return null;
     }
 
-    const usagePercentage = (subscription.monthlyOrderCount / subscription.orderLimit) * 100;
-
-    // Don't show if below 80%
-    if (usagePercentage < 80) {
-        return null;
-    }
-
-    const isExceeded = usagePercentage >= 100;
-    const resetDate = subscription.currentBillingPeriodEnd
-        ? new Date(subscription.currentBillingPeriodEnd).toLocaleDateString('en-US', {
+    const isExceeded = quotaStatus.state === "exceeded";
+    const resetDate = quotaStatus.resetDate
+        ? quotaStatus.resetDate.toLocaleDateString('en-US', {
             month: 'short',
             day: 'numeric'
         })
@@ -49,7 +36,7 @@ export function QuotaWarningBanner() {
                                 Duplicate flag limit reached
                             </p>
                             <p className="text-sm text-muted-foreground">
-                                You've used {subscription.monthlyOrderCount} of {subscription.orderLimit} duplicate flags this cycle.
+                                You've used {quotaStatus.used} of {quotaStatus.limit} duplicate flags this cycle.
                                 New duplicate-looking orders won't be tagged or flagged until reset{resetDate ? ` on ${resetDate}` : ''}. Upgrade to keep protection active.
                             </p>
                         </div>
@@ -64,7 +51,6 @@ export function QuotaWarningBanner() {
         );
     }
 
-    // 80-99% warning
     return (
         <div
             className="mb-4 rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-4"
@@ -78,7 +64,7 @@ export function QuotaWarningBanner() {
                             Approaching duplicate flag limit
                         </p>
                         <p className="text-sm text-muted-foreground">
-                            You've used {subscription.monthlyOrderCount} of {subscription.orderLimit} duplicate flags this cycle ({Math.round(usagePercentage)}% used).
+                            You've used {quotaStatus.used} of {quotaStatus.limit} duplicate flags this cycle ({Math.round(quotaStatus.usagePercentage)}% used).
                             {resetDate && ` Resets on ${resetDate}.`} Upgrade before the limit to keep flagged-order review uninterrupted.
                         </p>
                     </div>

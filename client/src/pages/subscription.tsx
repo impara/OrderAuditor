@@ -11,6 +11,7 @@ import { Check, X, Zap, CreditCard, AlertCircle, Flag } from "lucide-react";
 import { useState, useEffect } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { Header } from "@/components/Header";
+import { getQuotaStatus } from "@/lib/quotaStatus";
 
 interface Subscription {
   id: string;
@@ -231,6 +232,7 @@ function SubscriptionPage() {
   const remainingDuplicateFlags = isUnlimited
     ? "Unlimited"
     : Math.max(0, subscription.orderLimit - subscription.monthlyOrderCount);
+  const quotaStatus = getQuotaStatus(subscription);
 
   const periodEnd = subscription.currentBillingPeriodEnd
     ? new Date(subscription.currentBillingPeriodEnd)
@@ -251,6 +253,28 @@ function SubscriptionPage() {
             Manage your subscription and view usage statistics
           </p>
         </div>
+
+        {quotaStatus.state !== "hidden" && (
+          <Alert
+            className={
+              quotaStatus.state === "exceeded"
+                ? "mb-6 border-destructive/50 bg-destructive/10 text-destructive dark:border-destructive"
+                : "mb-6 border-amber-500/50 bg-amber-500/10"
+            }
+            data-testid={
+              quotaStatus.state === "exceeded"
+                ? "subscription-quota-alert-exceeded"
+                : "subscription-quota-alert-warning"
+            }
+          >
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              {quotaStatus.state === "exceeded"
+                ? "Your free duplicate flag limit has been reached. New duplicate-looking orders will not be tagged or flagged until the usage cycle resets."
+                : `You have used ${Math.round(quotaStatus.usagePercentage)}% of your free duplicate flags this cycle.`}
+            </AlertDescription>
+          </Alert>
+        )}
 
         <div className="grid gap-6 md:grid-cols-2">
           {/* Current Plan Card */}
@@ -327,14 +351,14 @@ function SubscriptionPage() {
 
               {!isPaid && (
                 <>
-                  {usagePercentage >= 100 ? (
+                  {quotaStatus.state === "exceeded" ? (
                     <Alert className="mt-4 border-destructive/50 bg-destructive/10 text-destructive dark:border-destructive">
                       <AlertCircle className="h-4 w-4" />
                       <AlertDescription>
                         You've used all free duplicate flags for this cycle. Upgrade to keep tagging and flagging duplicate-looking orders before fulfillment.
                       </AlertDescription>
                     </Alert>
-                  ) : usagePercentage >= 90 ? (
+                  ) : quotaStatus.state === "warning" && quotaStatus.usagePercentage >= 90 ? (
                     <Alert className="mt-4">
                       <AlertCircle className="h-4 w-4" />
                       <AlertDescription>
