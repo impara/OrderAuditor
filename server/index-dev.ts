@@ -9,7 +9,12 @@ import { type Express } from "express";
 import { createServer as createViteServer, createLogger } from "vite";
 
 import viteConfig from "../vite.config";
-import runApp from "./app";
+
+// Shopify CLI injects the active development tunnel as HOST. Prefer it over
+// the static .env APP_URL so OAuth callbacks follow tunnel rotations.
+if (process.env.HOST && /^https?:\/\//.test(process.env.HOST)) {
+  process.env.APP_URL = process.env.HOST.replace(/\/$/, "");
+}
 
 export async function setupVite(app: Express, server: Server) {
   const viteLogger = createLogger();
@@ -77,12 +82,15 @@ export async function setupVite(app: Express, server: Server) {
   });
 }
 
-import { queueService } from "./services/queue.service";
-import { webhookWorker } from "./workers/webhook-worker";
-import { historicalScanWorker } from "./workers/historical-scan-worker";
-import { setupGracefulShutdown } from "./shutdown";
-
 (async () => {
+  const [{ default: runApp }, { queueService }, { webhookWorker }, { historicalScanWorker }, { setupGracefulShutdown }] =
+    await Promise.all([
+      import("./app"),
+      import("./services/queue.service"),
+      import("./workers/webhook-worker"),
+      import("./workers/historical-scan-worker"),
+      import("./shutdown"),
+    ]);
   await queueService.initialize();
   await webhookWorker.start();
   await historicalScanWorker.start();

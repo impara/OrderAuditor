@@ -127,6 +127,51 @@ describe("DuplicateDetectionService.findDuplicates", () => {
     });
   });
 
+  it("does not treat two empty address objects as the same address", async () => {
+    const settings = {
+      shopDomain: "test.myshopify.com",
+      timeWindowHours: 24,
+      matchEmail: true,
+      matchPhone: false,
+      matchAddress: true,
+      matchSku: false,
+    };
+    const existingOrder = buildOrder({
+      customerEmail: "customer@example.com",
+      customerName: "John Doe",
+      shippingAddress: {},
+    });
+
+    mockSelect
+      .mockReturnValueOnce(buildQueryStub([settings]))
+      .mockReturnValueOnce(buildQueryStub([existingOrder]))
+      .mockReturnValueOnce(buildQueryStub([existingOrder]));
+
+    const result = await service.findDuplicates(
+      {
+        shopDomain: "test.myshopify.com",
+        shopifyOrderId: "1002",
+        orderNumber: "#1002",
+        customerEmail: "customer@example.com",
+        customerName: "John Doe",
+        customerPhone: null,
+        shippingAddress: {},
+        totalPrice: "25.00",
+        currency: "USD",
+        createdAt: new Date(),
+        isFlagged: false,
+        lineItems: [],
+      },
+      "test.myshopify.com"
+    );
+
+    expect(result).toEqual({
+      order: existingOrder,
+      matchReason: "Same email, Same name",
+      confidence: 70,
+    });
+  });
+
   it("flags a warm household collision when email and name differ but address and SKU overlap", async () => {
     const settings = {
       shopDomain: "test.myshopify.com",

@@ -395,11 +395,18 @@ export class DuplicateDetectionService {
     const normalizeString = (str: string | undefined) =>
       (str || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
-    const address1Match =
-      normalizeString(addr1.address1) === normalizeString(addr2.address1);
-    const cityMatch =
-      normalizeString(addr1.city) === normalizeString(addr2.city);
-    const zipMatch = normalizeString(addr1.zip) === normalizeString(addr2.zip);
+    const sameNonEmptyValue = (
+      first: string | undefined,
+      second: string | undefined
+    ) => {
+      const normalizedFirst = normalizeString(first);
+      const normalizedSecond = normalizeString(second);
+      return Boolean(normalizedFirst) && normalizedFirst === normalizedSecond;
+    };
+
+    const address1Match = sameNonEmptyValue(addr1.address1, addr2.address1);
+    const cityMatch = sameNonEmptyValue(addr1.city, addr2.city);
+    const zipMatch = sameNonEmptyValue(addr1.zip, addr2.zip);
 
     if (address1Match && cityMatch && zipMatch) {
       return 50;
