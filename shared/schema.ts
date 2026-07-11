@@ -40,6 +40,8 @@ export const orders = pgTable(
     currency: varchar("currency", { length: 3 }).notNull(),
     createdAt: timestamp("created_at").notNull(),
     isFlagged: boolean("is_flagged").default(false).notNull(),
+    flagSource: varchar("flag_source", { length: 20 }).notNull().default("live"),
+    flaggedByScanRunId: varchar("flagged_by_scan_run_id"),
     flaggedAt: timestamp("flagged_at"),
     duplicateOfOrderId: varchar("duplicate_of_order_id"),
     matchReason: text("match_reason"),
@@ -207,6 +209,31 @@ export const webhookDeliveries = pgTable(
   })
 );
 
+export const historicalScanRuns = pgTable("historical_scan_runs", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  shopDomain: varchar("shop_domain").notNull().unique(),
+  status: varchar("status", { length: 20 })
+    .$type<"queued" | "running" | "completed" | "failed">()
+    .notNull()
+    .default("queued"),
+  requestedAt: timestamp("requested_at").notNull().default(sql`now()`),
+  statusUpdatedAt: timestamp("status_updated_at").notNull().default(sql`now()`),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  windowDays: integer("window_days").notNull().default(60),
+  attemptCount: integer("attempt_count").notNull().default(1),
+  ordersFetched: integer("orders_fetched").notNull().default(0),
+  ordersImported: integer("orders_imported").notNull().default(0),
+  matchesFound: integer("matches_found").notNull().default(0),
+  candidateCapExceeded: boolean("candidate_cap_exceeded")
+    .notNull()
+    .default(false),
+  queueJobId: varchar("queue_job_id"),
+  errorMessage: text("error_message"),
+});
+
 // Insert schemas for validation
 export const insertOrderSchema = createInsertSchema(orders).omit({
   id: true,
@@ -250,6 +277,15 @@ export const insertWebhookDeliverySchema = createInsertSchema(
   processedAt: true,
 });
 
+export const insertHistoricalScanRunSchema = createInsertSchema(
+  historicalScanRuns
+).omit({
+  id: true,
+  statusUpdatedAt: true,
+  startedAt: true,
+  completedAt: true,
+});
+
 // Update schema for settings
 export const updateDetectionSettingsSchema =
   insertDetectionSettingsSchema.partial();
@@ -273,6 +309,8 @@ export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
 export type UpdateSubscription = z.infer<typeof updateSubscriptionSchema>;
 export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
 export type InsertWebhookDelivery = z.infer<typeof insertWebhookDeliverySchema>;
+export type HistoricalScanRun = typeof historicalScanRuns.$inferSelect;
+export type InsertHistoricalScanRun = typeof historicalScanRuns.$inferInsert;
 export type ShopifySession = typeof shopifySessions.$inferSelect;
 
 // Dashboard stats type

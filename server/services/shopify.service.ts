@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { logger } from "../utils/logger";
 import { fetchWithRetry } from "../utils/fetch-with-retry";
+import type { ShopifyOrderPayload } from "./order-mapper.service";
 
 interface ShopifyWebhook {
   id: number;
@@ -534,6 +535,84 @@ export class ShopifyService {
       logger.error("[Shopify] Error fetching order:", error);
       return null;
     }
+  }
+
+  /**
+   * Retrieve the frozen default-access order window. Shopify's read_orders
+   * scope exposes at most the last 60 days, so callers cannot widen it.
+   */
+  async listOrdersCreatedSince(
+    shopDomain: string,
+    accessToken: string,
+    since: Date,
+    until: Date
+  ): Promise<ShopifyOrderPayload[]> {
+    if (!this.validateCredentials(shopDomain, accessToken)) {
+      throw new Error("Shopify credentials not provided");
+    }
+
+    const untilTime = new Date(until);
+    if (Number.isNaN(untilTime.getTime())) {
+      throw new Error("Invalid historical scan end time");
+    }
+    const requestedSince = new Date(since);
+    const scopeCutoff = new Date(untilTime.getTime() - 60 * 24 * 60 * 60 * 1000);
+    const effectiveSince =
+      !Number.isNaN(requestedSince.getTime()) && requestedSince > scopeCutoff
+        ? requestedSince
+        : scopeCutoff;
+
+    const fields = [
+      "id",
+      "order_number",
+      "name",
+      "email",
+      "contact_email",
+      "phone",
+      "customer",
+      "billing_address",
+      "shipping_address",
+      "line_items",
+      "total_price",
+      "currency",
+      "created_at",
+    ].join(",");
+    const firstUrl = new URL(`${this.getBaseApiUrl(shopDomain)}/orders.json`);
+    firstUrl.searchParams.set("status", "any");
+    firstUrl.searchParams.set("limit", "250");
+    firstUrl.searchParams.set("created_at_min", effectiveSince.toISOString());
+    firstUrl.searchParams.set("created_at_max", untilTime.toISOString());
+    firstUrl.searchParams.set("fields", fields);
+
+    const ordersById = new Map<string, ShopifyOrderPayload>();
+    let nextUrl: string | null = firstUrl.toString();
+
+    while (nextUrl) {
+      const response = await fetchWithRetry(nextUrl, {
+        method: "GET",
+        headers: {
+          "X-Shopify-Access-Token": accessToken,
+          "Content-Type": "application/json",
+        },
+        label: `listOrdersCreatedSince(${shopDomain})`,
+      });
+      if (!response.ok) {
+        throw new Error(
+          `Shopify historical orders request failed (${response.status} ${response.statusText})`
+        );
+      }
+
+      const body = (await response.json()) as { orders?: ShopifyOrderPayload[] };
+      for (const order of body.orders || []) {
+        ordersById.set(String(order.id), order);
+      }
+
+      const link = response.headers.get("Link");
+      const nextMatch = link?.match(/<([^>]+)>;\s*rel="next"/i);
+      nextUrl = nextMatch?.[1] ?? null;
+    }
+
+    return Array.from(ordersById.values());
   }
 
   /**

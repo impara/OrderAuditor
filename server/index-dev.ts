@@ -79,11 +79,13 @@ export async function setupVite(app: Express, server: Server) {
 
 import { queueService } from "./services/queue.service";
 import { webhookWorker } from "./workers/webhook-worker";
+import { historicalScanWorker } from "./workers/historical-scan-worker";
 import { setupGracefulShutdown } from "./shutdown";
 
 (async () => {
   await queueService.initialize();
   await webhookWorker.start();
+  await historicalScanWorker.start();
 
   const server = await runApp(setupVite);
   setupGracefulShutdown(server);

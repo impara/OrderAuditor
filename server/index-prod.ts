@@ -53,12 +53,14 @@ export async function serveStatic(app: Express, _server: Server) {
 
 import { queueService } from "./services/queue.service";
 import { webhookWorker } from "./workers/webhook-worker";
+import { historicalScanWorker } from "./workers/historical-scan-worker";
 
 (async () => {
   // Schema migrations run as a one-off step in deploy.sh (npm run db:migrate).
 
   await queueService.initialize();
   await webhookWorker.start();
+  await historicalScanWorker.start();
 
   const server = await runApp(serveStatic);
   setupGracefulShutdown(server);

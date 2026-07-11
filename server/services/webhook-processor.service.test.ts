@@ -210,6 +210,13 @@ describe("WebhookProcessorService.processOrderCreate idempotency", () => {
   });
 
   it("treats duplicate order insert errors as idempotent success", async () => {
+    mocks.storage.getOrderByShopifyId
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({
+        id: "order-row-id",
+        shopifyOrderId: "123",
+        isFlagged: false,
+      });
     mocks.storage.createOrder.mockRejectedValue(
       new Error("duplicate key value violates unique constraint")
     );

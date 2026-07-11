@@ -280,4 +280,130 @@ describe("DuplicateDetectionService.findDuplicates", () => {
       confidence: 70,
     });
   });
+
+  it("anchors the duplicate window to an old order timestamp", async () => {
+    const referenceTime = new Date("2026-05-01T12:00:00.000Z");
+    const existingOrder = buildOrder({
+      customerEmail: "ada@example.com",
+      createdAt: new Date("2026-05-01T00:00:00.000Z"),
+    });
+
+    mockSelect
+      .mockReturnValueOnce(buildQueryStub([{
+        shopDomain: "test.myshopify.com",
+        timeWindowHours: 24,
+        matchEmail: true,
+        matchPhone: false,
+        matchAddress: false,
+        matchSku: false,
+      }]))
+      .mockReturnValueOnce(buildQueryStub([existingOrder]));
+
+    const result = await service.findDuplicates(
+      {
+        ...buildOrder({ id: undefined }),
+        shopifyOrderId: "1002",
+        orderNumber: "#1002",
+        customerEmail: "ada@example.com",
+        createdAt: referenceTime,
+      },
+      "test.myshopify.com"
+    );
+
+    expect(result?.order.id).toBe(existingOrder.id);
+  });
+
+  it.each([
+    ["outside the preceding window", "2026-04-30T11:59:59.000Z", "1001"],
+    ["created after the analyzed order", "2026-05-01T13:00:00.000Z", "1001"],
+    ["the persisted row itself", "2026-05-01T12:00:00.000Z", "1002"],
+  ])("does not match an order %s", async (_label, candidateCreatedAt, candidateShopifyId) => {
+    const existingOrder = buildOrder({
+      shopifyOrderId: candidateShopifyId,
+      customerEmail: "ada@example.com",
+      createdAt: new Date(candidateCreatedAt),
+    });
+
+    mockSelect
+      .mockReturnValueOnce(buildQueryStub([{
+        shopDomain: "test.myshopify.com",
+        timeWindowHours: 24,
+        matchEmail: true,
+        matchPhone: false,
+        matchAddress: false,
+        matchSku: false,
+      }]))
+      .mockReturnValueOnce(buildQueryStub([existingOrder]));
+
+    const result = await service.findDuplicates(
+      {
+        ...buildOrder({ id: undefined }),
+        shopifyOrderId: "1002",
+        orderNumber: "#1002",
+        customerEmail: "ada@example.com",
+        createdAt: new Date("2026-05-01T12:00:00.000Z"),
+      },
+      "test.myshopify.com"
+    );
+
+    expect(result).toBeNull();
+  });
+
+  it("does not use Unknown customer names to turn a SKU-only match into a flag", async () => {
+    const existingOrder = buildOrder({ customerName: "Unknown" });
+    mockSelect
+      .mockReturnValueOnce(buildQueryStub([{
+        shopDomain: "test.myshopify.com",
+        timeWindowHours: 24,
+        matchEmail: false,
+        matchPhone: false,
+        matchAddress: false,
+        matchSku: true,
+      }]))
+      .mockReturnValueOnce(buildQueryStub([existingOrder]));
+
+    const result = await service.findDuplicates(
+      {
+        ...buildOrder({ id: undefined }),
+        shopifyOrderId: "1002",
+        orderNumber: "#1002",
+        customerName: "Unknown",
+      },
+      "test.myshopify.com"
+    );
+
+    expect(result).toBeNull();
+  });
+
+  it("reports fuzzy-candidate truncation only when more than the cap exists", async () => {
+    const candidates = Array.from({ length: 501 }, (_, index) =>
+      buildOrder({
+        id: `candidate-${index}`,
+        shopifyOrderId: String(2000 + index),
+      })
+    );
+    mockSelect
+      .mockReturnValueOnce(buildQueryStub([{
+        shopDomain: "test.myshopify.com",
+        timeWindowHours: 24,
+        matchEmail: false,
+        matchPhone: false,
+        matchAddress: false,
+        matchSku: true,
+      }]))
+      .mockReturnValueOnce(buildQueryStub(candidates));
+    const metadata = { candidateCapExceeded: false };
+
+    await service.findDuplicates(
+      {
+        ...buildOrder({ id: undefined }),
+        shopifyOrderId: "1002",
+        orderNumber: "#1002",
+      },
+      "test.myshopify.com",
+      metadata
+    );
+
+    expect(metadata.candidateCapExceeded).toBe(true);
+  });
 });

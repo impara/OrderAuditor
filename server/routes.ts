@@ -17,6 +17,10 @@ import { subscriptionService } from "./services/subscription.service";
 import { shopifyBillingService } from "./services/shopify-billing.service";
 import { reviewPromptService } from "./services/review-prompt.service";
 import {
+  historicalScanService,
+  HistoricalScanConflictError,
+} from "./services/historical-scan.service";
+import {
   buildOrderCreateDeliveryId,
   buildOrderCreateJobKey,
 } from "./services/webhook-processor.service";
@@ -28,6 +32,7 @@ import { randomUUID, timingSafeEqual } from "crypto";
 import { logger } from "./utils/logger";
 import { queueService } from "./services/queue.service";
 import { pool } from "./db";
+import { shouldRemoveShopifyTag } from "./utils/order-dismissal";
 
 
 /**
@@ -536,6 +541,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  const safeHistoricalScan = (run: Awaited<ReturnType<typeof historicalScanService.getLatest>>) =>
+    run
+      ? {
+          id: run.id,
+          status: run.status,
+          requestedAt: run.requestedAt,
+          completedAt: run.completedAt,
+          windowDays: run.windowDays,
+          attemptCount: run.attemptCount,
+          ordersFetched: run.ordersFetched,
+          ordersImported: run.ordersImported,
+          matchesFound: run.matchesFound,
+          candidateCapExceeded: run.candidateCapExceeded,
+          errorMessage: run.errorMessage,
+        }
+      : null;
+
+  app.get("/api/historical-scan/latest", async (_req: Request, res: Response) => {
+    try {
+      const { shop } = res.locals.shopify;
+      res.json(safeHistoricalScan(await historicalScanService.getLatest(shop)));
+    } catch (error) {
+      logger.error("[HistoricalScanAPI] Failed to load scan:", error);
+      res.status(500).json({ error: "Failed to load recent-order scan" });
+    }
+  });
+
+  app.post("/api/historical-scan", async (_req: Request, res: Response) => {
+    try {
+      const { shop } = res.locals.shopify;
+      const run = await historicalScanService.startOrRetry(shop);
+      res.status(202).json(safeHistoricalScan(run));
+    } catch (error) {
+      if (error instanceof HistoricalScanConflictError) {
+        return res.status(409).json({
+          error:
+            error.run.status === "completed"
+              ? "The initial recent-order scan is already complete"
+              : "A recent-order scan is already active",
+          scan: safeHistoricalScan(error.run),
+        });
+      }
+      logger.error("[HistoricalScanAPI] Failed to start scan:", error);
+      res.status(503).json({ error: "Failed to start recent-order scan" });
+    }
+  });
+
   app.get("/api/review-prompt", async (req: Request, res: Response) => {
     try {
       const { shop } = res.locals.shopify;
@@ -636,20 +688,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Dismiss the order (sets isFlagged: false, resolvedAt, resolvedBy)
         const dismissedOrder = await storage.dismissOrder(shop, orderId);
 
-        // Remove the tag from Shopify
-        try {
-          await shopifyService.removeOrderTag(
-            shop,
-            accessToken,
-            order.shopifyOrderId,
-            "Merge_Review_Candidate"
-          );
-        } catch (error) {
-          logger.error(
-            "Failed to remove tag from Shopify, but order was dismissed:",
-            error
-          );
-          // Continue even if tag removal fails - order is already dismissed in our system
+        if (shouldRemoveShopifyTag(order.flagSource)) {
+          try {
+            await shopifyService.removeOrderTag(
+              shop,
+              accessToken,
+              order.shopifyOrderId,
+              "Merge_Review_Candidate"
+            );
+          } catch (error) {
+            logger.error(
+              "Failed to remove tag from Shopify, but order was dismissed:",
+              error
+            );
+          }
         }
 
         // Log the dismissal action

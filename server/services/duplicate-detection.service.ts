@@ -1,7 +1,7 @@
 import { db } from "../db";
 import { storage } from "../storage";
 import { orders, detectionSettings } from "@shared/schema";
-import { eq, and, gte, desc } from "drizzle-orm";
+import { eq, and, gte, lte, ne, desc } from "drizzle-orm";
 import type { Order, InsertOrder } from "@shared/schema";
 import { logger } from "../utils/logger";
 import { normalizePhoneNumber } from "../utils/phone";
@@ -11,10 +11,14 @@ const FUZZY_CANDIDATE_LIMIT = parseInt(
   10
 );
 
-interface DuplicateMatch {
+export interface DuplicateMatch {
   order: Order;
   matchReason: string;
   confidence: number;
+}
+
+export interface DuplicateDetectionMetadata {
+  candidateCapExceeded: boolean;
 }
 
 type FuzzyCandidateOrder = Pick<
@@ -38,7 +42,8 @@ export class DuplicateDetectionService {
    */
   async findDuplicates(
     newOrder: InsertOrder,
-    shopDomain: string
+    shopDomain: string,
+    metadata: DuplicateDetectionMetadata = { candidateCapExceeded: false }
   ): Promise<DuplicateMatch | null> {
     let [settings] = await db
       .select()
@@ -58,8 +63,15 @@ export class DuplicateDetectionService {
       `[DuplicateDetection] Settings - Email: ${settings.matchEmail}, Phone: ${settings.matchPhone}, Address: ${settings.matchAddress}, SKU: ${settings.matchSku}, TimeWindow: ${settings.timeWindowHours}h`
     );
 
-    const timeThreshold = new Date();
-    timeThreshold.setHours(timeThreshold.getHours() - settings.timeWindowHours);
+    const parsedReferenceTime = newOrder.createdAt
+      ? new Date(newOrder.createdAt)
+      : new Date();
+    const referenceTime = Number.isNaN(parsedReferenceTime.getTime())
+      ? new Date()
+      : parsedReferenceTime;
+    const timeThreshold = new Date(
+      referenceTime.getTime() - settings.timeWindowHours * 60 * 60 * 1000
+    );
     logger.debug(
       `[DuplicateDetection] Looking for orders created after: ${timeThreshold.toISOString()}`
     );
@@ -68,6 +80,14 @@ export class DuplicateDetectionService {
     let ordersInWindow: FuzzyCandidateOrder[] | null = null;
     const addCandidateOrders = (candidateOrders: Array<Order | FuzzyCandidateOrder>) => {
       for (const order of candidateOrders) {
+        const candidateTime = new Date(order.createdAt).getTime();
+        if (
+          order.shopifyOrderId === newOrder.shopifyOrderId ||
+          candidateTime < timeThreshold.getTime() ||
+          candidateTime > referenceTime.getTime()
+        ) {
+          continue;
+        }
         if (!existingOrders.find((existing) => existing.id === order.id)) {
           existingOrders.push(order as Order);
         }
@@ -82,7 +102,7 @@ export class DuplicateDetectionService {
         `[DuplicateDetection] Loading time-window candidate orders for ${reason}`
       );
 
-      ordersInWindow = await db
+      const candidateRows = await db
         .select({
           id: orders.id,
           shopDomain: orders.shopDomain,
@@ -100,17 +120,22 @@ export class DuplicateDetectionService {
         .where(
           and(
             eq(orders.shopDomain, shopDomain),
-            gte(orders.createdAt, timeThreshold)
+            gte(orders.createdAt, timeThreshold),
+            lte(orders.createdAt, referenceTime),
+            ne(orders.shopifyOrderId, newOrder.shopifyOrderId)
           )
         )
         .orderBy(desc(orders.createdAt))
-        .limit(FUZZY_CANDIDATE_LIMIT);
+        .limit(FUZZY_CANDIDATE_LIMIT + 1);
 
-      if (ordersInWindow.length >= FUZZY_CANDIDATE_LIMIT) {
+      if (candidateRows.length > FUZZY_CANDIDATE_LIMIT) {
+        metadata.candidateCapExceeded = true;
         logger.warn(
           `[DuplicateDetection] Fuzzy candidate cap (${FUZZY_CANDIDATE_LIMIT}) reached for shop ${shopDomain}. Older matches in the time window may be missed.`
         );
       }
+
+      ordersInWindow = candidateRows.slice(0, FUZZY_CANDIDATE_LIMIT);
 
       logger.debug(
         `[DuplicateDetection] Found ${ordersInWindow.length} orders in time window`
@@ -130,6 +155,8 @@ export class DuplicateDetectionService {
           and(
             eq(orders.shopDomain, shopDomain),
             gte(orders.createdAt, timeThreshold),
+            lte(orders.createdAt, referenceTime),
+            ne(orders.shopifyOrderId, newOrder.shopifyOrderId),
             eq(orders.customerEmail, newOrder.customerEmail)
           )
         );
@@ -157,6 +184,8 @@ export class DuplicateDetectionService {
             and(
               eq(orders.shopDomain, shopDomain),
               gte(orders.createdAt, timeThreshold),
+              lte(orders.createdAt, referenceTime),
+              ne(orders.shopifyOrderId, newOrder.shopifyOrderId),
               eq(orders.customerPhoneNormalized, normalizedPhone)
             )
           );
@@ -291,10 +320,16 @@ export class DuplicateDetectionService {
       }
     }
 
-    if (newOrder.customerName && existingOrder.customerName) {
+    const newCustomerName = newOrder.customerName?.trim();
+    const existingCustomerName = existingOrder.customerName?.trim();
+    if (
+      newCustomerName &&
+      existingCustomerName &&
+      newCustomerName.toLowerCase() !== "unknown" &&
+      existingCustomerName.toLowerCase() !== "unknown"
+    ) {
       if (
-        newOrder.customerName.toLowerCase() ===
-        existingOrder.customerName.toLowerCase()
+        newCustomerName.toLowerCase() === existingCustomerName.toLowerCase()
       ) {
         confidence += 20;
         reasons.push("Same name");

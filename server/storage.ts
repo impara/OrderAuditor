@@ -4,6 +4,7 @@ import {
   auditLogs,
   subscriptions,
   webhookDeliveries,
+  historicalScanRuns,
   shopifySessions,
   type Order,
   type InsertOrder,
@@ -17,6 +18,8 @@ import {
   type InsertSubscription,
   type UpdateSubscription,
   type InsertWebhookDelivery,
+  type HistoricalScanRun,
+  type InsertHistoricalScanRun,
 } from "@shared/schema";
 import { db } from "./db";
 import {
@@ -30,6 +33,7 @@ import {
   inArray,
   isNotNull,
   count,
+  lt,
 } from "drizzle-orm";
 import { normalizePhoneNumber } from "./utils/phone";
 
@@ -53,6 +57,16 @@ export interface IStorage {
     id: string,
     updates: Partial<Order>
   ): Promise<Order>;
+  getHistoricalScanRun(shopDomain: string): Promise<HistoricalScanRun | undefined>;
+  getHistoricalScanRunById(id: string): Promise<HistoricalScanRun | undefined>;
+  createHistoricalScanRun(run: InsertHistoricalScanRun): Promise<HistoricalScanRun>;
+  updateHistoricalScanRun(
+    id: string,
+    updates: Partial<HistoricalScanRun>
+  ): Promise<HistoricalScanRun>;
+  retryHistoricalScanRun(id: string): Promise<HistoricalScanRun | undefined>;
+  getStaleHistoricalScanRuns(cutoff: Date): Promise<HistoricalScanRun[]>;
+  getFlaggedOrdersForScan(runId: string): Promise<Order[]>;
   getDashboardStats(shopDomain: string): Promise<DashboardStats>;
 
   getSettings(shopDomain: string): Promise<DetectionSettings | undefined>;
@@ -201,6 +215,99 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(orders.id, id), eq(orders.shopDomain, shopDomain)))
       .returning();
     return order;
+  }
+
+  async getHistoricalScanRun(
+    shopDomain: string
+  ): Promise<HistoricalScanRun | undefined> {
+    const [run] = await db
+      .select()
+      .from(historicalScanRuns)
+      .where(eq(historicalScanRuns.shopDomain, shopDomain))
+      .limit(1);
+    return run || undefined;
+  }
+
+  async getHistoricalScanRunById(
+    id: string
+  ): Promise<HistoricalScanRun | undefined> {
+    const [run] = await db
+      .select()
+      .from(historicalScanRuns)
+      .where(eq(historicalScanRuns.id, id))
+      .limit(1);
+    return run || undefined;
+  }
+
+  async createHistoricalScanRun(
+    run: InsertHistoricalScanRun
+  ): Promise<HistoricalScanRun> {
+    const [created] = await db
+      .insert(historicalScanRuns)
+      .values(run)
+      .returning();
+    return created;
+  }
+
+  async updateHistoricalScanRun(
+    id: string,
+    updates: Partial<HistoricalScanRun>
+  ): Promise<HistoricalScanRun> {
+    const [updated] = await db
+      .update(historicalScanRuns)
+      .set(updates)
+      .where(eq(historicalScanRuns.id, id))
+      .returning();
+    return updated;
+  }
+
+  async retryHistoricalScanRun(
+    id: string
+  ): Promise<HistoricalScanRun | undefined> {
+    const now = new Date();
+    const [updated] = await db
+      .update(historicalScanRuns)
+      .set({
+        status: "queued",
+        statusUpdatedAt: now,
+        attemptCount: sql`${historicalScanRuns.attemptCount} + 1`,
+        startedAt: null,
+        completedAt: null,
+        queueJobId: null,
+        errorMessage: null,
+      })
+      .where(
+        and(
+          eq(historicalScanRuns.id, id),
+          eq(historicalScanRuns.status, "failed")
+        )
+      )
+      .returning();
+    return updated || undefined;
+  }
+
+  async getStaleHistoricalScanRuns(cutoff: Date): Promise<HistoricalScanRun[]> {
+    return db
+      .select()
+      .from(historicalScanRuns)
+      .where(
+        and(
+          inArray(historicalScanRuns.status, ["queued", "running"]),
+          lt(historicalScanRuns.statusUpdatedAt, cutoff)
+        )
+      );
+  }
+
+  async getFlaggedOrdersForScan(runId: string): Promise<Order[]> {
+    return db
+      .select()
+      .from(orders)
+      .where(
+        and(
+          eq(orders.flaggedByScanRunId, runId),
+          eq(orders.isFlagged, true)
+        )
+      );
   }
 
   async getDashboardStats(shopDomain: string): Promise<DashboardStats> {
@@ -644,6 +751,10 @@ export class DatabaseStorage implements IStorage {
     excludeDeliveryId?: string
   ): Promise<void> {
     // Delete in order to respect foreign key constraints
+    await db
+      .delete(historicalScanRuns)
+      .where(eq(historicalScanRuns.shopDomain, shopDomain));
+
     // 1. Delete audit logs (references orders)
     await db.delete(auditLogs).where(eq(auditLogs.shopDomain, shopDomain));
 

@@ -775,6 +775,23 @@ export async function authCallback(req: Request, res: Response) {
       // Don't fail the OAuth flow if charge checking fails
     }
 
+    void (async () => {
+      try {
+        const { historicalScanService } = await import(
+          "./services/historical-scan.service.js"
+        );
+        const existingRun = await historicalScanService.getLatest(session.shop);
+        if (!existingRun) {
+          await historicalScanService.startOrRetry(session.shop);
+        }
+      } catch (error) {
+        logger.warn(
+          `[AuthCallback] Historical scan auto-start failed for ${session.shop}:`,
+          error
+        );
+      }
+    })();
+
     const redirectParams = new URLSearchParams({ shop: session.shop });
     if (typeof req.query.host === "string" && req.query.host.length > 0) {
       redirectParams.set("host", req.query.host);

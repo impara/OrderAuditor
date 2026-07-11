@@ -5,11 +5,16 @@ import { logger } from "../utils/logger";
 // Queue names
 export const QUEUES = {
   ORDERS_CREATE: "orders-create-processing",
+  HISTORICAL_SCAN: "historical-scan-processing",
 } as const;
 
 const QUEUE_OPTIONS: Record<string, PgBoss.Queue> = {
   [QUEUES.ORDERS_CREATE]: {
     name: QUEUES.ORDERS_CREATE,
+    policy: "stately",
+  },
+  [QUEUES.HISTORICAL_SCAN]: {
+    name: QUEUES.HISTORICAL_SCAN,
     policy: "stately",
   },
 };
@@ -190,6 +195,16 @@ export class QueueService {
       logger.error(`[Queue] Failed to register worker for ${queueName}:`, error);
       throw error;
     }
+  }
+
+  public async isJobViable(queueName: string, jobId: string | null): Promise<boolean> {
+    if (!this.boss || !this.isReady || !jobId) {
+      return false;
+    }
+    const job = await this.boss.getJobById(queueName, jobId, {
+      includeArchive: false,
+    });
+    return Boolean(job && ["created", "retry", "active"].includes(job.state));
   }
 
   /**

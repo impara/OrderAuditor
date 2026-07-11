@@ -17,6 +17,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Link, useLocation } from "wouter";
 import { Header } from "@/components/Header";
 import { QuotaWarningBanner } from "@/components/QuotaWarningBanner";
+import { HistoricalScanCard } from "@/components/HistoricalScanCard";
 import { ReviewPromptBanner } from "@/components/ReviewPromptBanner";
 import { OnboardingChecklist, isOnboardingFullyHealthy, type OnboardingStatus } from "@/components/OnboardingChecklist";
 
@@ -624,6 +625,7 @@ export default function Dashboard() {
         <MonitoringActiveBanner status={onboardingStatus} stats={stats} />
         <QuotaWarningBanner />
         <ReviewPromptBanner />
+        <HistoricalScanCard />
         <div className="flex flex-col lg:flex-row gap-6">
           <div className="flex-1 order-2 lg:order-1">
             {ordersLoading ? (
