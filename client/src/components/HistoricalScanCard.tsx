@@ -73,15 +73,16 @@ export function HistoricalScanCard() {
     action = null;
   } else if (scan?.status === "completed") {
     icon = <CheckCircle2 className="h-5 w-5 text-green-600" />;
-    title =
+    title = "Recent-order scan complete";
+    const resultSummary =
       scan.matchesFound > 0
         ? `${scan.ordersFetched} orders checked · ${scan.matchesFound} duplicate-looking ${
             scan.matchesFound === 1 ? "group" : "groups"
           } found`
         : `${scan.ordersFetched} orders checked · no duplicate-looking matches found`;
     description = scan.candidateCapExceeded
-      ? "High-volume periods were partially checked. Review the results below while live monitoring continues."
-      : "The results are shown below. Future new orders continue to be checked normally.";
+      ? `${resultSummary}. High-volume periods were partially checked. Review the results below while live monitoring continues.`
+      : `${resultSummary}. The results are shown below. Future new orders continue to be checked normally.`;
     action = null;
   } else if (scan?.status === "failed") {
     icon = <AlertTriangle className="h-5 w-5 text-amber-600" />;
