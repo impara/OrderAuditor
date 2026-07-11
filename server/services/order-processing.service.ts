@@ -3,6 +3,7 @@ import { storage } from "../storage";
 import { logger } from "../utils/logger";
 import {
   duplicateDetectionService,
+  HISTORICAL_SCAN_MATCHING_PROFILE,
   type DuplicateDetectionMetadata,
   type DuplicateMatch,
 } from "./duplicate-detection.service";
@@ -92,7 +93,10 @@ export async function processOrder(
   const match = await duplicateDetectionService.findDuplicates(
     order,
     order.shopDomain,
-    detectionMetadata
+    detectionMetadata,
+    options.mode === "historical"
+      ? HISTORICAL_SCAN_MATCHING_PROFILE
+      : undefined
   );
   const persistenceValues = {
     ...order,

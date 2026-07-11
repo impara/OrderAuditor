@@ -8,7 +8,10 @@ vi.mock("../db", () => ({
   },
 }));
 
-import { DuplicateDetectionService } from "./duplicate-detection.service";
+import {
+  DuplicateDetectionService,
+  HISTORICAL_SCAN_MATCHING_PROFILE,
+} from "./duplicate-detection.service";
 
 function buildQueryStub(rows: any[]) {
   const stub: any = {
@@ -163,6 +166,149 @@ describe("DuplicateDetectionService.findDuplicates", () => {
         lineItems: [],
       },
       "test.myshopify.com"
+    );
+
+    expect(result).toEqual({
+      order: existingOrder,
+      matchReason: "Same email, Same name",
+      confidence: 70,
+    });
+  });
+
+  it("scan profile flags different emails with the same address and sample SKU", async () => {
+    const storedLiveSettings = {
+      shopDomain: "test.myshopify.com",
+      timeWindowHours: 24,
+      matchEmail: true,
+      matchPhone: false,
+      matchAddress: true,
+      matchSku: false,
+    };
+    const matchingAddress = {
+      address1: "123 Main St",
+      city: "New York",
+      zip: "10001",
+      country: "US",
+    };
+    const existingOrder = buildOrder({
+      customerEmail: "first@example.com",
+      customerName: "First Shopper",
+      shippingAddress: matchingAddress,
+    });
+
+    mockSelect
+      .mockReturnValueOnce(buildQueryStub([storedLiveSettings]))
+      .mockReturnValueOnce(buildQueryStub([]))
+      .mockReturnValueOnce(buildQueryStub([existingOrder]));
+
+    const result = await service.findDuplicates(
+      {
+        ...buildOrder({ id: undefined }),
+        shopifyOrderId: "1002",
+        orderNumber: "#1002",
+        customerEmail: "second@example.com",
+        customerName: "Second Shopper",
+        shippingAddress: matchingAddress,
+      },
+      "test.myshopify.com",
+      undefined,
+      HISTORICAL_SCAN_MATCHING_PROFILE
+    );
+
+    expect(result).toEqual({
+      order: existingOrder,
+      matchReason: "Same address, Same SKU purchased",
+      confidence: 100,
+    });
+    expect(storedLiveSettings.matchSku).toBe(false);
+  });
+
+  it("scan profile does not flag different email and name on address alone", async () => {
+    const storedLiveSettings = {
+      shopDomain: "test.myshopify.com",
+      timeWindowHours: 24,
+      matchEmail: true,
+      matchPhone: false,
+      matchAddress: true,
+      matchSku: false,
+    };
+    const matchingAddress = {
+      address1: "123 Main St",
+      city: "New York",
+      zip: "10001",
+      country: "US",
+    };
+    const existingOrder = buildOrder({
+      customerEmail: "first@example.com",
+      customerName: "First Shopper",
+      shippingAddress: matchingAddress,
+      lineItems: [{ id: "old-line", sku: "OTHER-SKU", title: "Other", quantity: 1, price: "25.00" }],
+    });
+
+    mockSelect
+      .mockReturnValueOnce(buildQueryStub([storedLiveSettings]))
+      .mockReturnValueOnce(buildQueryStub([]))
+      .mockReturnValueOnce(buildQueryStub([existingOrder]));
+
+    const result = await service.findDuplicates(
+      {
+        ...buildOrder({ id: undefined }),
+        shopifyOrderId: "1002",
+        orderNumber: "#1002",
+        customerEmail: "second@example.com",
+        customerName: "Second Shopper",
+        shippingAddress: matchingAddress,
+      },
+      "test.myshopify.com",
+      undefined,
+      HISTORICAL_SCAN_MATCHING_PROFILE
+    );
+
+    expect(result).toBeNull();
+  });
+
+  it("scan profile flags the same email and name without an address match", async () => {
+    const storedLiveSettings = {
+      shopDomain: "test.myshopify.com",
+      timeWindowHours: 24,
+      matchEmail: true,
+      matchPhone: false,
+      matchAddress: true,
+      matchSku: false,
+    };
+    const existingOrder = buildOrder({
+      customerEmail: "same@example.com",
+      customerName: "Same Shopper",
+      shippingAddress: {
+        address1: "123 Main St",
+        city: "New York",
+        zip: "10001",
+      },
+      lineItems: null,
+    });
+
+    mockSelect
+      .mockReturnValueOnce(buildQueryStub([storedLiveSettings]))
+      .mockReturnValueOnce(buildQueryStub([existingOrder]))
+      .mockReturnValueOnce(buildQueryStub([existingOrder]));
+
+    const result = await service.findDuplicates(
+      {
+        ...buildOrder({ id: undefined }),
+        shopifyOrderId: "1002",
+        orderNumber: "#1002",
+        customerEmail: "same@example.com",
+        customerName: "Same Shopper",
+        shippingAddress: {
+          address1: "999 Side St",
+          city: "Boston",
+          zip: "02108",
+        },
+        lineItems: null,
+      },
+      "test.myshopify.com",
+      undefined,
+      HISTORICAL_SCAN_MATCHING_PROFILE
     );
 
     expect(result).toEqual({

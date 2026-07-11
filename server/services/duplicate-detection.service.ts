@@ -2,7 +2,7 @@ import { db } from "../db";
 import { storage } from "../storage";
 import { orders, detectionSettings } from "@shared/schema";
 import { eq, and, gte, lte, ne, desc } from "drizzle-orm";
-import type { Order, InsertOrder } from "@shared/schema";
+import type { DetectionSettings, Order, InsertOrder } from "@shared/schema";
 import { logger } from "../utils/logger";
 import { normalizePhoneNumber } from "../utils/phone";
 
@@ -20,6 +20,18 @@ export interface DuplicateMatch {
 export interface DuplicateDetectionMetadata {
   candidateCapExceeded: boolean;
 }
+
+export type MatchingProfile = Pick<
+  DetectionSettings,
+  "matchEmail" | "matchPhone" | "matchAddress" | "matchSku"
+>;
+
+export const HISTORICAL_SCAN_MATCHING_PROFILE: MatchingProfile = {
+  matchEmail: true,
+  matchPhone: true,
+  matchAddress: true,
+  matchSku: true,
+};
 
 type FuzzyCandidateOrder = Pick<
   Order,
@@ -43,21 +55,26 @@ export class DuplicateDetectionService {
   async findDuplicates(
     newOrder: InsertOrder,
     shopDomain: string,
-    metadata: DuplicateDetectionMetadata = { candidateCapExceeded: false }
+    metadata: DuplicateDetectionMetadata = { candidateCapExceeded: false },
+    matchingProfile?: MatchingProfile
   ): Promise<DuplicateMatch | null> {
-    let [settings] = await db
+    let [storedSettings] = await db
       .select()
       .from(detectionSettings)
       .where(eq(detectionSettings.shopDomain, shopDomain))
       .limit(1);
 
-    if (!settings) {
+    if (!storedSettings) {
       logger.info(
         `[DuplicateDetection] No settings for shop ${shopDomain}, initializing defaults`
       );
       const initialized = await storage.initializeSettings(shopDomain);
-      settings = initialized;
+      storedSettings = initialized;
     }
+
+    const settings = matchingProfile
+      ? { ...storedSettings, ...matchingProfile }
+      : storedSettings;
 
     logger.debug(
       `[DuplicateDetection] Settings - Email: ${settings.matchEmail}, Phone: ${settings.matchPhone}, Address: ${settings.matchAddress}, SKU: ${settings.matchSku}, TimeWindow: ${settings.timeWindowHours}h`

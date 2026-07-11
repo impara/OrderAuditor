@@ -20,6 +20,12 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../storage", () => ({ storage: mocks.storage }));
 vi.mock("./duplicate-detection.service", () => ({
   duplicateDetectionService: mocks.duplicateDetectionService,
+  HISTORICAL_SCAN_MATCHING_PROFILE: {
+    matchEmail: true,
+    matchPhone: true,
+    matchAddress: true,
+    matchSku: true,
+  },
 }));
 vi.mock("./shopify.service", () => ({ shopifyService: mocks.shopifyService }));
 vi.mock("./notification.service", () => ({
@@ -31,6 +37,7 @@ vi.mock("./subscription.service", () => ({
 vi.mock("../utils/logger", () => ({ logger: mocks.logger }));
 
 import { processOrder } from "./order-processing.service";
+import { HISTORICAL_SCAN_MATCHING_PROFILE } from "./duplicate-detection.service";
 
 const mappedOrder = {
   shopDomain: "test.myshopify.com",
@@ -103,8 +110,17 @@ describe("processOrder", () => {
         isFlagged: true,
       })
     );
+    expect(mocks.duplicateDetectionService.findDuplicates).toHaveBeenCalledWith(
+      mappedOrder,
+      mappedOrder.shopDomain,
+      expect.any(Object),
+      HISTORICAL_SCAN_MATCHING_PROFILE
+    );
     expect(mocks.shopifyService.tagOrder).not.toHaveBeenCalled();
     expect(mocks.notificationService.sendNotifications).not.toHaveBeenCalled();
+    expect(
+      mocks.notificationService.sendQuotaExceededNotification
+    ).not.toHaveBeenCalled();
     expect(mocks.subscriptionService.checkQuota).not.toHaveBeenCalled();
     expect(mocks.subscriptionService.recordOrder).not.toHaveBeenCalled();
   });
