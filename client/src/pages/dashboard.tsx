@@ -89,8 +89,8 @@ function MonitoringActiveBanner({
       : `${status.totalOrdersProcessed} orders checked`;
   const duplicateLabel = stats
     ? stats.totalFlagged === 1
-      ? "1 duplicate flagged"
-      : `${stats.totalFlagged} duplicates flagged`
+      ? "1 order flagged for review"
+      : `${stats.totalFlagged} orders flagged for review`
     : null;
   const activitySegments = [
     ordersCheckedLabel,
@@ -664,7 +664,7 @@ export default function Dashboard() {
             ) : stats ? (
               <div className="grid grid-cols-2 lg:flex lg:flex-col gap-3">
                 <StatsCard
-                  title="Total Flagged"
+                  title="Orders Flagged"
                   value={stats.totalFlagged}
                   icon={AlertCircle}
                   trend={stats.totalFlaggedTrend}

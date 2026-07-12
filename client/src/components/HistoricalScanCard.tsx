@@ -80,9 +80,13 @@ export function HistoricalScanCard() {
             scan.matchesFound === 1 ? "group" : "groups"
           } found`
         : `${scan.ordersFetched} orders checked · no duplicate-looking matches found`;
+    const groupExplanation =
+      scan.matchesFound > 0
+        ? " A group may contain multiple flagged orders."
+        : "";
     description = scan.candidateCapExceeded
-      ? `${resultSummary}. High-volume periods were partially checked. Review the results below while live monitoring continues.`
-      : `${resultSummary}. The results are shown below. Future new orders continue to be checked normally.`;
+      ? `${resultSummary}.${groupExplanation} High-volume periods were partially checked. Review the results below while live monitoring continues.`
+      : `${resultSummary}.${groupExplanation} The results are shown below. Future new orders continue to be checked normally.`;
     action = null;
   } else if (scan?.status === "failed") {
     icon = <AlertTriangle className="h-5 w-5 text-amber-600" />;
