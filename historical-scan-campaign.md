@@ -420,6 +420,16 @@ git commit -m "feat: show immediate historical scan proof"
 
 **Measurement:** outreach-to-install, install-to-scan-completion, share with ≥1 match, and 14-day retained installation.
 
+### Controlled production acceptance — 2026-07-12
+
+Verified with the production app on `order-auditor-test-2.myshopify.com` using six purpose-built development-store orders. The automatic OAuth scan completed on its first attempt with PCD email, customer name, and shipping address present on every fixture:
+
+- Different email + same normalized address + same sample SKU: flagged as one group at 100% (`Same address, Same SKU purchased`).
+- Different email and name + same address only + different SKUs: not flagged at the 70-point threshold.
+- Same email and name + different address + different SKUs: flagged as one group at 70% (`Same email, Same name`).
+
+The scan left fixture Shopify tags and order update timestamps unchanged, kept subscription monthly/all-time counters at zero, did not mutate stored live settings (`matchSku` remained false), and restored both order webhooks after fixture setup. The run imported 12 total orders and reported four total groups because six pre-existing shop orders contributed two earlier groups; the controlled fixtures contributed exactly the two expected groups.
+
 ## Final verification checklist
 
 - [ ] `npm run check` passes.
@@ -439,10 +449,10 @@ git commit -m "feat: show immediate historical scan proof"
 - [ ] Dismissing a historical finding performs no Shopify API call; dismissing a live finding still removes the tag.
 - [ ] Orders persisted by live webhooks mid-scan are re-analyzed by the scan; dismissed orders are never re-flagged.
 - [ ] Two customer-less ("Unknown"-name) orders sharing only a SKU are not flagged.
-- [ ] Historical detection uses the scan-only email + address + SKU profile without mutating stored live settings; phone is considered only when data is available.
-- [ ] The three controlled scan-profile fixtures pass: address + SKU flags an email change, address alone does not, and same email + name flags without an address match.
-- [ ] Historical mode never tags Shopify, sends notifications, checks/consumes quota, or increments duplicate counts.
+- [x] Historical detection uses the scan-only email + address + SKU profile without mutating stored live settings; phone is considered only when data is available.
+- [x] The three controlled scan-profile fixtures pass: address + SKU flags an email change, address alone does not, and same email + name flags without an address match.
+- [x] Historical mode never tags Shopify, sends notifications, checks/consumes quota, or increments duplicate counts.
 - [ ] Completed scan populates the existing dashboard flagged-order table.
 - [ ] A zero-match scan plainly says it completed.
 - [ ] Uninstall cleanup still removes imported shop data, including `historical_scan_runs` rows.
-- [ ] The first campaign email is not drafted/sent until a controlled scan has verified the end-to-end result.
+- [x] The first campaign email is not drafted/sent until a controlled scan has verified the end-to-end result.
