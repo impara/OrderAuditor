@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "NODE_ENV=development tsx server/index-dev.ts",
-    "build": "vite build && esbuild server/index-prod.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/index.js",
+    "build": "vite build && esbuild server/index-prod.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/index.js && esbuild scripts/audit-billing-consistency.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/audit-billing-consistency.js",
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc",
     "db:push": "drizzle-kit push",
@@ -17,7 +17,8 @@
     "test:duplicate-logic": "tsx scripts/verify-duplicate-logic.ts",
     "test:validation": "bash scripts/test-validation-plan.sh",
     "test:billing": "tsx scripts/test-billing.ts",
-    "billing:audit": "tsx scripts/audit-billing-consistency.ts",
+    "billing:audit": "node dist/audit-billing-consistency.js",
+    "billing:audit:source": "tsx scripts/audit-billing-consistency.ts",
     "test": "vitest run",
     "landing:seo-index": "python3 landing-page/tools/seo_index.py",
     "landing:seo-index:check": "python3 landing-page/tools/seo_index.py --check"
