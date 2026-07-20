@@ -1,6 +1,8 @@
 import "dotenv/config";
 import { parseBillingAuditArgs } from "./billing-audit-options";
 
+let closeDatabase: (() => Promise<void>) | undefined;
+
 function printHelp(): void {
   console.log(`Usage:
   npm run billing:audit
@@ -19,7 +21,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const [{ eq }, { db }, { getValidOfflineSession }, { billingReconciliationService }, schema] =
+  const [{ eq }, database, { getValidOfflineSession }, { billingReconciliationService }, schema] =
     await Promise.all([
       import("drizzle-orm"),
       import("../server/db"),
@@ -27,6 +29,8 @@ async function main(): Promise<void> {
       import("../server/services/billing-reconciliation.service"),
       import("../shared/schema"),
     ]);
+  const { db, pool } = database;
+  closeDatabase = () => pool.end();
   const { subscriptions } = schema;
 
   const rows = options.shop
@@ -83,7 +87,11 @@ async function main(): Promise<void> {
   if (!options.applyActive && actionable) process.exitCode = 2;
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
-});
+main()
+  .catch((error) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await closeDatabase?.();
+  });
