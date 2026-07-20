@@ -32,9 +32,8 @@ jobs:
     - name: Landing SEO index check
       run: npm run landing:seo-index:check
 
+    - name: Run Tests
+      run: npm test
+
     - name: Build
       run: npm run build
-
-    # Tests will be enabled once the testing infrastructure is set up
-    # - name: Run Tests
-    #   run: npm test
