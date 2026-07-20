@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { Check, X, Zap, CreditCard, AlertCircle, Flag } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { Header } from "@/components/Header";
 import { getQuotaStatus } from "@/lib/quotaStatus";
@@ -29,6 +29,7 @@ function SubscriptionPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [upgradeLoading, setUpgradeLoading] = useState(false);
+  const upgradeInFlightRef = useRef(false);
 
   const { data: subscription, isLoading } = useQuery<Subscription>({
     queryKey: ["/api/subscription"],
@@ -111,7 +112,6 @@ function SubscriptionPage() {
           description: "Redirecting to Shopify to complete payment...",
         });
       }
-      setUpgradeLoading(false);
     },
     onError: (error: Error) => {
       toast({
@@ -119,9 +119,18 @@ function SubscriptionPage() {
         description: error.message,
         variant: "destructive",
       });
+    },
+    onSettled: () => {
+      upgradeInFlightRef.current = false;
       setUpgradeLoading(false);
     },
   });
+
+  const requestUpgrade = () => {
+    if (upgradeInFlightRef.current || upgradeMutation.isPending) return;
+    upgradeInFlightRef.current = true;
+    upgradeMutation.mutate();
+  };
 
   const activateMutation = useMutation({
     mutationFn: async (chargeId: string) => {
@@ -456,8 +465,8 @@ function SubscriptionPage() {
                       )
                     ) : (
                       <Button
-                        onClick={() => upgradeMutation.mutate()}
-                        disabled={upgradeLoading}
+                        onClick={requestUpgrade}
+                        disabled={upgradeLoading || upgradeMutation.isPending}
                         className="w-full"
                       >
                         {upgradeLoading ? (

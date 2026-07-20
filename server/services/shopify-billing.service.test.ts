@@ -27,6 +27,12 @@ vi.mock("./subscription.service", () => ({
   },
 }));
 
+vi.mock("../utils/shop-billing-lock", () => ({
+  withShopBillingLock: vi.fn(
+    async (_shop: string, operation: () => Promise<unknown>) => operation()
+  ),
+}));
+
 // Mock global fetch
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
@@ -164,5 +170,84 @@ describe("ShopifyBillingService — double cancellation regression", () => {
       "shpat_testtoken"
     );
     expect(updateTier).not.toHaveBeenCalled();
+  });
+
+  it("reads active and historical subscriptions from Shopify GraphQL", async () => {
+    mockFetch.mockResolvedValue(
+      makeResponse(200, {
+        data: {
+          currentAppInstallation: {
+            activeSubscriptions: [
+              {
+                id: "gid://shopify/AppSubscription/42",
+                name: "Duplicate Guard - Unlimited Plan",
+                status: "ACTIVE",
+                createdAt: "2026-06-13T12:27:18Z",
+                currentPeriodEnd: "2026-08-12T12:27:31Z",
+                test: false,
+              },
+            ],
+            allSubscriptions: {
+              nodes: [
+                {
+                  id: "gid://shopify/AppSubscription/41",
+                  name: "Duplicate Guard - Unlimited Plan",
+                  status: "EXPIRED",
+                  createdAt: "2026-06-13T12:27:13Z",
+                  currentPeriodEnd: null,
+                  test: false,
+                },
+              ],
+            },
+          },
+        },
+      })
+    );
+
+    const result = await service.getBillingSnapshot(
+      "test.myshopify.com",
+      "shpat_testtoken"
+    );
+
+    expect(result.active).toHaveLength(1);
+    expect(result.active[0].currentPeriodEnd).toBe("2026-08-12T12:27:31Z");
+    expect(result.history[0].status).toBe("EXPIRED");
+  });
+
+  it("does not translate a Shopify 401 into an empty subscription list", async () => {
+    mockFetch.mockResolvedValue(makeResponse(401, { errors: "Unauthorized" }));
+
+    await expect(
+      service.getBillingSnapshot("test.myshopify.com", "expired-token")
+    ).rejects.toMatchObject({
+      name: "BillingSnapshotError",
+      status: 401,
+    });
+  });
+
+  it("reuses a pending charge inside the guarded upgrade decision", async () => {
+    vi.spyOn(service, "handleExistingCharges").mockResolvedValue({
+      hasPendingCharge: true,
+      pendingCharge: {
+        id: 42,
+        name: "Duplicate Guard",
+        price: "7.99",
+        status: "PENDING",
+        return_url: "https://example.com",
+        confirmation_url: "https://admin.shopify.com/confirm",
+      },
+      hasActiveCharge: false,
+      activeCharge: null,
+    });
+    const create = vi.spyOn(service, "createRecurringCharge");
+
+    const result = await service.getOrCreateUpgradeCharge(
+      "test.myshopify.com",
+      "token",
+      "https://example.com"
+    );
+
+    expect(result.kind).toBe("pending");
+    expect(create).not.toHaveBeenCalled();
   });
 });

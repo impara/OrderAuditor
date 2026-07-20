@@ -17,6 +17,7 @@
     "test:duplicate-logic": "tsx scripts/verify-duplicate-logic.ts",
     "test:validation": "bash scripts/test-validation-plan.sh",
     "test:billing": "tsx scripts/test-billing.ts",
+    "billing:audit": "tsx scripts/audit-billing-consistency.ts",
     "test": "vitest run",
     "landing:seo-index": "python3 landing-page/tools/seo_index.py",
     "landing:seo-index:check": "python3 landing-page/tools/seo_index.py --check"

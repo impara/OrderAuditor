@@ -122,13 +122,15 @@ export class SubscriptionService {
   async activatePaidSubscription(
     shopDomain: string,
     shopifyChargeId?: string | number | null,
-    accessToken?: string
+    accessToken?: string,
+    currentPeriodEnd?: Date
   ): Promise<Subscription> {
     const updates: {
       tier: "paid";
       status: "active";
       orderLimit: number;
       shopifyChargeId?: string;
+      currentBillingPeriodEnd?: Date;
     } = {
       tier: "paid",
       status: "active",
@@ -137,6 +139,9 @@ export class SubscriptionService {
 
     if (shopifyChargeId != null && shopifyChargeId !== "") {
       updates.shopifyChargeId = String(shopifyChargeId);
+    }
+    if (currentPeriodEnd) {
+      updates.currentBillingPeriodEnd = currentPeriodEnd;
     }
 
     const subscription = await storage.updateSubscription(shopDomain, updates);

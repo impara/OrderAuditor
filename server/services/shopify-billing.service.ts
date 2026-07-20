@@ -1,14 +1,50 @@
 import { logger } from "../utils/logger";
 import { subscriptionService } from "./subscription.service";
 import { fetchWithRetry, fetchBillingWithRetry } from "../utils/fetch-with-retry";
+import { withShopBillingLock } from "../utils/shop-billing-lock";
 
-interface ShopifyRecurringCharge {
+export interface ShopifyRecurringCharge {
   id: number;
   name: string;
   price: string;
   status: string;
   return_url: string;
   confirmation_url?: string;
+}
+
+export type ShopifyAppSubscriptionStatus =
+  | "ACTIVE"
+  | "CANCELLED"
+  | "DECLINED"
+  | "EXPIRED"
+  | "FROZEN";
+
+export interface ShopifyAppSubscription {
+  id: string;
+  name: string;
+  status: ShopifyAppSubscriptionStatus;
+  createdAt: string;
+  currentPeriodEnd: string | null;
+  test: boolean;
+}
+
+export interface ShopifyBillingSnapshot {
+  active: ShopifyAppSubscription[];
+  history: ShopifyAppSubscription[];
+  fetchedAt: Date;
+}
+
+export type UpgradeChargeResult =
+  | { kind: "pending"; charge: ShopifyRecurringCharge }
+  | { kind: "active"; charge: ShopifyRecurringCharge }
+  | { kind: "created"; charge: ShopifyRecurringCharge }
+  | { kind: "failed" };
+
+export class BillingSnapshotError extends Error {
+  constructor(message: string, readonly status?: number) {
+    super(message);
+    this.name = "BillingSnapshotError";
+  }
 }
 
 export class ShopifyBillingService {
@@ -27,6 +63,96 @@ export class ShopifyBillingService {
       return false;
     }
     return true;
+  }
+
+  async getBillingSnapshot(
+    shopDomain: string,
+    accessToken: string
+  ): Promise<ShopifyBillingSnapshot> {
+    if (!this.validateCredentials(shopDomain, accessToken)) {
+      throw new BillingSnapshotError("Shopify credentials not provided");
+    }
+
+    const query = `query BillingSnapshot {
+      currentAppInstallation {
+        activeSubscriptions { id name status createdAt currentPeriodEnd test }
+        allSubscriptions(first: 25, sortKey: CREATED_AT, reverse: true) {
+          nodes { id name status createdAt currentPeriodEnd test }
+        }
+      }
+    }`;
+
+    let response: Response;
+    try {
+      response = await fetchWithRetry(
+        `https://${shopDomain}/admin/api/${this.apiVersion}/graphql.json`,
+        {
+          method: "POST",
+          headers: {
+            "X-Shopify-Access-Token": accessToken,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ query }),
+          idempotent: true,
+          label: `getBillingSnapshot(${shopDomain})`,
+        }
+      );
+    } catch (error) {
+      throw new BillingSnapshotError(
+        `Shopify billing query failed: ${
+          error instanceof Error ? error.message : "unknown error"
+        }`
+      );
+    }
+
+    if (!response.ok) {
+      throw new BillingSnapshotError(
+        `Shopify billing query returned HTTP ${response.status}`,
+        response.status
+      );
+    }
+
+    const payload = await response.json();
+    if (Array.isArray(payload.errors) && payload.errors.length > 0) {
+      throw new BillingSnapshotError("Shopify billing query returned GraphQL errors");
+    }
+
+    const installation = payload.data?.currentAppInstallation;
+    const active = installation?.activeSubscriptions;
+    const history = installation?.allSubscriptions?.nodes;
+    if (!Array.isArray(active) || !Array.isArray(history)) {
+      throw new BillingSnapshotError("Malformed Shopify billing response");
+    }
+
+    const validateSubscription = (value: any): ShopifyAppSubscription => {
+      if (
+        typeof value?.id !== "string" ||
+        typeof value?.name !== "string" ||
+        typeof value?.status !== "string" ||
+        typeof value?.createdAt !== "string" ||
+        typeof value?.test !== "boolean" ||
+        (value.currentPeriodEnd !== null &&
+          typeof value.currentPeriodEnd !== "string")
+      ) {
+        throw new BillingSnapshotError("Malformed Shopify subscription entry");
+      }
+      if (Number.isNaN(Date.parse(value.createdAt))) {
+        throw new BillingSnapshotError("Malformed Shopify subscription createdAt");
+      }
+      if (
+        value.currentPeriodEnd !== null &&
+        Number.isNaN(Date.parse(value.currentPeriodEnd))
+      ) {
+        throw new BillingSnapshotError("Malformed Shopify currentPeriodEnd");
+      }
+      return value as ShopifyAppSubscription;
+    };
+
+    return {
+      active: active.map(validateSubscription),
+      history: history.map(validateSubscription),
+      fetchedAt: new Date(),
+    };
   }
 
   /**
@@ -383,6 +509,36 @@ export class ShopifyBillingService {
       hasActiveCharge: !!activeCharge,
       activeCharge,
     };
+  }
+
+  async getOrCreateUpgradeCharge(
+    shopDomain: string,
+    accessToken: string,
+    returnUrl: string
+  ): Promise<UpgradeChargeResult> {
+    return withShopBillingLock(shopDomain, async () => {
+      const existing = await this.handleExistingCharges(
+        shopDomain,
+        accessToken,
+        returnUrl
+      );
+
+      if (existing.hasPendingCharge && existing.pendingCharge) {
+        return { kind: "pending", charge: existing.pendingCharge };
+      }
+      if (existing.hasActiveCharge && existing.activeCharge) {
+        return { kind: "active", charge: existing.activeCharge };
+      }
+
+      const charge = await this.createRecurringCharge(
+        shopDomain,
+        accessToken,
+        returnUrl
+      );
+      return charge
+        ? { kind: "created", charge }
+        : { kind: "failed" };
+    });
   }
 
   /**

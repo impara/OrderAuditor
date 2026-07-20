@@ -262,15 +262,22 @@ describe("SubscriptionService — free tier limit constant regression", () => {
     expect(calledWith).not.toHaveProperty("orderLimit", FREE_TIER_ORDER_LIMIT);
   });
 
-  it("stores shopifyChargeId when activating paid subscription", async () => {
+  it("stores shopifyChargeId and authoritative period end when activating paid subscription", async () => {
+    const periodEnd = new Date("2026-08-17T13:09:59Z");
     getSubscription.mockResolvedValue(makeSub());
     updateSubscription.mockResolvedValue(
-      makeSub({ tier: "paid", shopifyChargeId: "37757518115" })
+      makeSub({
+        tier: "paid",
+        shopifyChargeId: "37757518115",
+        currentBillingPeriodEnd: periodEnd,
+      })
     );
 
     await subscriptionService.activatePaidSubscription(
       "test.myshopify.com",
-      37757518115
+      37757518115,
+      undefined,
+      periodEnd
     );
 
     expect(updateSubscription).toHaveBeenCalledWith(
@@ -280,6 +287,7 @@ describe("SubscriptionService — free tier limit constant regression", () => {
         status: "active",
         orderLimit: -1,
         shopifyChargeId: "37757518115",
+        currentBillingPeriodEnd: periodEnd,
       })
     );
   });

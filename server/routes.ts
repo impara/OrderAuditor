@@ -15,6 +15,7 @@ import { shopifyService } from "./services/shopify.service";
 import { notificationService } from "./services/notification.service";
 import { subscriptionService } from "./services/subscription.service";
 import { shopifyBillingService } from "./services/shopify-billing.service";
+import { billingReconciliationService } from "./services/billing-reconciliation.service";
 import { reviewPromptService } from "./services/review-prompt.service";
 import {
   historicalScanService,
@@ -2230,52 +2231,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Validate returnUrl to prevent open redirect attacks
       const returnUrl = validateReturnUrl(requestedReturnUrl);
 
-      // Check for existing charges first to avoid 403 errors
-      const existingCharges = await shopifyBillingService.handleExistingCharges(
+      const upgradeResult = await shopifyBillingService.getOrCreateUpgradeCharge(
         shop,
         accessToken,
         returnUrl
       );
 
-      // If there's already a pending charge, reuse it
-      if (existingCharges.hasPendingCharge && existingCharges.pendingCharge) {
+      if (upgradeResult.kind === "pending") {
         logger.info(
-          `[Subscription] Found existing pending charge ${existingCharges.pendingCharge.id}, reusing confirmation URL`
+          `[Subscription] Found existing pending charge ${upgradeResult.charge.id}, reusing confirmation URL`
         );
         return res.json({
           success: true,
-          charge: existingCharges.pendingCharge,
-          confirmationUrl: existingCharges.pendingCharge.confirmation_url,
+          charge: upgradeResult.charge,
+          confirmationUrl: upgradeResult.charge.confirmation_url,
           existing: true,
         });
       }
 
-      // If there's already an active charge, return success
-      if (existingCharges.hasActiveCharge && existingCharges.activeCharge) {
+      if (upgradeResult.kind === "active") {
         logger.info(
-          `[Subscription] Store already has active charge ${existingCharges.activeCharge.id}`
+          `[Subscription] Store already has active charge ${upgradeResult.charge.id}`
         );
-        await subscriptionService.activatePaidSubscription(
-          shop,
-          existingCharges.activeCharge.id,
-          accessToken
-        );
+        await billingReconciliationService.reconcileActive(shop, accessToken);
         return res.json({
           success: true,
-          charge: existingCharges.activeCharge,
+          charge: upgradeResult.charge,
           message: "Subscription already active",
           alreadyActive: true,
         });
       }
 
-      // No existing charges, create a new one
-      const charge = await shopifyBillingService.createRecurringCharge(
-        shop,
-        accessToken,
-        returnUrl
-      );
-
-      if (!charge) {
+      if (upgradeResult.kind === "failed") {
         return res
           .status(500)
           .json({ error: "Failed to create billing charge" });
@@ -2283,8 +2270,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         success: true,
-        charge,
-        confirmationUrl: charge.confirmation_url,
+        charge: upgradeResult.charge,
+        confirmationUrl: upgradeResult.charge.confirmation_url,
       });
     } catch (error) {
       logger.error("Error creating upgrade charge:", error);
@@ -2310,6 +2297,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!success) {
           return res.status(500).json({ error: "Failed to activate charge" });
         }
+
+        await billingReconciliationService.reconcileActive(shop, accessToken);
 
         res.json({ success: true });
       } catch (error) {

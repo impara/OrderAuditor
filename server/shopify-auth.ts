@@ -13,6 +13,7 @@ import * as jose from "jose";
 import { createSecretKey } from "crypto";
 import { shopifyBillingService } from "./services/shopify-billing.service";
 import { subscriptionService } from "./services/subscription.service";
+import { billingReconciliationService } from "./services/billing-reconciliation.service";
 
 // Initialize Shopify API client
 const shopify = shopifyApi({
@@ -749,6 +750,10 @@ export async function authCallback(req: Request, res: Response) {
       );
 
       if (chargeStatus.hasActiveCharge && chargeStatus.activeCharge) {
+        await billingReconciliationService.reconcileActive(
+          session.shop,
+          session.accessToken || ""
+        );
         logger.info(
           `[AuthCallback] ✅ Found active charge ${chargeStatus.activeCharge.id}. Subscription synced to paid tier.`
         );
