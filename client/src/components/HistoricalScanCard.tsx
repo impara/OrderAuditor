@@ -3,6 +3,10 @@ import type { ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Loader2, Search } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import {
+  formatHistoricalScanDescription,
+  type HistoricalScanSignal,
+} from "@/lib/historical-scan-summary";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -11,6 +15,10 @@ type HistoricalScan = {
   status: "queued" | "running" | "completed" | "failed";
   ordersFetched: number;
   matchesFound: number;
+  flaggedOrders: number;
+  strongerFindings: number;
+  reviewFindings: number;
+  signals: HistoricalScanSignal[];
   candidateCapExceeded: boolean;
   errorMessage: string | null;
 };
@@ -74,19 +82,7 @@ export function HistoricalScanCard() {
   } else if (scan?.status === "completed") {
     icon = <CheckCircle2 className="h-5 w-5 text-green-600" />;
     title = "Recent-order scan complete";
-    const resultSummary =
-      scan.matchesFound > 0
-        ? `${scan.ordersFetched} orders checked · ${scan.matchesFound} duplicate-looking ${
-            scan.matchesFound === 1 ? "group" : "groups"
-          } found`
-        : `${scan.ordersFetched} orders checked · no duplicate-looking matches found`;
-    const groupExplanation =
-      scan.matchesFound > 0
-        ? " A group may contain multiple flagged orders."
-        : "";
-    description = scan.candidateCapExceeded
-      ? `${resultSummary}.${groupExplanation} High-volume periods were partially checked. Review the results below while live monitoring continues.`
-      : `${resultSummary}.${groupExplanation} The results are shown below. Future new orders continue to be checked normally.`;
+    description = formatHistoricalScanDescription(scan);
     action = null;
   } else if (scan?.status === "failed") {
     icon = <AlertTriangle className="h-5 w-5 text-amber-600" />;

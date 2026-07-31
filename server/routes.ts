@@ -22,6 +22,10 @@ import {
   HistoricalScanConflictError,
 } from "./services/historical-scan.service";
 import {
+  emptyHistoricalScanFindingSummary,
+  summarizeHistoricalScanFindings,
+} from "./services/historical-scan-summary";
+import {
   buildOrderCreateDeliveryId,
   buildOrderCreateJobKey,
 } from "./services/webhook-processor.service";
@@ -542,27 +546,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  const safeHistoricalScan = (run: Awaited<ReturnType<typeof historicalScanService.getLatest>>) =>
-    run
-      ? {
-          id: run.id,
-          status: run.status,
-          requestedAt: run.requestedAt,
-          completedAt: run.completedAt,
-          windowDays: run.windowDays,
-          attemptCount: run.attemptCount,
-          ordersFetched: run.ordersFetched,
-          ordersImported: run.ordersImported,
-          matchesFound: run.matchesFound,
-          candidateCapExceeded: run.candidateCapExceeded,
-          errorMessage: run.errorMessage,
-        }
-      : null;
+  const safeHistoricalScan = async (
+    run: Awaited<ReturnType<typeof historicalScanService.getLatest>>
+  ) => {
+    if (!run) {
+      return null;
+    }
+
+    let findingSummary = emptyHistoricalScanFindingSummary();
+    if (run.status === "completed") {
+      try {
+        const findings = await storage.getFlaggedOrdersForScan(run.id);
+        findingSummary = summarizeHistoricalScanFindings(findings);
+      } catch (error) {
+        logger.warn(
+          `[HistoricalScanAPI] Failed to summarize scan ${run.id}; returning core scan state`,
+          error
+        );
+      }
+    }
+
+    return {
+      id: run.id,
+      status: run.status,
+      requestedAt: run.requestedAt,
+      completedAt: run.completedAt,
+      windowDays: run.windowDays,
+      attemptCount: run.attemptCount,
+      ordersFetched: run.ordersFetched,
+      ordersImported: run.ordersImported,
+      matchesFound: run.matchesFound,
+      candidateCapExceeded: run.candidateCapExceeded,
+      errorMessage: run.errorMessage,
+      ...findingSummary,
+    };
+  };
 
   app.get("/api/historical-scan/latest", async (_req: Request, res: Response) => {
     try {
       const { shop } = res.locals.shopify;
-      res.json(safeHistoricalScan(await historicalScanService.getLatest(shop)));
+      res.json(await safeHistoricalScan(await historicalScanService.getLatest(shop)));
     } catch (error) {
       logger.error("[HistoricalScanAPI] Failed to load scan:", error);
       res.status(500).json({ error: "Failed to load recent-order scan" });
@@ -573,7 +596,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { shop } = res.locals.shopify;
       const run = await historicalScanService.startOrRetry(shop);
-      res.status(202).json(safeHistoricalScan(run));
+      res.status(202).json(await safeHistoricalScan(run));
     } catch (error) {
       if (error instanceof HistoricalScanConflictError) {
         return res.status(409).json({
@@ -581,7 +604,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             error.run.status === "completed"
               ? "The initial recent-order scan is already complete"
               : "A recent-order scan is already active",
-          scan: safeHistoricalScan(error.run),
+          scan: await safeHistoricalScan(error.run),
         });
       }
       logger.error("[HistoricalScanAPI] Failed to start scan:", error);

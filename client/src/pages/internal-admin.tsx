@@ -394,7 +394,7 @@ export default function InternalAdminPage() {
                   <TableRow>
                     <TableHead>Store</TableHead>
                     <TableHead>Plan</TableHead>
-                        <TableHead>Period usage</TableHead>
+                    <TableHead>Live duplicate flags</TableHead>
                     <TableHead>Orders</TableHead>
                     <TableHead>Period</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
