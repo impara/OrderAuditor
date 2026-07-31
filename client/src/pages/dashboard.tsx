@@ -184,7 +184,10 @@ function OrderDetailsModal({ order, isOpen, onClose }: { order: Order; isOpen: b
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-order-details">
+        <DialogContent
+          className="!left-2 !right-2 !top-2 !bottom-[calc(6.5rem+env(safe-area-inset-bottom))] !w-auto !max-w-none !translate-x-0 !translate-y-0 overflow-y-auto rounded-lg p-4 sm:!left-[50%] sm:!right-auto sm:!top-[50%] sm:!bottom-auto sm:!w-full sm:!max-w-2xl sm:!translate-x-[-50%] sm:!translate-y-[-50%] sm:max-h-[90vh] sm:p-6"
+          data-testid="dialog-order-details"
+        >
           <DialogHeader>
             <DialogTitle className="text-xl">Order #{order.orderNumber} Details</DialogTitle>
             <DialogDescription>
