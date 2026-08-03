@@ -15,12 +15,9 @@ describe("formatHistoricalScanDescription", () => {
   it("explains mixed findings without calling them confirmed duplicates", () => {
     const description = formatHistoricalScanDescription(completedScan);
 
-    expect(description).toContain("120 orders checked");
-    expect(description).toContain("14 orders flagged for review");
+    expect(description).toContain("120 checked · 14 flagged.");
     expect(description).not.toContain("duplicate-looking groups");
-    expect(description).toContain("3 stronger matches (90–100%)");
-    expect(description).toContain("11 need review (70–89%)");
-    expect(description).toContain("Review each flagged order before taking action.");
+    expect(description).toContain("3 strong matches · 11 need closer review.");
     expect(description).not.toContain("Signals found:");
     expect(description.toLowerCase()).not.toContain("confirmed duplicate");
   });
@@ -35,9 +32,7 @@ describe("formatHistoricalScanDescription", () => {
       signals: [],
     });
 
-    expect(description).toContain("120 orders checked");
-    expect(description).toContain("no duplicate-looking orders flagged");
-    expect(description).toBe("120 orders checked · no duplicate-looking orders flagged.");
+    expect(description).toBe("120 checked · none flagged.");
   });
 
   it("includes the partial-check warning when the candidate cap was reached", () => {

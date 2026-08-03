@@ -23,7 +23,7 @@ type HistoricalScan = {
   errorMessage: string | null;
 };
 
-export function HistoricalScanCard() {
+export function HistoricalScanCard({ openFlagCount }: { openFlagCount?: number }) {
   const queryClient = useQueryClient();
   const invalidatedRun = useRef<string | null>(null);
   const { data: scan, isLoading } = useQuery<HistoricalScan | null>({
@@ -108,6 +108,11 @@ export function HistoricalScanCard() {
           <div>
             <h2 className="text-sm font-semibold">{title}</h2>
             <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+            {scan?.status === "completed" && scan.flaggedOrders > 0 && openFlagCount !== undefined && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                There are currently {openFlagCount} open flags in total; the result above covers only this 60-day scan.
+              </p>
+            )}
             {scan?.status === "completed" && (
               <details className="mt-2 text-xs text-muted-foreground">
                 <summary className="w-fit cursor-pointer font-medium text-foreground">

@@ -17,32 +17,27 @@ function plural(value: number, singular: string, pluralForm = `${singular}s`): s
 export function formatHistoricalScanDescription(
   scan: HistoricalScanDescriptionInput
 ): string {
-  const parts: string[] = [`${scan.ordersFetched} orders checked`];
+  const checkedLabel = `${scan.ordersFetched} checked`;
 
   if (scan.flaggedOrders === 0) {
-    parts.push("no duplicate-looking orders flagged");
-  } else {
-    parts.push(
-      `${scan.flaggedOrders} ${plural(scan.flaggedOrders, "order")} flagged for review`
-    );
+    return `${checkedLabel} · none flagged.`;
   }
 
-  let description = `${parts.join(" · ")}.`;
+  let description = `${checkedLabel} · ${scan.flaggedOrders} flagged.`;
 
-  if (scan.flaggedOrders > 0) {
-    const confidenceParts: string[] = [];
-    if (scan.strongerFindings > 0) {
-      confidenceParts.push(
-        `${scan.strongerFindings} stronger ${plural(scan.strongerFindings, "match", "matches")} (90–100%)`
-      );
-    }
-    if (scan.reviewFindings > 0) {
-      confidenceParts.push(`${scan.reviewFindings} need review (70–89%)`);
-    }
-    if (confidenceParts.length > 0) {
-      description += ` ${confidenceParts.join(" · ")}.`;
-    }
-    description += " Review each flagged order before taking action.";
+  const confidenceParts: string[] = [];
+  if (scan.strongerFindings > 0) {
+    confidenceParts.push(
+      `${scan.strongerFindings} strong ${plural(scan.strongerFindings, "match", "matches")}`
+    );
+  }
+  if (scan.reviewFindings > 0) {
+    confidenceParts.push(
+      `${scan.reviewFindings} ${scan.reviewFindings === 1 ? "needs" : "need"} closer review`
+    );
+  }
+  if (confidenceParts.length > 0) {
+    description += ` ${confidenceParts.join(" · ")}.`;
   }
 
   description += scan.candidateCapExceeded

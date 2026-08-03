@@ -615,78 +615,48 @@ export default function Dashboard() {
         <MonitoringActiveBanner status={onboardingStatus} stats={stats} />
         <QuotaWarningBanner />
         <ReviewPromptBanner />
-        <HistoricalScanCard />
-        <div className="flex flex-col lg:flex-row gap-6">
-          <div id="flagged-orders" className="flex-1 scroll-mt-24 order-2 lg:order-1">
-            {ordersLoading ? (
-              <Card>
+        {statsLoading ? (
+          <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <Card key={i}>
                 <CardContent className="p-6">
-                  <Skeleton className="h-64 w-full" />
+                  <Skeleton className="h-20 w-full" />
                 </CardContent>
               </Card>
-            ) : orders && orders.length > 0 ? (
-              <FlaggedOrdersTable
-                orders={orders}
-                total={totalFlaggedOrders}
-                limit={currentLimit}
-                offset={currentOffset}
-                onPreviousPage={() =>
-                  setFlaggedOrdersPage((page) => Math.max(page - 1, 0))
-                }
-                onNextPage={() => setFlaggedOrdersPage((page) => page + 1)}
-              />
-            ) : (
-              <EmptyState ordersChecked={onboardingStatus?.totalOrdersProcessed} />
-            )}
+            ))}
           </div>
-
-          <div className="w-full lg:w-80 order-1 lg:order-2">
-            {statsLoading ? (
-              <div className="grid grid-cols-2 lg:flex lg:flex-col gap-3">
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <Card key={i}>
-                    <CardContent className="p-6">
-                      <Skeleton className="h-20 w-full" />
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            ) : stats ? (
-              <div className="grid grid-cols-2 lg:flex lg:flex-col gap-3">
-                <StatsCard
-                  title="Open Flags"
-                  value={stats.totalFlagged}
-                  icon={AlertCircle}
-                  context="Needs review"
-                />
-                <StatsCard
-                  title="Orders Checked"
-                  value={onboardingStatus?.totalOrdersProcessed ?? "-"}
-                  icon={Package}
-                  context="All time"
-                />
-                <StatsCard
-                  title="Flagged Order Value"
-                  value={`$${stats.potentialDuplicateValue.toLocaleString()}`}
-                  icon={DollarSign}
-                  context="Open flags"
-                />
-                <StatsCard
-                  title="Flagged Today"
-                  value={stats.ordersFlaggedToday}
-                  icon={Flag}
-                  context="Since midnight"
-                />
-                <StatsCard
-                  title="Avg Resolution"
-                  value={stats.averageResolutionTime > 0 ? `${stats.averageResolutionTime}h` : "—"}
-                  icon={Clock}
-                  context={stats.averageResolutionTime > 0 ? "All resolved flags" : "No resolved flags yet"}
-                />
-              </div>
-            ) : null}
+        ) : stats ? (
+          <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            <StatsCard title="Open Flags" value={stats.totalFlagged} icon={AlertCircle} context="Needs review" />
+            <StatsCard title="Orders Checked" value={onboardingStatus?.totalOrdersProcessed ?? "-"} icon={Package} context="All time" />
+            <StatsCard title="Flagged Order Value" value={`$${stats.potentialDuplicateValue.toLocaleString()}`} icon={DollarSign} context="Open flags" />
+            <StatsCard title="Flagged Today" value={stats.ordersFlaggedToday} icon={Flag} context="Since midnight" />
+            <StatsCard title="Avg Resolution" value={stats.averageResolutionTime > 0 ? `${stats.averageResolutionTime}h` : "—"} icon={Clock} context={stats.averageResolutionTime > 0 ? "All resolved flags" : "No resolved flags yet"} />
           </div>
-        </div>
+        ) : null}
+        <HistoricalScanCard openFlagCount={stats?.totalFlagged} />
+        <div id="flagged-orders" className="scroll-mt-24">
+          {ordersLoading ? (
+            <Card>
+              <CardContent className="p-6">
+                <Skeleton className="h-64 w-full" />
+              </CardContent>
+            </Card>
+          ) : orders && orders.length > 0 ? (
+            <FlaggedOrdersTable
+              orders={orders}
+              total={totalFlaggedOrders}
+              limit={currentLimit}
+              offset={currentOffset}
+              onPreviousPage={() =>
+                setFlaggedOrdersPage((page) => Math.max(page - 1, 0))
+              }
+              onNextPage={() => setFlaggedOrdersPage((page) => page + 1)}
+            />
+          ) : (
+            <EmptyState ordersChecked={onboardingStatus?.totalOrdersProcessed} />
+          )}
+          </div>
       </main>
     </div>
   );
