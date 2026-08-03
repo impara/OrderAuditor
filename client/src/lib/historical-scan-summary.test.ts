@@ -17,11 +17,11 @@ describe("formatHistoricalScanDescription", () => {
 
     expect(description).toContain("120 orders checked");
     expect(description).toContain("14 orders flagged for review");
-    expect(description).toContain("4 duplicate-looking groups");
+    expect(description).not.toContain("duplicate-looking groups");
     expect(description).toContain("3 stronger matches (90–100%)");
     expect(description).toContain("11 need review (70–89%)");
-    expect(description).toContain("Signals found: email, address, and name");
-    expect(description).toContain("These are review signals, not automatic decisions.");
+    expect(description).toContain("Review each flagged order before taking action.");
+    expect(description).not.toContain("Signals found:");
     expect(description.toLowerCase()).not.toContain("confirmed duplicate");
   });
 
@@ -37,7 +37,7 @@ describe("formatHistoricalScanDescription", () => {
 
     expect(description).toContain("120 orders checked");
     expect(description).toContain("no duplicate-looking orders flagged");
-    expect(description).toContain("Future new orders continue to be checked normally.");
+    expect(description).toBe("120 orders checked · no duplicate-looking orders flagged.");
   });
 
   it("includes the partial-check warning when the candidate cap was reached", () => {

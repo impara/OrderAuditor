@@ -81,7 +81,7 @@ export function HistoricalScanCard() {
     action = null;
   } else if (scan?.status === "completed") {
     icon = <CheckCircle2 className="h-5 w-5 text-green-600" />;
-    title = "Recent-order scan complete";
+    title = "Recent 60-day scan complete";
     description = formatHistoricalScanDescription(scan);
     action = null;
   } else if (scan?.status === "failed") {
@@ -108,6 +108,16 @@ export function HistoricalScanCard() {
           <div>
             <h2 className="text-sm font-semibold">{title}</h2>
             <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+            {scan?.status === "completed" && (
+              <details className="mt-2 text-xs text-muted-foreground">
+                <summary className="w-fit cursor-pointer font-medium text-foreground">
+                  How matching works
+                </summary>
+                <p className="mt-1 max-w-2xl">
+                  Duplicate Guard compares email, phone, address, name, and SKU. Matches are review signals, not automatic decisions.
+                </p>
+              </details>
+            )}
           </div>
         </div>
         {action}

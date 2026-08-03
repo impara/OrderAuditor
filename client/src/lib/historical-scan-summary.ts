@@ -14,16 +14,6 @@ function plural(value: number, singular: string, pluralForm = `${singular}s`): s
   return value === 1 ? singular : pluralForm;
 }
 
-function formatList(values: readonly string[]): string {
-  if (values.length <= 1) {
-    return values[0] ?? "";
-  }
-  if (values.length === 2) {
-    return `${values[0]} and ${values[1]}`;
-  }
-  return `${values.slice(0, -1).join(", ")}, and ${values.at(-1)}`;
-}
-
 export function formatHistoricalScanDescription(
   scan: HistoricalScanDescriptionInput
 ): string {
@@ -35,11 +25,6 @@ export function formatHistoricalScanDescription(
     parts.push(
       `${scan.flaggedOrders} ${plural(scan.flaggedOrders, "order")} flagged for review`
     );
-    if (scan.matchesFound > 0) {
-      parts.push(
-        `${scan.matchesFound} duplicate-looking ${plural(scan.matchesFound, "group")}`
-      );
-    }
   }
 
   let description = `${parts.join(" · ")}.`;
@@ -57,19 +42,12 @@ export function formatHistoricalScanDescription(
     if (confidenceParts.length > 0) {
       description += ` ${confidenceParts.join(" · ")}.`;
     }
-    if (scan.signals.length > 0) {
-      description += ` Signals found: ${formatList(scan.signals)}.`;
-    }
-    description +=
-      " These are review signals, not automatic decisions. Review each flagged order before taking action.";
+    description += " Review each flagged order before taking action.";
   }
 
-  description +=
-    " Duplicate Guard compares order details such as email, phone, address, name, and SKU.";
-
   description += scan.candidateCapExceeded
-    ? " High-volume periods were partially checked. Review the available results while live monitoring continues."
-    : " Future new orders continue to be checked normally.";
+    ? " High-volume periods were partially checked; review the available results."
+    : "";
 
   return description;
 }

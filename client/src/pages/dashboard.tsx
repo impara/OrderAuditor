@@ -9,12 +9,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
-import { AlertCircle, TrendingUp, TrendingDown, DollarSign, Clock, Flag, Package, MapPin, Mail, Phone, Calendar, X, Menu, ChevronLeft, ChevronRight, CheckCircle2 } from "lucide-react";
+import { AlertCircle, DollarSign, Clock, Flag, Package, MapPin, Mail, Phone, Calendar, X, ChevronLeft, ChevronRight, CheckCircle2, ArrowRight } from "lucide-react";
 import type { Order, DashboardStats } from "@shared/schema";
 import { format } from "date-fns";
 import { useEffect, useState } from "react";
 import { apiRequest } from "@/lib/queryClient";
-import { Link, useLocation } from "wouter";
 import { Header } from "@/components/Header";
 import { QuotaWarningBanner } from "@/components/QuotaWarningBanner";
 import { HistoricalScanCard } from "@/components/HistoricalScanCard";
@@ -27,18 +26,13 @@ function StatsCard({
   title,
   value,
   icon: Icon,
-  trend,
-  trendLabel
+  context,
 }: {
   title: string;
   value: string | number;
   icon: any;
-  trend?: number;
-  trendLabel?: string;
+  context: string;
 }) {
-  const isPositiveTrend = trend !== undefined && trend >= 0;
-  const TrendIcon = isPositiveTrend ? TrendingUp : TrendingDown;
-
   return (
     <Card data-testid={`card-stat-${title.toLowerCase().replace(/\s+/g, '-')}`} className="overflow-hidden">
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 p-4">
@@ -49,17 +43,7 @@ function StatsCard({
       </CardHeader>
       <CardContent className="p-4 pt-0">
         <div className="text-xl sm:text-2xl font-bold text-foreground">{value}</div>
-        {trend !== undefined && (
-          <div className="flex items-center gap-1 mt-1">
-            <TrendIcon className={`h-3 w-3 ${isPositiveTrend ? 'text-chart-1' : 'text-destructive'}`} />
-            <span className={`text-xs ${isPositiveTrend ? 'text-chart-1' : 'text-destructive'}`}>
-              {Math.abs(trend)}%
-            </span>
-            {trendLabel && (
-              <span className="text-xs text-muted-foreground hidden sm:inline">{trendLabel}</span>
-            )}
-          </div>
-        )}
+        <p className="mt-1 text-xs text-muted-foreground">{context}</p>
       </CardContent>
     </Card>
   );
@@ -87,32 +71,35 @@ function MonitoringActiveBanner({
     status.totalOrdersProcessed === 1
       ? "1 order checked"
       : `${status.totalOrdersProcessed} orders checked`;
-  const duplicateLabel = stats
-    ? stats.totalFlagged === 1
-      ? "1 order flagged for review"
-      : `${stats.totalFlagged} orders flagged for review`
-    : null;
-  const activitySegments = [
-    ordersCheckedLabel,
-    duplicateLabel,
-    "monitoring new orders",
-  ].filter(Boolean);
+  const reviewButtonLabel = stats?.totalFlagged === 1
+    ? "Review 1 flagged order"
+    : `Review ${stats?.totalFlagged ?? 0} flagged orders`;
+  const hasFlags = Boolean(stats?.totalFlagged);
 
   return (
     <Card className="mb-6 border-green-200 bg-green-50/70 dark:border-green-900/50 dark:bg-green-950/20">
-      <CardContent className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <CheckCircle2 className="h-5 w-5 shrink-0 text-green-600" />
           <div>
             <h2 className="text-sm font-semibold text-foreground">Monitoring active</h2>
             <p className="text-xs text-muted-foreground">
-              {activitySegments.join(" | ")}
+              {ordersCheckedLabel} all time · New orders are checked automatically
             </p>
           </div>
         </div>
-        <Badge variant="secondary" className="w-fit text-xs">
-          Live
-        </Badge>
+        {hasFlags ? (
+          <Button size="sm" asChild data-testid="button-review-flagged-orders">
+            <a href="#flagged-orders">
+              {reviewButtonLabel}
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </a>
+          </Button>
+        ) : (
+          <Badge variant="secondary" className="w-fit text-xs">
+            Live · Nothing to review
+          </Badge>
+        )}
       </CardContent>
     </Card>
   );
@@ -623,14 +610,14 @@ export default function Dashboard() {
     <div className="min-h-screen bg-background">
       <Header />
 
-      <main className="container mx-auto px-4 sm:px-6 py-6">
+      <main className="container mx-auto px-4 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 md:pb-6">
         <OnboardingChecklist />
         <MonitoringActiveBanner status={onboardingStatus} stats={stats} />
         <QuotaWarningBanner />
         <ReviewPromptBanner />
         <HistoricalScanCard />
         <div className="flex flex-col lg:flex-row gap-6">
-          <div className="flex-1 order-2 lg:order-1">
+          <div id="flagged-orders" className="flex-1 scroll-mt-24 order-2 lg:order-1">
             {ordersLoading ? (
               <Card>
                 <CardContent className="p-6">
@@ -667,31 +654,34 @@ export default function Dashboard() {
             ) : stats ? (
               <div className="grid grid-cols-2 lg:flex lg:flex-col gap-3">
                 <StatsCard
-                  title="Orders Flagged"
+                  title="Open Flags"
                   value={stats.totalFlagged}
                   icon={AlertCircle}
-                  trend={stats.totalFlaggedTrend}
-                  trendLabel="vs last 7d"
+                  context="Needs review"
                 />
                 <StatsCard
                   title="Orders Checked"
                   value={onboardingStatus?.totalOrdersProcessed ?? "-"}
                   icon={Package}
+                  context="All time"
                 />
                 <StatsCard
-                  title="Potential Value"
+                  title="Flagged Order Value"
                   value={`$${stats.potentialDuplicateValue.toLocaleString()}`}
                   icon={DollarSign}
+                  context="Open flags"
                 />
                 <StatsCard
                   title="Flagged Today"
                   value={stats.ordersFlaggedToday}
                   icon={Flag}
+                  context="Since midnight"
                 />
                 <StatsCard
                   title="Avg Resolution"
-                  value={`${stats.averageResolutionTime}h`}
+                  value={stats.averageResolutionTime > 0 ? `${stats.averageResolutionTime}h` : "—"}
                   icon={Clock}
+                  context={stats.averageResolutionTime > 0 ? "All resolved flags" : "No resolved flags yet"}
                 />
               </div>
             ) : null}
