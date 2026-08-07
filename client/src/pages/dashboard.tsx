@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
-import { AlertCircle, DollarSign, Clock, Flag, Package, MapPin, Mail, Phone, Calendar, X, ChevronLeft, ChevronRight, CheckCircle2, ArrowRight } from "lucide-react";
+import { AlertCircle, DollarSign, Clock, Flag, Package, MapPin, Mail, Phone, Calendar, X, ChevronLeft, ChevronRight, CheckCircle2, ArrowRight, Info } from "lucide-react";
 import type { Order, DashboardStats } from "@shared/schema";
 import { format } from "date-fns";
 import { useEffect, useState } from "react";
@@ -49,13 +49,15 @@ function StatsCard({
   );
 }
 
-function ConfidenceBadge({ confidence }: { confidence: number }) {
-  if (confidence >= 90) {
-    return <Badge variant="destructive" className="whitespace-nowrap" data-testid="badge-confidence-high">High ({confidence}%)</Badge>;
-  } else if (confidence >= 70) {
-    return <Badge className="bg-chart-4 text-white hover:bg-chart-4/90 whitespace-nowrap" data-testid="badge-confidence-medium">Medium ({confidence}%)</Badge>;
+function ReviewScoreBadge({ score }: { score: number }) {
+  const title = "Rule score from matched criteria; this is not a fraud probability.";
+
+  if (score >= 90) {
+    return <Badge variant="destructive" className="whitespace-nowrap" title={title} data-testid="badge-confidence-high">Strong match · {score}/100</Badge>;
+  } else if (score >= 70) {
+    return <Badge className="bg-chart-4 text-white hover:bg-chart-4/90 whitespace-nowrap" title={title} data-testid="badge-confidence-medium">Review match · {score}/100</Badge>;
   }
-  return <Badge variant="secondary" className="whitespace-nowrap" data-testid="badge-confidence-low">Low ({confidence}%)</Badge>;
+  return <Badge variant="secondary" className="whitespace-nowrap" title={title} data-testid="badge-confidence-low">Below threshold · {score}/100</Badge>;
 }
 
 function MonitoringActiveBanner({
@@ -82,9 +84,9 @@ function MonitoringActiveBanner({
         <div className="flex items-center gap-3">
           <CheckCircle2 className="h-5 w-5 shrink-0 text-green-600" />
           <div>
-            <h2 className="text-sm font-semibold text-foreground">Monitoring active</h2>
+            <h2 className="text-sm font-semibold text-foreground">Connected and checking new orders</h2>
             <p className="text-xs text-muted-foreground">
-              {ordersCheckedLabel} all time · New orders are checked automatically
+              {ordersCheckedLabel} all time · {hasFlags ? reviewButtonLabel : "No duplicate-looking matches found"}
             </p>
           </div>
         </div>
@@ -97,7 +99,7 @@ function MonitoringActiveBanner({
           </Button>
         ) : (
           <Badge variant="secondary" className="w-fit text-xs">
-            Live · Nothing to review
+            Live · No matches found
           </Badge>
         )}
       </CardContent>
@@ -117,13 +119,34 @@ function EmptyState({ ordersChecked }: { ordersChecked?: number }) {
         <div className="rounded-full bg-muted p-4 mb-4">
           <Package className="h-8 w-8 text-muted-foreground" />
         </div>
-        <h3 className="text-lg font-semibold mb-2">No duplicates yet</h3>
+        <h3 className="text-lg font-semibold mb-2">No duplicate-looking orders found</h3>
         <p className="text-sm text-muted-foreground text-center max-w-md mb-4">
           {emptyStateCopy}
         </p>
         <Button variant="outline" asChild data-testid="button-adjust-settings">
-          <a href={`/settings${window.location.search}`}>Adjust Detection Settings</a>
+          <a href={`/settings${window.location.search}`}>Review detection criteria</a>
         </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DetectionGuide() {
+  return (
+    <Card className="mb-4 border-primary/15 bg-primary/[0.025]" data-testid="card-detection-guide">
+      <CardContent className="p-4">
+        <div className="flex items-start gap-3">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          <div className="space-y-1">
+            <h2 className="text-sm font-semibold">How flags are decided</h2>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Enabled criteria add to a review score. Orders reaching 70/100 are flagged so you can inspect them before fulfillment. The score explains rule strength; it is not a fraud probability.
+            </p>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Each flag includes the exact match evidence, such as email, phone, shipping address, customer name, or SKU.
+            </p>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
@@ -190,11 +213,11 @@ function OrderDetailsModal({ order, isOpen, onClose }: { order: Order; isOpen: b
               </h3>
               <div className="bg-muted/50 rounded-md p-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Confidence Score</span>
-                  {order.matchConfidence != null && <ConfidenceBadge confidence={order.matchConfidence} />}
+                  <span className="text-sm text-muted-foreground">Review Score</span>
+                  {order.matchConfidence != null && <ReviewScoreBadge score={order.matchConfidence} />}
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Match Reason</span>
+                  <span className="text-sm text-muted-foreground">Match Evidence</span>
                   <span className="text-sm font-medium">{order.matchReason}</span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -346,7 +369,7 @@ function MobileOrderCard({ order, onClick }: { order: Order; onClick: () => void
             </div>
           </div>
           <div className="text-right">
-            {order.matchConfidence && <ConfidenceBadge confidence={order.matchConfidence} />}
+            {order.matchConfidence != null && <ReviewScoreBadge score={order.matchConfidence} />}
           </div>
         </div>
 
@@ -460,7 +483,7 @@ function FlaggedOrdersTable({
               <TableRow>
                 <TableHead className="w-[140px]">Order Number</TableHead>
                 <TableHead>Customer</TableHead>
-                <TableHead>Match Reason</TableHead>
+                <TableHead>Match Evidence</TableHead>
                 <TableHead className="text-right">Order Total</TableHead>
                 <TableHead>Date Flagged</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -495,7 +518,7 @@ function FlaggedOrdersTable({
                     </div>
                   </TableCell>
                   <TableCell>
-                    {order.matchConfidence && <ConfidenceBadge confidence={order.matchConfidence} />}
+                    {order.matchConfidence != null && <ReviewScoreBadge score={order.matchConfidence} />}
                     <div className="text-xs text-muted-foreground mt-1" data-testid={`text-match-reason-${order.id}`}>
                       {order.matchReason}
                     </div>
@@ -635,6 +658,7 @@ export default function Dashboard() {
           </div>
         ) : null}
         <HistoricalScanCard openFlagCount={stats?.totalFlagged} />
+        <DetectionGuide />
         <div id="flagged-orders" className="scroll-mt-24">
           {ordersLoading ? (
             <Card>
