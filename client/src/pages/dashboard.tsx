@@ -36,7 +36,7 @@ function StatsCard({
   return (
     <Card data-testid={`card-stat-${title.toLowerCase().replace(/\s+/g, '-')}`} className="overflow-hidden">
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 p-4">
-        <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground truncate">
+        <CardTitle className="text-xs font-medium leading-tight text-muted-foreground sm:text-sm">
           {title}
         </CardTitle>
         <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -53,9 +53,9 @@ function ReviewScoreBadge({ score }: { score: number }) {
   const title = "Rule score from matched criteria; this is not a fraud probability.";
 
   if (score >= 90) {
-    return <Badge variant="destructive" className="whitespace-nowrap" title={title} data-testid="badge-confidence-high">Strong match · {score}/100</Badge>;
+    return <Badge className="whitespace-nowrap bg-orange-700 text-white hover:bg-orange-700/90" title={title} data-testid="badge-confidence-high">Strong match · {score}/100</Badge>;
   } else if (score >= 70) {
-    return <Badge className="bg-chart-4 text-white hover:bg-chart-4/90 whitespace-nowrap" title={title} data-testid="badge-confidence-medium">Review match · {score}/100</Badge>;
+    return <Badge className="whitespace-nowrap bg-amber-500 text-amber-950 hover:bg-amber-500/90" title={title} data-testid="badge-confidence-medium">Review match · {score}/100</Badge>;
   }
   return <Badge variant="secondary" className="whitespace-nowrap" title={title} data-testid="badge-confidence-low">Below threshold · {score}/100</Badge>;
 }
@@ -74,8 +74,8 @@ function MonitoringActiveBanner({
       ? "1 order checked"
       : `${status.totalOrdersProcessed} orders checked`;
   const reviewButtonLabel = stats?.totalFlagged === 1
-    ? "Review 1 flagged order"
-    : `Review ${stats?.totalFlagged ?? 0} flagged orders`;
+    ? "Review 1 order"
+    : `Review ${stats?.totalFlagged ?? 0} orders`;
   const hasFlags = Boolean(stats?.totalFlagged);
 
   return (
@@ -86,7 +86,7 @@ function MonitoringActiveBanner({
           <div>
             <h2 className="text-sm font-semibold text-foreground">Connected and checking new orders</h2>
             <p className="text-xs text-muted-foreground">
-              {ordersCheckedLabel} all time · {hasFlags ? reviewButtonLabel : "No duplicate-looking matches found"}
+              {ordersCheckedLabel} in total · {hasFlags ? `${stats?.totalFlagged} ${stats?.totalFlagged === 1 ? "order needs" : "orders need"} review` : "No duplicate-looking matches found"}
             </p>
           </div>
         </div>
@@ -140,10 +140,10 @@ function DetectionGuide() {
           <div className="space-y-1">
             <h2 className="text-sm font-semibold">How flags are decided</h2>
             <p className="text-xs leading-relaxed text-muted-foreground">
-              Enabled criteria add to a review score. Orders reaching 70/100 are flagged so you can inspect them before fulfillment. The score explains rule strength; it is not a fraud probability.
+              Your selected match rules contribute to each order’s review score. Orders scoring 70 or higher are flagged for review before fulfillment.
             </p>
             <p className="text-xs leading-relaxed text-muted-foreground">
-              Each flag includes the exact match evidence, such as email, phone, shipping address, customer name, or SKU.
+              The score measures match strength—not the probability of fraud. Each flag shows which details matched, such as email, phone, shipping address, customer name, or SKU.
             </p>
           </div>
         </div>
@@ -651,10 +651,10 @@ export default function Dashboard() {
         ) : stats ? (
           <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             <StatsCard title="Open Flags" value={stats.totalFlagged} icon={AlertCircle} context="Needs review" />
-            <StatsCard title="Orders Checked" value={onboardingStatus?.totalOrdersProcessed ?? "-"} icon={Package} context="All time" />
-            <StatsCard title="Flagged Order Value" value={`$${stats.potentialDuplicateValue.toLocaleString()}`} icon={DollarSign} context="Open flags" />
+            <StatsCard title="Orders Checked" value={onboardingStatus?.totalOrdersProcessed ?? "-"} icon={Package} context="In total" />
+            <StatsCard title="Value of Flagged Orders" value={`$${stats.potentialDuplicateValue.toLocaleString()}`} icon={DollarSign} context="Open flags" />
             <StatsCard title="Flagged Today" value={stats.ordersFlaggedToday} icon={Flag} context="Since midnight" />
-            <StatsCard title="Avg Resolution" value={stats.averageResolutionTime > 0 ? `${stats.averageResolutionTime}h` : "—"} icon={Clock} context={stats.averageResolutionTime > 0 ? "All resolved flags" : "No resolved flags yet"} />
+            <StatsCard title="Average Resolution Time" value={stats.averageResolutionTime > 0 ? `${stats.averageResolutionTime}h` : "—"} icon={Clock} context={stats.averageResolutionTime > 0 ? "All resolved flags" : "No resolved flags yet"} />
           </div>
         ) : null}
         <HistoricalScanCard openFlagCount={stats?.totalFlagged} />

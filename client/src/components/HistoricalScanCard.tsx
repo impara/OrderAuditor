@@ -81,7 +81,7 @@ export function HistoricalScanCard({ openFlagCount }: { openFlagCount?: number }
     action = null;
   } else if (scan?.status === "completed") {
     icon = <CheckCircle2 className="h-5 w-5 text-green-600" />;
-    title = "Recent 60-day scan complete";
+    title = "60-day order scan complete";
     description = formatHistoricalScanDescription(scan);
     action = null;
   } else if (scan?.status === "failed") {
@@ -110,7 +110,7 @@ export function HistoricalScanCard({ openFlagCount }: { openFlagCount?: number }
             <p className="mt-1 text-xs text-muted-foreground">{description}</p>
             {scan?.status === "completed" && scan.flaggedOrders > 0 && openFlagCount !== undefined && (
               <p className="mt-1 text-xs text-muted-foreground">
-                There are currently {openFlagCount} open flags in total; the result above covers only this 60-day scan.
+                {openFlagCount} {openFlagCount === 1 ? "order currently needs" : "orders currently need"} review in total.
               </p>
             )}
             {scan?.status === "completed" && (
@@ -119,7 +119,7 @@ export function HistoricalScanCard({ openFlagCount }: { openFlagCount?: number }
                   How matching works
                 </summary>
                 <p className="mt-1 max-w-2xl">
-                  Duplicate Guard compares email, phone, address, name, and SKU. Matches are review signals, not automatic decisions.
+                  Duplicate Guard compares order details such as email, phone, shipping address, customer name, and SKU. Matches are signals for review—not automatic decisions.
                 </p>
               </details>
             )}

@@ -17,13 +17,13 @@ function plural(value: number, singular: string, pluralForm = `${singular}s`): s
 export function formatHistoricalScanDescription(
   scan: HistoricalScanDescriptionInput
 ): string {
-  const checkedLabel = `${scan.ordersFetched} checked`;
+  const checkedLabel = `${scan.ordersFetched} ${plural(scan.ordersFetched, "order")} checked`;
 
   if (scan.flaggedOrders === 0) {
     return `${checkedLabel} · none flagged.`;
   }
 
-  let description = `${checkedLabel} · ${scan.flaggedOrders} flagged.`;
+  let description = `${checkedLabel} · ${scan.flaggedOrders} flagged in this scan.`;
 
   const confidenceParts: string[] = [];
   if (scan.strongerFindings > 0) {
@@ -33,7 +33,7 @@ export function formatHistoricalScanDescription(
   }
   if (scan.reviewFindings > 0) {
     confidenceParts.push(
-      `${scan.reviewFindings} ${scan.reviewFindings === 1 ? "needs" : "need"} closer review`
+      `${scan.reviewFindings} ${scan.reviewFindings === 1 ? "needs" : "need"} review`
     );
   }
   if (confidenceParts.length > 0) {
