@@ -1,4 +1,10 @@
 const DEFAULT_RECOVERY_TTL_MS = 10 * 60 * 1000;
+const DEFAULT_MAX_RECOVERY_ENTRIES = 1_000;
+
+export type OAuthRecoveryClaimResult =
+  | "claimed"
+  | "already_claimed"
+  | "capacity_exhausted";
 
 export class OAuthRecoveryRegistry {
   // Process-local UX loop protection only. This is not an authorization control;
@@ -7,10 +13,11 @@ export class OAuthRecoveryRegistry {
 
   constructor(
     private readonly ttlMs = DEFAULT_RECOVERY_TTL_MS,
-    private readonly now: () => number = Date.now
+    private readonly now: () => number = Date.now,
+    private readonly maxEntries = DEFAULT_MAX_RECOVERY_ENTRIES
   ) {}
 
-  claimAutomaticRetry(shop: string): boolean {
+  claimAutomaticRetry(shop: string): OAuthRecoveryClaimResult {
     const key = shop.toLowerCase();
     const now = this.now();
 
@@ -21,11 +28,15 @@ export class OAuthRecoveryRegistry {
     });
 
     if (this.claimedAtByShop.has(key)) {
-      return false;
+      return "already_claimed";
+    }
+
+    if (this.claimedAtByShop.size >= this.maxEntries) {
+      return "capacity_exhausted";
     }
 
     this.claimedAtByShop.set(key, now);
-    return true;
+    return "claimed";
   }
 
   clear(shop: string): boolean {

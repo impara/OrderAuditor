@@ -2,7 +2,12 @@ import { CookieNotFound } from "@shopify/shopify-api";
 import type { Response } from "express";
 import type { OAuthRecoveryRegistry } from "./oauth-recovery";
 
-const SHOP_DOMAIN_PATTERN = /^[a-z0-9][a-z0-9_-]*\.myshopify\.com$/;
+// Keep this defensive assertion aligned with the built-in domains accepted by
+// Shopify's sanitizeShop utility. The SDK sanitizer remains authoritative at
+// the integration boundary; this prevents paths/control characters from being
+// introduced before constructing the relative recovery URL.
+const SHOP_DOMAIN_PATTERN =
+  /^[a-z0-9][a-z0-9_-]*\.(?:myshopify\.com|shopify\.com|myshopify\.io|shop\.dev)\/*$/;
 
 type RecoveryLogger = {
   warn(message: string, context: Record<string, string>): void;
@@ -16,11 +21,15 @@ export function isOAuthCookieNotFound(error: unknown): boolean {
 }
 
 function normalizeShop(shop: string): string {
-  const normalized = shop.trim().toLowerCase();
+  if (shop !== shop.trim()) {
+    throw new Error("Invalid Shopify shop domain");
+  }
+
+  const normalized = shop.toLowerCase();
   if (!SHOP_DOMAIN_PATTERN.test(normalized)) {
     throw new Error("Invalid Shopify shop domain");
   }
-  return normalized;
+  return normalized.replace(/\/+$/, "");
 }
 
 export function buildOAuthRestartPath(shop: string): string {
@@ -90,7 +99,8 @@ export function handleOAuthCallbackFailure({
   // The expired callback is not trusted as an authorization event. Its code,
   // HMAC, state, timestamp, and other parameters are discarded. This redirect
   // only selects a sanitized shop for a completely fresh SDK-managed OAuth flow.
-  if (registry.claimAutomaticRetry(normalizedShop)) {
+  const claim = registry.claimAutomaticRetry(normalizedShop);
+  if (claim === "claimed") {
     logger.warn("[AuthCallback] oauth_cookie_missing", {
       shop: normalizedShop,
       action: "automatic_retry",
@@ -99,10 +109,15 @@ export function handleOAuthCallbackFailure({
     return true;
   }
 
-  logger.error("[AuthCallback] oauth_cookie_missing", {
-    shop: normalizedShop,
-    action: "manual_recovery",
-  });
+  logger.error(
+    claim === "capacity_exhausted"
+      ? "[AuthCallback] oauth_recovery_capacity_exhausted"
+      : "[AuthCallback] oauth_cookie_missing",
+    {
+      shop: normalizedShop,
+      action: "manual_recovery",
+    }
+  );
   response.type("html").status(409).send(renderOAuthRecoveryPage(normalizedShop));
   return true;
 }

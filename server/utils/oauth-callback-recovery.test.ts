@@ -26,7 +26,9 @@ function responseDouble() {
 
 const logger = () => ({ warn: vi.fn(), error: vi.fn() });
 const sanitizeShop = vi.fn((shop: string) =>
-  /^[a-z0-9][a-z0-9_-]*\.myshopify\.com$/i.test(shop)
+  /^[a-z0-9][a-z0-9_-]*\.(?:myshopify\.com|shopify\.com|myshopify\.io|shop\.dev)\/*$/i.test(
+    shop
+  )
     ? shop.toLowerCase()
     : null
 );
@@ -46,11 +48,21 @@ describe("OAuth callback recovery helpers", () => {
     expect(buildOAuthRestartPath("store_name.myshopify.com")).toBe(
       "/api/auth?shop=store_name.myshopify.com"
     );
+    expect(buildOAuthRestartPath("store-name.shopify.com")).toBe(
+      "/api/auth?shop=store-name.shopify.com"
+    );
+    expect(buildOAuthRestartPath("store-name.myshopify.io/")).toBe(
+      "/api/auth?shop=store-name.myshopify.io"
+    );
+    expect(buildOAuthRestartPath("store-name.shop.dev///")).toBe(
+      "/api/auth?shop=store-name.shop.dev"
+    );
     expect(() => buildOAuthRestartPath("evil.example")).toThrow();
     expect(() =>
       buildOAuthRestartPath("store.myshopify.com%0d%0aLocation:evil")
     ).toThrow();
     expect(() => buildOAuthRestartPath("store.myshopify.com/redirect")).toThrow();
+    expect(() => buildOAuthRestartPath("store.myshopify.com\n")).toThrow();
   });
 
   it("renders a safe manual recovery page", () => {
@@ -125,6 +137,36 @@ describe("handleOAuthCallbackFailure", () => {
     expect(logs.error).toHaveBeenCalledWith(
       "[AuthCallback] oauth_cookie_missing",
       { shop: "slow-shop.myshopify.com", action: "manual_recovery" }
+    );
+  });
+
+  it("returns a safe 409 and distinct log when recovery capacity is exhausted", () => {
+    const registry = new OAuthRecoveryRegistry(10 * 60 * 1000, Date.now, 1);
+    registry.claimAutomaticRetry("existing.myshopify.com");
+    const response = responseDouble();
+    const logs = logger();
+
+    expect(
+      handleOAuthCallbackFailure({
+        error: new CookieNotFound("missing code=secret-code&state=secret-state"),
+        shop: "new-shop.myshopify.com",
+        response: response as any,
+        registry,
+        logger: logs,
+        sanitizeShop,
+      })
+    ).toBe(true);
+
+    expect(response.set).toHaveBeenCalledWith("Cache-Control", "no-store");
+    expect(response.redirect).not.toHaveBeenCalled();
+    expect(response.type).toHaveBeenCalledWith("html");
+    expect(response.status).toHaveBeenCalledWith(409);
+    expect(logs.error).toHaveBeenCalledWith(
+      "[AuthCallback] oauth_recovery_capacity_exhausted",
+      { shop: "new-shop.myshopify.com", action: "manual_recovery" }
+    );
+    expect(JSON.stringify(logs.error.mock.calls)).not.toMatch(
+      /secret-code|secret-state/
     );
   });
 

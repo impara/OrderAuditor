@@ -106,7 +106,9 @@ describe("runOAuthCallback", () => {
       })
     ).resolves.toBe(callback);
 
-    expect(registry.claimAutomaticRetry("slow-shop.myshopify.com")).toBe(true);
+    expect(registry.claimAutomaticRetry("slow-shop.myshopify.com")).toBe(
+      "claimed"
+    );
   });
 
   it("rethrows generic OAuth errors for the existing failure path", async () => {
@@ -140,7 +142,9 @@ describe("runOAuthCallback", () => {
       })
     ).resolves.toBe(callback);
 
-    expect(registry.claimAutomaticRetry("slow-shop.myshopify.com")).toBe(true);
+    expect(registry.claimAutomaticRetry("slow-shop.myshopify.com")).toBe(
+      "claimed"
+    );
     expect(logs.info).toHaveBeenCalledWith(
       "[AuthCallback] oauth_cookie_recovered",
       {

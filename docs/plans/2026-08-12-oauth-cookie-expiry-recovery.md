@@ -4,7 +4,7 @@
 
 **Goal:** Recover new Shopify installations when the SDK's 60-second OAuth state cookie expires, without weakening Shopify's HMAC/state validation or leaving merchants on a raw HTTP 500 page.
 
-**Architecture:** Keep `@shopify/shopify-api` as the sole OAuth validator and token exchanger. When `shopify.auth.callback()` throws `CookieNotFound`, reject that expired callback as an authorization event and discard its code, HMAC, state, timestamp, host, and every other parameter except a strictly sanitized `*.myshopify.com` shop name. Use that shop name to start one bounded, completely fresh SDK-managed OAuth flow. Track the retry in a small process-local TTL registry, then show a safe manual recovery page rather than looping if the fresh flow also expires.
+**Architecture:** Keep `@shopify/shopify-api` as the sole OAuth validator and token exchanger. When `shopify.auth.callback()` throws `CookieNotFound`, reject that expired callback as an authorization event and discard its code, HMAC, state, timestamp, host, and every other parameter except the shop value accepted by Shopify's sanitizer. Use that sanitized shop name to start one bounded, completely fresh SDK-managed OAuth flow. Track the retry in a small process-local TTL registry, then show a safe manual recovery page rather than looping if the fresh flow also expires.
 
 **Tech Stack:** Express 4, TypeScript, `@shopify/shopify-api` 12.3, Vitest 4, existing Postgres session storage and structured logger.
 
@@ -20,7 +20,7 @@
 - Preserve the existing SDK HMAC/state checks, offline-token exchange, session storage, webhook registration, billing reconciliation, and historical scan startup.
 - Add structured, non-secret logs for initial recovery, repeated failure, and successful recovery.
 - Add unit tests, typecheck, build, and a production smoke-test procedure.
-- Treat the process-local registry only as UX loop protection: a restart clears it, replicas have independent state, and tabs for one shop share the local retry allowance.
+- Treat the process-local registry only as UX loop protection: a restart clears it, replicas have independent state, and tabs for one shop share the local retry allowance. Bound it to 1,000 active entries and fall back to the safe manual recovery page if capacity is exhausted.
 
 ### Out of scope
 
