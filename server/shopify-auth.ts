@@ -14,6 +14,8 @@ import { createSecretKey } from "crypto";
 import { shopifyBillingService } from "./services/shopify-billing.service";
 import { subscriptionService } from "./services/subscription.service";
 import { billingReconciliationService } from "./services/billing-reconciliation.service";
+import { runOAuthCallback } from "./utils/oauth-callback-runner";
+import { oauthRecoveryRegistry } from "./utils/oauth-recovery";
 
 // Initialize Shopify API client
 const shopify = shopifyApi({
@@ -290,11 +292,25 @@ export async function authCallback(req: Request, res: Response) {
       )}`
     );
 
-    const callback = await shopify.auth.callback({
-      rawRequest: req,
-      rawResponse: res,
-      expiring: true, // Request an expiring offline token (access token + rotating refresh token)
+    const callback = await runOAuthCallback({
+      execute: () =>
+        shopify.auth.callback({
+          rawRequest: req,
+          rawResponse: res,
+          expiring: true, // Request an expiring offline token (access token + rotating refresh token)
+        }),
+      shop: req.query.shop,
+      response: res,
+      registry: oauthRecoveryRegistry,
+      logger,
+      // CookieNotFound means the original callback cannot be authorized. Discard
+      // it and use only a strictly sanitized shop to start fresh SDK-managed OAuth.
+      sanitizeShop: (shop) => shopify.utils.sanitizeShop(shop, false),
     });
+
+    if (!callback) {
+      return;
+    }
 
     const { session } = callback;
     const tokenPrefix = session.accessToken?.substring(0, 6) || "N/A";
