@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Google tag (gtag.js) for GA4 + Google Ads -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-PEHD1P2YQG"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-PEHD1P2YQG');
+      gtag('config', 'AW-105962761');
+      function trackDuplicateGuardAppStoreClick(location, element){
+        if (typeof gtag !== 'function') return;
+        gtag('event', 'app_store_click', {
+          app: 'duplicate_guard',
+          location: location,
+          page_path: window.location.pathname,
+          cta_text: element ? element.textContent.trim() : ''
+        });
+        gtag('event', 'shopify_install_click', {location: location});
+      }
+    </script>
+    <title>Shopify Duplicate Order Review Checklist | Duplicate Guard</title>
+    <meta name="description" content="A practical Shopify duplicate order review checklist for catching duplicate-looking orders before fulfillment. Compare contact fields, shipping details, and order patterns, then decide manually.">
+    <link rel="canonical" href="https://duplicateguard.amertech.online/duplicate-order-review-checklist.html">
+    <meta property="og:title" content="Shopify Duplicate Order Review Checklist | Duplicate Guard">
+    <meta property="og:description" content="Use a simple review checklist to catch duplicate-looking Shopify orders before fulfillment, compare match reasons, and decide before shipping.">
+    <meta property="og:url" content="https://duplicateguard.amertech.online/duplicate-order-review-checklist.html">
+    <meta property="og:type" content="article">
+    <style>
+        :root {
+            --primary: #008060;
+            --primary-dark: #004c3f;
+            --text-main: #202223;
+            --text-sub: #6d7175;
+            --bg-light: #f6f6f7;
+            --border: #e1e3e5;
+            --white: #ffffff;
+        }
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--text-main); line-height: 1.7; margin: 0; padding: 0; background: var(--white); }
+        a { color: var(--primary); }
+        .container { max-width: 860px; margin: 0 auto; padding: 40px 20px; }
+        .wide-container { max-width: 1100px; margin: 0 auto; padding: 0 20px; }
+        header { border-bottom: 1px solid var(--border); background: var(--white); }
+        .nav { display: flex; justify-content: space-between; align-items: center; padding: 18px 0; gap: 20px; }
+        .logo { font-weight: 700; color: var(--text-main); text-decoration: none; display: flex; align-items: center; gap: 8px; flex-shrink: 0; white-space: nowrap; }
+        .logo img { height: 32px; width: auto; }
+        .nav-links { display: flex; align-items: center; justify-content: flex-end; gap: 18px; flex-wrap: wrap; }
+        .nav-links a { color: var(--text-sub); text-decoration: none; font-weight: 600; font-size: 0.95rem; }
+        .nav-links a:hover { color: var(--primary); }
+        .nav-links .btn { color: white; white-space: nowrap; }
+        .btn { display: inline-block; background: var(--primary); color: white; padding: 14px 24px; border-radius: 8px; font-weight: 700; text-decoration: none; transition: transform 0.2s, background-color 0.2s; }
+        .btn:hover { transform: translateY(-2px); background: var(--primary-dark); color: white; }
+        .back-link { display: inline-block; margin-bottom: 24px; color: var(--primary); text-decoration: none; font-weight: 700; }
+        .back-link:hover { text-decoration: underline; }
+        h1 { font-size: 2.7rem; margin: 0 0 1rem; line-height: 1.15; letter-spacing: -0.02em; }
+        h2 { font-size: 1.75rem; margin-top: 2.7rem; margin-bottom: 1rem; color: var(--primary-dark); line-height: 1.25; }
+        h3 { font-size: 1.25rem; margin-top: 1.6rem; margin-bottom: 0.65rem; }
+        p { margin-bottom: 1.25rem; color: var(--text-sub); font-size: 1.08rem; }
+        ul, ol { margin-bottom: 1.5rem; padding-left: 24px; color: var(--text-sub); font-size: 1.05rem; }
+        li { margin-bottom: 0.65rem; }
+        strong { color: var(--text-main); }
+        .eyebrow { display: inline-block; color: var(--primary-dark); background: #e3f1df; font-weight: 700; padding: 6px 12px; border-radius: 999px; font-size: 0.9rem; margin-bottom: 1.2rem; }
+        .intro { font-size: 1.22rem; color: var(--text-sub); }
+        .highlight-box { background: #e3f1df; border-left: 4px solid var(--primary); padding: 22px 26px; margin: 2rem 0; border-radius: 0 10px 10px 0; }
+        .highlight-box p { margin: 0; color: var(--text-main); }
+        .checklist { background: var(--bg-light); padding: 24px 26px; border-radius: 12px; border: 1px solid var(--border); }
+        .checklist ul { list-style: none; padding-left: 0; }
+        .checklist li { padding-left: 32px; position: relative; margin-bottom: 0.9rem; }
+        .checklist li::before { content: ""; position: absolute; left: 0; top: 2px; width: 18px; height: 18px; border: 2px solid var(--primary); border-radius: 4px; background: var(--white); }
+        .decision-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; margin: 1.5rem 0; }
+        .decision-card { background: var(--bg-light); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+        .decision-card h3 { margin-top: 0; }
+        .cta-box { background: #002e25; color: white; padding: 42px; border-radius: 14px; text-align: center; margin-top: 3rem; }
+        .cta-box h2 { color: white; margin-top: 0; }
+        .cta-box p { color: rgba(255,255,255,0.82); margin-left: auto; margin-right: auto; max-width: 620px; }
+        footer { border-top: 1px solid var(--border); margin-top: 50px; padding: 30px 0; color: var(--text-sub); }
+        .footer-links { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 12px; }
+        .footer-links a { color: var(--text-sub); text-decoration: none; }
+        .footer-links a:hover { color: var(--primary); text-decoration: underline; }
+        @media (max-width: 720px) {
+            h1 { font-size: 2.1rem; }
+            .nav { align-items: flex-start; flex-direction: column; }
+            .nav-links { width: 100%; display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
+            .nav-links a { font-size: 0.95rem; text-align: center; padding: 10px 0; }
+            .nav-links .btn { width: 100%; text-align: center; padding: 12px 16px; font-size: 1rem; }
+            .container { padding-top: 28px; }
+        }
+    </style>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "How do I know if two Shopify orders are duplicates?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Start by comparing the contact and shipping fields, the items ordered, and the timing. If the orders share email, phone, address, customer name, SKU overlap, or source and arrived close together, review them before fulfillment. The goal is not to assume every match is a true duplicate; it is to catch the ones that deserve a human check."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Should duplicate orders be merged automatically?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Not always. Some similar orders are legitimate repeat purchases, add-ons, or sync-created lookalikes. Automatic merging can be useful when the match is obvious, but a review-first process is safer when the answer is uncertain."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What fields should a duplicate order review checklist include?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Useful fields include email, phone, shipping address, customer name, SKU or product overlap, order timing, and order source or channel metadata. Different store setups rely on different signals, so a checklist should be broader than one field."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Does Duplicate Guard automatically cancel or merge orders?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. Duplicate Guard is built around flagging duplicate-looking orders for merchant review before fulfillment. The merchant stays in control of the final decision, including whether to fulfill, hold, contact, cancel, refund, or merge manually."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "When is a duplicate order checklist most useful?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "It is most useful for stores with fast fulfillment, COD or phone-first customers, flash sales or limited drops, multiple order sources, or manual duplicate-order checking today. It helps teams review suspicious matches before labels are purchased and boxes are packed."
+          }
+        }
+      ]
+    }
+    </script>
+</head>
+<body>
+    <header>
+        <div class="wide-container nav">
+            <a href="/" class="logo">
+                <img src="/assets/logo.png" alt="Duplicate Guard Logo">
+                Duplicate Guard
+            </a>
+            <nav class="nav-links" aria-label="Primary navigation">
+                <a href="/shopify-duplicate-order-checker.html">Duplicate order checker</a>
+                <a href="/duplicate-order-review-checklist.html">Duplicate order checklist</a>
+                <a href="/order-merger-alternative.html">Order Merger alternative</a>
+                <a href="/blog.html">Blog</a>
+                <a href="https://apps.shopify.com/duplicate-guard" class="btn" onclick="trackDuplicateGuardAppStoreClick('guide_header', this);">Install on Shopify</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <a href="/" class="back-link">← Back to Home</a>
+        <span class="eyebrow">Duplicate order review checklist</span>
+        <h1>Duplicate Order Review Checklist: Catch Shopify Duplicate Orders Before Fulfillment</h1>
+        <p class="intro">Duplicate-looking Shopify orders are easy to miss when they arrive fast, look similar, and look legitimate at first glance. A customer may place two orders minutes apart. A sales-channel sync may create a second order. A phone-first shopper may use two different contact details. The cost usually shows up later: after labels are printed, after packing starts, or after support has already begun.</p>
+
+        <div class="highlight-box">
+            <p><strong>A review checklist helps your team catch the risky cases early without slowing down the orders that are clearly fine.</strong></p>
+        </div>
+
+        <h2>Why a checklist matters before fulfillment</h2>
+        <p>The hardest moment to fix a duplicate order is after fulfillment. At that point, the shipping label is bought, the box is sealed, and the customer or support thread has already started. If two similar orders were actually the same customer placing twice, or a sync issue creating a duplicate, the mistake is already in motion.</p>
+        <p>A checklist keeps the review point early enough to matter.</p>
+        <ul>
+            <li>It tells your team what to compare, not just what to worry about.</li>
+            <li>It turns a vague "could be a duplicate" feeling into a repeatable review process.</li>
+            <li>It helps separate true duplicates from intentional repeat purchases and unrelated shared details.</li>
+        </ul>
+
+        <h2>Quick duplicate order review checklist</h2>
+        <p>Use this as a first-pass review before anything ships.</p>
+        <div class="checklist">
+            <ul>
+                <li>Does the order match a recent order on email, phone, or shipping address?</li>
+                <li>Are the customer name and contact details identical, similar, or only partly shared?</li>
+                <li>Is the same sample, SKU, or product appearing in both orders?</li>
+                <li>Did the orders arrive within a short window of each other?</li>
+                <li>Do the order source, channel, or tags suggest a sync or repeat-submit cause?</li>
+                <li>Could this be an intentional second purchase, add-on order, or forgotten item?</li>
+                <li>Is there any existing note, tag, or prior review attached to the customer or order?</li>
+            </ul>
+        </div>
+        <p>A checklist answer is not a final decision. It is a signal that the order deserves a closer look before fulfillment.</p>
+
+        <h2>What to compare on a Shopify duplicate order</h2>
+        <p>No single field catches every duplicate. Different store setups create different risks.</p>
+
+        <h3>Customer and contact fields</h3>
+        <p>Email, phone number, customer name, and account details can catch obvious repeats, but email-only checks miss phone-first and guest-checkout patterns. A shared phone number with different names, or a shared address with different emails, may still be worth reviewing.</p>
+
+        <h3>Shipping fields</h3>
+        <p>Address matching is useful when customers use guest checkout, changed emails, or slightly different formatting such as apartment numbers, suite codes, or building names. Small address variations can hide a household-level pattern, especially on sample or one-per-household promotions.</p>
+
+        <h3>Order pattern fields</h3>
+        <p>Repeated SKUs, close order timing, order source, channel metadata, tags, and notes help your team understand why the order was flagged. Two orders with identical items and nearly identical timing are more worth reviewing than two unrelated orders that happen to share one contact field.</p>
+
+        <h2>Review workflow: flag, then decide</h2>
+        <p>A useful duplicate order review process usually follows the same shape.</p>
+        <ol>
+            <li><strong>Flag the order before fulfillment.</strong> The review needs to happen early enough to change the outcome.</li>
+            <li><strong>Review the match reason.</strong> A useful flag should show what matched: email, phone, address, customer name, SKU overlap, order timing, or source.</li>
+            <li><strong>Check the order context.</strong> Tags, notes, source fields, and prior reviews can help confirm whether multiple sync paths or a customer behavior created the lookalike order.</li>
+            <li><strong>Decide manually.</strong> Fulfill both, hold one, contact the customer, cancel or refund, merge manually, or fix the upstream setup.</li>
+            <li><strong>Track repeat patterns.</strong> If the same kind of duplicate-looking order keeps appearing, the root issue may be upstream: sales-channel sync, marketplace integration, theme code, app conflict, or checkout behavior.</li>
+        </ol>
+
+        <h2>When a duplicate order review checklist is most useful</h2>
+        <p>A checklist approach is especially helpful when:</p>
+        <ul>
+            <li>your team manually checks for duplicate orders today</li>
+            <li>you have COD or phone-first customers</li>
+            <li>you run flash sales, limited drops, or purchase limits</li>
+            <li>you have multiple order sources or sales-channel integrations</li>
+            <li>duplicate-looking orders are easy to miss before packing</li>
+            <li>you want alerts without automatic merging</li>
+        </ul>
+
+        <h2>When a checklist is not the whole answer</h2>
+        <p>A review checklist is not a replacement for every order workflow.</p>
+        <p>It may not be enough if you mainly need to:</p>
+        <ul>
+            <li>automatically combine orders into one shipment</li>
+            <li>generate a new merged order</li>
+            <li>refund extra shipping charges automatically</li>
+            <li>edit order line items after checkout</li>
+            <li>give customers a self-service post-purchase edit portal</li>
+            <li>run detailed merge-history analytics</li>
+        </ul>
+        <p>If those are the core jobs, a dedicated order-merging or order-editing workflow may be the better fit. A checklist is most useful when the first concern is catching and reviewing duplicate-looking orders before fulfillment.</p>
+
+        <h2>Frequently asked questions</h2>
+
+        <h3>How do I know if two Shopify orders are duplicates?</h3>
+        <p>Start by comparing the contact and shipping fields, the items ordered, and the timing. If the orders share email, phone, address, customer name, SKU overlap, or source and arrived close together, review them before fulfillment. The goal is not to assume every match is a true duplicate; it is to catch the ones that deserve a human check.</p>
+
+        <h3>Should duplicate orders be merged automatically?</h3>
+        <p>Not always. Some similar orders are legitimate repeat purchases, add-ons, or sync-created lookalikes. Automatic merging can be useful when the match is obvious, but a review-first process is safer when the answer is uncertain.</p>
+
+        <h3>What fields should a duplicate order review checklist include?</h3>
+        <p>Useful fields include email, phone, shipping address, customer name, SKU or product overlap, order timing, and order source or channel metadata. Different store setups rely on different signals, so a checklist should be broader than one field.</p>
+
+        <h3>Does Duplicate Guard automatically cancel or merge orders?</h3>
+        <p>No. Duplicate Guard is built around flagging duplicate-looking orders for merchant review before fulfillment. The merchant stays in control of the final decision, including whether to fulfill, hold, contact, cancel, refund, or merge manually.</p>
+
+        <h3>When is a duplicate order checklist most useful?</h3>
+        <p>It is most useful for stores with fast fulfillment, COD or phone-first customers, flash sales or limited drops, multiple order sources, or manual duplicate-order checking today. It helps teams review suspicious matches before labels are purchased and boxes are packed.</p>
+
+        <div class="cta-box">
+            <h2>Review duplicate-looking orders before they ship</h2>
+            <p>A duplicate order review checklist helps your team catch suspicious Shopify orders early, compare the match reasons, and decide before fulfillment.</p>
+            <p>Duplicate Guard flags duplicate-looking Shopify orders before fulfillment so your team can review the context and decide what should happen next.</p>
+            <a href="https://apps.shopify.com/duplicate-guard" class="btn" onclick="trackDuplicateGuardAppStoreClick('guide_cta', this);">Install Duplicate Guard on Shopify</a>
+        </div>
+    </main>
+
+    <footer>
+        <div class="wide-container">
+            <strong>Duplicate Guard</strong>
+            <div class="footer-links">
+                <a href="/">Home</a>
+                <a href="/shopify-duplicate-order-checker.html">Duplicate order checker</a>
+                <a href="/duplicate-order-review-checklist.html">Duplicate order checklist</a>
+                <a href="/order-merger-alternative.html">Order Merger alternative</a>
+                <a href="/blog.html">Blog</a>
+                <a href="/privacy.html">Privacy Policy</a>
+                <a href="mailto:info@amertech.online">Support</a>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
