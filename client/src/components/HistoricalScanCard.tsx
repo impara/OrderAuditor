@@ -9,6 +9,7 @@ import {
 } from "@/lib/historical-scan-summary";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { trackProductEvent } from "@/lib/productTelemetry";
 
 type HistoricalScan = {
   id: string;
@@ -56,6 +57,22 @@ export function HistoricalScanCard({ openFlagCount }: { openFlagCount?: number }
       queryClient.invalidateQueries({ queryKey: ["/api/onboarding/status"] });
     }
   }, [queryClient, scan]);
+
+  useEffect(() => {
+    if (scan?.status !== "completed") return;
+
+    const statusBucket =
+      scan.ordersFetched === 0
+        ? "no_orders"
+        : scan.matchesFound === 0
+          ? "no_matches"
+          : "matches_found";
+
+    void trackProductEvent(
+      { eventName: "scan_summary_viewed", properties: { statusBucket } },
+      `scan:${scan.id}`
+    );
+  }, [scan?.id, scan?.status, scan?.ordersFetched, scan?.matchesFound]);
 
   if (isLoading) {
     return null;

@@ -1,8 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { AlertTriangle, AlertCircle, ArrowRight } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { getQuotaStatus, type QuotaSubscription } from "@/lib/quotaStatus";
+import { trackProductEvent } from "@/lib/productTelemetry";
 
 export function QuotaWarningBanner() {
     const { data: subscription } = useQuery<QuotaSubscription>({
@@ -10,6 +12,33 @@ export function QuotaWarningBanner() {
     });
 
     const quotaStatus = getQuotaStatus(subscription);
+    const quotaState = quotaStatus.state;
+    const usagePercentage = quotaStatus.state === "hidden"
+        ? null
+        : quotaStatus.usagePercentage;
+    const percentageBucket = usagePercentage === null
+        ? null
+        : usagePercentage >= 100
+            ? "100+"
+            : usagePercentage >= 90
+                ? "90-99"
+                : "80-89";
+
+    useEffect(() => {
+        if (quotaState === "hidden" || percentageBucket === null) return;
+
+        void trackProductEvent(
+            {
+                eventName: "quota_banner_seen",
+                properties: {
+                    status: quotaState,
+                    percentageBucket,
+                },
+            },
+            `${quotaState}:${percentageBucket}`
+        );
+    }, [quotaState, percentageBucket]);
+
     if (quotaStatus.state === "hidden") {
         return null;
     }

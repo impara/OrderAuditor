@@ -38,6 +38,7 @@ import { logger } from "./utils/logger";
 import { queueService } from "./services/queue.service";
 import { pool } from "./db";
 import { shouldRemoveShopifyTag } from "./utils/order-dismissal";
+import { createProductEventHandler } from "./routes/product-events";
 
 
 /**
@@ -545,6 +546,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to fetch dashboard stats" });
     }
   });
+
+  // Registered after the protected /api middleware above; shop identity comes
+  // only from the verified Shopify session in res.locals.
+  app.post("/api/product-events", createProductEventHandler(storage));
 
   const safeHistoricalScan = async (
     run: Awaited<ReturnType<typeof historicalScanService.getLatest>>

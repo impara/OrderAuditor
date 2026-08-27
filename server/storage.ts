@@ -5,6 +5,7 @@ import {
   subscriptions,
   webhookDeliveries,
   historicalScanRuns,
+  productEvents,
   shopifySessions,
   type Order,
   type InsertOrder,
@@ -20,7 +21,9 @@ import {
   type InsertWebhookDelivery,
   type HistoricalScanRun,
   type InsertHistoricalScanRun,
+  type ProductEvent,
 } from "@shared/schema";
+import type { ProductEventPayload } from "@shared/product-events";
 import { db } from "./db";
 import {
   eq,
@@ -77,6 +80,10 @@ export interface IStorage {
   initializeSettings(shopDomain: string): Promise<DetectionSettings>;
 
   createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
+  recordProductEvent(
+    shopDomain: string,
+    event: ProductEventPayload
+  ): Promise<ProductEvent | undefined>;
 
   getSubscription(shopDomain: string): Promise<Subscription | undefined>;
   createSubscription(subscription: InsertSubscription): Promise<Subscription>;
@@ -458,6 +465,23 @@ export class DatabaseStorage implements IStorage {
     return log;
   }
 
+  async recordProductEvent(
+    shopDomain: string,
+    event: ProductEventPayload
+  ): Promise<ProductEvent | undefined> {
+    const [recorded] = await db
+      .insert(productEvents)
+      .values({
+        shopDomain,
+        eventName: event.eventName,
+        eventKey: event.eventKey,
+        properties: event.properties,
+      })
+      .onConflictDoNothing()
+      .returning();
+    return recorded;
+  }
+
   async getSubscription(shopDomain: string): Promise<Subscription | undefined> {
     const [subscription] = await db
       .select()
@@ -751,6 +775,8 @@ export class DatabaseStorage implements IStorage {
     excludeDeliveryId?: string
   ): Promise<void> {
     // Delete in order to respect foreign key constraints
+    await db.delete(productEvents).where(eq(productEvents.shopDomain, shopDomain));
+
     await db
       .delete(historicalScanRuns)
       .where(eq(historicalScanRuns.shopDomain, shopDomain));

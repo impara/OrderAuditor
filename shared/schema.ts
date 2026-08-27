@@ -234,6 +234,33 @@ export const historicalScanRuns = pgTable("historical_scan_runs", {
   errorMessage: text("error_message"),
 });
 
+// First-party, PII-free product events used to measure activation gaps.
+export const productEvents = pgTable(
+  "product_events",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    shopDomain: varchar("shop_domain").notNull(),
+    eventName: varchar("event_name", { length: 50 }).notNull(),
+    eventKey: varchar("event_key", { length: 128 }).notNull(),
+    properties: jsonb("properties").$type<Record<string, string>>().notNull(),
+    occurredAt: timestamp("occurred_at").notNull().default(sql`now()`),
+  },
+  (table) => ({
+    shopEventOccurredIdx: index("product_events_shop_event_occurred_idx").on(
+      table.shopDomain,
+      table.eventName,
+      table.occurredAt
+    ),
+    shopEventKeyUnique: uniqueIndex("product_events_shop_event_key_idx").on(
+      table.shopDomain,
+      table.eventName,
+      table.eventKey
+    ),
+  })
+);
+
 // Insert schemas for validation
 export const insertOrderSchema = createInsertSchema(orders).omit({
   id: true,
@@ -311,6 +338,7 @@ export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
 export type InsertWebhookDelivery = z.infer<typeof insertWebhookDeliverySchema>;
 export type HistoricalScanRun = typeof historicalScanRuns.$inferSelect;
 export type InsertHistoricalScanRun = typeof historicalScanRuns.$inferInsert;
+export type ProductEvent = typeof productEvents.$inferSelect;
 export type ShopifySession = typeof shopifySessions.$inferSelect;
 
 // Dashboard stats type

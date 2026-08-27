@@ -19,6 +19,7 @@ import { QuotaWarningBanner } from "@/components/QuotaWarningBanner";
 import { HistoricalScanCard } from "@/components/HistoricalScanCard";
 import { ReviewPromptBanner } from "@/components/ReviewPromptBanner";
 import { OnboardingChecklist, isOnboardingFullyHealthy, type OnboardingStatus } from "@/components/OnboardingChecklist";
+import { trackProductEvent } from "@/lib/productTelemetry";
 
 const FLAGGED_ORDERS_PAGE_SIZE = 50;
 
@@ -157,6 +158,16 @@ function OrderDetailsModal({ order, isOpen, onClose }: { order: Order; isOpen: b
   const { toast } = useToast();
   const [showDismissDialog, setShowDismissDialog] = useState(false);
   const [isDismissing, setIsDismissing] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    // Activation milestone only: record whether this browser session reached
+    // any match review. Do not transmit or persist an order identifier.
+    void trackProductEvent(
+      { eventName: "match_review_opened", properties: {} },
+      "first-review"
+    );
+  }, [isOpen]);
 
   const dismissMutation = useMutation({
     mutationFn: async (orderId: string) => {
@@ -590,6 +601,13 @@ type FlaggedOrdersResponse = {
 export default function Dashboard() {
   const [flaggedOrdersPage, setFlaggedOrdersPage] = useState(0);
   const flaggedOrdersOffset = flaggedOrdersPage * FLAGGED_ORDERS_PAGE_SIZE;
+
+  useEffect(() => {
+    void trackProductEvent(
+      { eventName: "dashboard_opened", properties: {} },
+      "dashboard"
+    );
+  }, []);
 
   const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
     queryKey: ['/api/dashboard/stats'],
