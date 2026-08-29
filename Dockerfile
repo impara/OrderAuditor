@@ -40,6 +40,7 @@ COPY --from=builder /app/shared ./shared
 COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
 COPY --from=builder /app/tsconfig.json ./tsconfig.json
+COPY --from=builder /app/scripts/product-activation-report.mjs ./scripts/product-activation-report.mjs
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \

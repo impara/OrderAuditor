@@ -1,4 +1,16 @@
-import { pool } from "../server/db";
+import pg from "pg";
+
+const { Pool } = pg;
+let databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) {
+  const { POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB } = process.env;
+  const host = process.env.POSTGRES_HOST || "postgres";
+  const port = process.env.POSTGRES_PORT || "5432";
+  if (!POSTGRES_USER || !POSTGRES_PASSWORD || !POSTGRES_DB) {
+    throw new Error("Database connection is not configured");
+  }
+  databaseUrl = `postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${host}:${port}/${POSTGRES_DB}`;
+}
 
 const daysArg = process.argv.find((arg) => arg.startsWith("--days="));
 const days = Number(daysArg?.split("=")[1] ?? "30");
@@ -6,13 +18,8 @@ if (!Number.isInteger(days) || days < 1 || days > 365) {
   throw new Error("--days must be an integer from 1 to 365");
 }
 
-const result = await pool.query<{
-  event_name: string;
-  event_count: string;
-  shop_count: string;
-  first_seen: Date;
-  last_seen: Date;
-}>(`
+const pool = new Pool({ connectionString: databaseUrl, max: 1 });
+const result = await pool.query(`
   SELECT
     event_name,
     COUNT(*)::text AS event_count,
