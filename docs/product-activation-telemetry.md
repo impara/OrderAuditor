@@ -27,6 +27,14 @@ Use:
 - distinct shops with both `scan_summary_viewed` and `match_review_opened` in a window;
 - scan-status and quota-bucket counts.
 
+Generate an aggregate evidence packet with:
+
+```bash
+npm run evidence:activation -- --days=30 > product-activation-evidence.json
+```
+
+The report contains event totals, distinct-shop totals, and time bounds only. Review it before adding it as an evidence location in the portfolio access inventory.
+
 Do not claim exact user conversion, exact per-order review rates, or causation from these events alone.
 
 ## Retention

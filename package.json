@@ -19,6 +19,7 @@
     "test:billing": "tsx scripts/test-billing.ts",
     "billing:audit": "node dist/audit-billing-consistency.js",
     "billing:audit:source": "tsx scripts/audit-billing-consistency.ts",
+    "evidence:activation": "tsx scripts/product-activation-report.ts",
     "test": "vitest run",
     "landing:seo-index": "python3 landing-page/tools/seo_index.py",
     "landing:seo-index:check": "python3 landing-page/tools/seo_index.py --check"
