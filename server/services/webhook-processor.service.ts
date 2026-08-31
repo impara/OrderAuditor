@@ -10,7 +10,6 @@ interface OrderCreateJobData {
   shopDomain: string;
   payload: any;
   deliveryId: string;
-  accessToken?: string;
   webhookTopic: string;
 }
 
@@ -137,17 +136,17 @@ export class WebhookProcessorService {
       
       // Debug: Log what we're extracting from Shopify payload
       logger.debug(`[WebhookProcessor] Shopify payload inspection:
-        - phone field: ${shopifyOrder.phone || 'missing'}
-        - customer.phone: ${shopifyOrder.customer?.phone || 'missing'}
-        - billing_address.phone: ${shopifyOrder.billing_address?.phone || 'missing'}
-        - shipping_address.phone: ${shopifyOrder.shipping_address?.phone || 'missing'}
+        - phone field present: ${!!shopifyOrder.phone}
+        - customer.phone present: ${!!shopifyOrder.customer?.phone}
+        - billing_address.phone present: ${!!shopifyOrder.billing_address?.phone}
+        - shipping_address.phone present: ${!!shopifyOrder.shipping_address?.phone}
         - line_items count: ${shopifyOrder.line_items?.length || 0}
         - line_items exists: ${!!shopifyOrder.line_items}
       `);
 
       const mappedOrder = mapShopifyOrder(shopDomain, shopifyOrder);
 
-      logger.debug(`[WebhookProcessor] Mapped order - customerPhone: ${mappedOrder.customerPhone || 'null'}, lineItems: ${mappedOrder.lineItems?.length || 0} items`);
+      logger.debug(`[WebhookProcessor] Mapped order - customerPhone present: ${!!mappedOrder.customerPhone}, lineItems: ${mappedOrder.lineItems?.length || 0} items`);
 
 
       await processOrder(mappedOrder, accessToken, { mode: "live" });

@@ -12,6 +12,7 @@ import rateLimit from "express-rate-limit";
 import * as Sentry from "@sentry/node";
 import { registerRoutes } from "./routes";
 import { logger } from "./utils/logger";
+import { buildFrameAncestorsCsp } from "./utils/security";
 
 export function log(message: string, source = "express") {
   logger.log(message, source);
@@ -35,6 +36,12 @@ app.use(helmet({
   contentSecurityPolicy: false, // Disable CSP for now as it might conflict with Shopify embedded app requirements
   frameguard: false, // Disable X-Frame-Options to allow embedding in Shopify admin
 }));
+
+// Restrict embedding to Shopify Admin and the sanitized shop domain.
+app.use((req, res, next) => {
+  res.setHeader("Content-Security-Policy", buildFrameAncestorsCsp(req.query.shop));
+  next();
+});
 
 // Rate limiting
 const limiter = rateLimit({
@@ -70,27 +77,11 @@ app.use(express.urlencoded({ extended: false }));
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
 
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
-
-      log(logLine);
+      log(`${req.method} ${path} ${res.statusCode} in ${duration}ms`);
     }
   });
 
@@ -107,7 +98,8 @@ export default async function runApp(
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+    const message =
+      status >= 500 ? "Internal Server Error" : err.message || "Request failed";
 
     res.status(status).json({ message });
   });

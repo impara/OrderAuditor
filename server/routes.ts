@@ -33,55 +33,25 @@ import {
   insertOrderSchema,
   updateDetectionSettingsSchema,
 } from "@shared/schema";
-import { randomUUID, timingSafeEqual } from "crypto";
+import { randomUUID } from "crypto";
 import { logger } from "./utils/logger";
+import {
+  isAllowedSlackWebhookUrl,
+  requireInternalAdmin,
+  validateReturnUrl,
+} from "./utils/security";
 import { queueService } from "./services/queue.service";
 import { pool } from "./db";
 import { shouldRemoveShopifyTag } from "./utils/order-dismissal";
 import { createProductEventHandler } from "./routes/product-events";
 
 
-/**
- * Validate returnUrl to prevent open redirect attacks
- * Only allows relative paths or URLs from the application's own domain
- */
-function validateReturnUrl(returnUrl: string): string {
-  const appUrl = process.env.APP_URL || "http://localhost:5000";
-
-  // If it's a relative path, it's safe
-  if (returnUrl.startsWith("/")) {
-    return returnUrl;
-  }
-
-  try {
-    const url = new URL(returnUrl);
-    const appUrlObj = new URL(appUrl);
-
-    // Only allow URLs from the same origin (same protocol, hostname, and port)
-    if (
-      url.protocol === appUrlObj.protocol &&
-      url.hostname === appUrlObj.hostname &&
-      url.port === appUrlObj.port
-    ) {
-      return returnUrl;
-    }
-
-    // If validation fails, return a safe default
-    logger.warn(`[Security] Invalid returnUrl rejected: ${returnUrl}`);
-    return `${appUrl}/subscription?upgrade=success`;
-  } catch (error) {
-    // If URL parsing fails, return a safe default
-    logger.warn(`[Security] Invalid returnUrl format rejected: ${returnUrl}`);
-    return `${appUrl}/subscription?upgrade=success`;
-  }
-}
 
 import {
   auth,
   authCallback,
   verifyRequest,
   shopify,
-  getOfflineAccessToken,
   forceRefreshOfflineToken,
   storeSessionWithRetry,
 } from "./shopify-auth";
@@ -171,44 +141,6 @@ async function redirectLegacyInstallLaunch(
   return res.redirect(authUrl);
 }
 
-function getConfiguredAdminToken(): string | undefined {
-  return process.env.INTERNAL_ADMIN_TOKEN || process.env.ADMIN_API_TOKEN;
-}
-
-function constantTimeEquals(a: string, b: string): boolean {
-  const aBuffer = Buffer.from(a);
-  const bBuffer = Buffer.from(b);
-
-  if (aBuffer.length !== bBuffer.length) {
-    return false;
-  }
-
-  return timingSafeEqual(aBuffer, bBuffer);
-}
-
-function requireInternalAdmin(
-  req: Request,
-  res: Response,
-  next: NextFunction
-) {
-  const configuredToken = getConfiguredAdminToken();
-
-  if (!configuredToken && process.env.NODE_ENV === "production") {
-    logger.error("[InternalAdmin] Missing INTERNAL_ADMIN_TOKEN in production");
-    return res.status(503).json({ error: "Internal admin is not configured" });
-  }
-
-  const expectedToken = configuredToken || "dev-admin-token";
-  const providedToken =
-    req.get("X-Admin-Token") ||
-    (typeof req.query.token === "string" ? req.query.token : "");
-
-  if (!providedToken || !constantTimeEquals(providedToken, expectedToken)) {
-    return res.status(401).json({ error: "Invalid admin token" });
-  }
-
-  next();
-}
 
 async function getWebhookOpsData(shop: string) {
   try {
@@ -413,20 +345,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(400).send("Missing exitIframe parameter");
     }
 
-    // Validate exitIframe URL to prevent open redirects
+    // Validate the exact origin, including port, and reject protocol-relative URLs.
     const appUrl = process.env.APP_URL || "http://localhost:5000";
+    let safeExitIframe: string;
     try {
-      const url = new URL(exitIframe);
-      const appUrlObj = new URL(appUrl);
-      
-      // Only allow URLs from the same origin
-      if (url.protocol !== appUrlObj.protocol || url.hostname !== appUrlObj.hostname) {
-        logger.warn(`[Security] Invalid exitiframe URL rejected: ${exitIframe}`);
+      const resolvedExitIframe = new URL(exitIframe, appUrl).toString();
+      safeExitIframe = validateReturnUrl(exitIframe, appUrl);
+      if (safeExitIframe !== resolvedExitIframe) {
         return res.status(400).send("Invalid redirect URL");
       }
-    } catch (error) {
-      logger.warn(`[Security] Invalid exitiframe URL format: ${exitIframe}`);
-      return res.status(400).send("Invalid URL format");
+    } catch {
+      return res.status(400).send("Invalid redirect URL");
     }
 
     // Return HTML that uses App Bridge to break out of iframe and redirect
@@ -445,7 +374,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // App Bridge v4 hooks into the browser open() API for top-frame
             // navigation from embedded app routes.
             try {
-                window.open(${JSON.stringify(exitIframe)}, "_top");
+                window.open(${JSON.stringify(safeExitIframe)}, "_top");
             } catch (e) {
                 console.error("Top-frame open failed:", e);
                 fallbackRedirect();
@@ -454,13 +383,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             function fallbackRedirect() {
                 try {
                     if (window.top && window.top !== window) {
-                        window.top.location.href = ${JSON.stringify(exitIframe)};
+                        window.top.location.href = ${JSON.stringify(safeExitIframe)};
                     } else {
-                        window.location.href = ${JSON.stringify(exitIframe)};
+                        window.location.href = ${JSON.stringify(safeExitIframe)};
                     }
                 } catch (e) {
                     // If top access is blocked, try standard navigation as last resort
-                    window.location.href = ${JSON.stringify(exitIframe)};
+                    window.location.href = ${JSON.stringify(safeExitIframe)};
                 }
             }
           </script>
@@ -514,6 +443,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     throw new Error("My first GlitchTip error!");
   });
+
+  // Internal operations fail closed at the router boundary so future routes
+  // cannot accidentally omit authentication.
+  app.use("/api/internal", requireInternalAdmin);
 
   // Webhook routes (bypass auth middleware)
   // ... (webhooks are registered below)
@@ -777,6 +710,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { shop } = res.locals.shopify;
       const validatedData = updateDetectionSettingsSchema.parse(req.body);
+
+      if (
+        validatedData.slackWebhookUrl &&
+        !isAllowedSlackWebhookUrl(validatedData.slackWebhookUrl)
+      ) {
+        return res.status(400).json({
+          error: "Slack webhook must be an HTTPS hooks.slack.com URL",
+        });
+      }
 
       // Check subscription if user is trying to enable notifications
       if (validatedData.enableNotifications) {
@@ -1441,6 +1383,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/webhooks/test", async (req: any, res: Response) => {
+    if (process.env.NODE_ENV === "production") {
+      return res.status(404).json({ message: "Not Found" });
+    }
+
     const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
     const rawBody = req.rawBody || Buffer.from(JSON.stringify(req.body));
     const rawBodyStr = Buffer.isBuffer(rawBody)
@@ -1560,11 +1506,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           `[Webhook] Received webhook, body size: ${rawBody.length} bytes`
         );
         logger.debug(`[Webhook] Body is Buffer: ${Buffer.isBuffer(rawBody)}`);
-        logger.debug(
-          `[Webhook] Body preview: ${rawBody
-            .toString("utf8")
-            .substring(0, 50)}...`
-        );
 
         // Validate webhook using custom service
         const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
@@ -1620,25 +1561,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }, Customer email in payload: ${!!shopifyOrder.customer?.email}`
         );
 
-        // Load session to get a fresh access token (refreshing expiring tokens
-        // as needed). The worker also re-resolves the token at processing time,
-        // so this is a best-effort hint passed along with the job.
-        let accessToken = "";
-        if (shopDomain) {
-          try {
-            const token = await getOfflineAccessToken(shopDomain);
-            if (token) {
-              accessToken = token;
-            } else {
-              logger.warn(
-                `[Webhook] ⚠️ Could not load offline session for ${shopDomain}. API calls will fail.`
-              );
-            }
-          } catch (error) {
-             logger.warn(`[Webhook] Error loading session:`, error);
-          }
-        }
-
         const jobKey = buildOrderCreateJobKey(shopDomain, shopifyOrder.id);
 
         // Enqueue job for async processing
@@ -1650,7 +1572,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             shopifyOrder.id,
             deliveryIdHeader
           ),
-          accessToken, // Pass token if we have it, otherwise worker will try to fetch it
           webhookTopic: topic || "orders/create",
         };
 
@@ -1701,11 +1622,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           `[Webhook] Received orders/updated webhook, body size: ${rawBody.length} bytes`
         );
         logger.debug(`[Webhook] Body is Buffer: ${Buffer.isBuffer(rawBody)}`);
-        logger.debug(
-          `[Webhook] Body preview: ${rawBody
-            .toString("utf8")
-            .substring(0, 50)}...`
-        );
 
         // Validate webhook using custom service
         const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
@@ -1991,7 +1907,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         logger.info(
-          `[Webhook] Data request for customer: ${customerEmail} (ID: ${customerId}), Orders: ${ordersRequested.length}`
+          `[Webhook] Customer data request received; requested orders: ${ordersRequested.length}`
         );
 
         // Get customer orders from our database
@@ -2012,9 +1928,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           );
         }
 
-        logger.info(
-          `[Webhook] Found ${ordersToReturn.length} orders for customer ${customerEmail}`
-        );
+        logger.info(`[Webhook] Found ${ordersToReturn.length} orders for data request`);
 
         return res.json({
           success: true,
@@ -2044,7 +1958,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         logger.info(
-          `[Webhook] Redaction request for customer: ${customerEmail} (ID: ${customerId}), Orders to redact: ${
+          `[Webhook] Customer redaction request received; orders to redact: ${
             ordersToRedact?.length ?? 0
           }`
         );
@@ -2057,9 +1971,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ordersToRedact
         );
 
-        logger.info(
-          `[Webhook] ✅ Successfully redacted customer data for ${customerEmail}`
-        );
+        logger.info(`[Webhook] ✅ Successfully redacted requested customer data`);
 
         return res.json({
           success: true,
@@ -2236,7 +2148,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { shop } = res.locals.shopify;
       logger.info(`[Subscription] Fetching subscription for shop: ${shop}`);
       const subscription = await subscriptionService.getSubscription(shop);
-      logger.info(`[Subscription] Retrieved subscription:`, subscription);
+      logger.info(`[Subscription] Retrieved subscription state for shop`);
       res.json(subscription);
     } catch (error) {
       logger.error("Error fetching subscription:", error);

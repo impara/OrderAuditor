@@ -9,6 +9,7 @@ import {
 import { PostgresSessionStorage } from "./shopify-session-storage";
 import { Request, Response, NextFunction } from "express";
 import { logger } from "./utils/logger";
+import { sessionTokenVerificationError } from "./utils/security";
 import * as jose from "jose";
 import { createSecretKey } from "crypto";
 import { shopifyBillingService } from "./services/shopify-billing.service";
@@ -274,7 +275,7 @@ export async function auth(req: Request, res: Response) {
   } catch (e: any) {
     logger.error(`Failed to begin auth: ${e.message}`);
     logger.error(`[Auth] Error stack: ${e.stack}`);
-    res.status(500).send(e.message);
+    res.status(500).send("Failed to begin authentication");
   }
 }
 
@@ -314,14 +315,11 @@ export async function authCallback(req: Request, res: Response) {
 
     const { session } = callback;
     const tokenPrefix = session.accessToken?.substring(0, 6) || "N/A";
-    const tokenLength = session.accessToken?.length || 0;
 
     logger.info(
       `[AuthCallback] OAuth completed for shop: ${session.shop}, session type: ${session.isOnline ? 'online' : 'offline'}`
     );
-    logger.debug(
-      `[AuthCallback] Session details - ID: ${session.id}, token prefix: ${tokenPrefix}, length: ${tokenLength}`
-    );
+    logger.debug(`[AuthCallback] Offline session received and validated`);
 
     // Validate token type based on response structure.
     // NOTE: expiring offline tokens DO set `expires`, so we must not treat the
@@ -329,7 +327,7 @@ export async function authCallback(req: Request, res: Response) {
     const isActuallyOfflineToken = !session.isOnline;
 
     logger.debug(
-      `[AuthCallback] Token validation - Prefix: ${tokenPrefix}, isOffline: ${isActuallyOfflineToken}`
+      `[AuthCallback] Token type validation - isOffline: ${isActuallyOfflineToken}`
     );
 
     // Validate we received the expected offline session
@@ -344,9 +342,7 @@ export async function authCallback(req: Request, res: Response) {
     } else if (tokenPrefix === "shpat_") {
       logger.debug(`[AuthCallback] ✅ Valid offline token (shpat_)`);
     } else {
-      logger.warn(
-        `[AuthCallback] Unexpected token prefix: ${tokenPrefix}. Expected 'shpat_'`
-      );
+      logger.warn(`[AuthCallback] Unexpected offline token type`);
     }
 
     // Manually store the session to ensure it's saved
@@ -384,9 +380,7 @@ export async function authCallback(req: Request, res: Response) {
         `[AuthCallback] Attempting to register webhooks for shop: ${session.shop}`
       );
       logger.debug(
-        `[AuthCallback] Session access token available: ${!!session.accessToken}, token prefix: ${
-          session.accessToken?.substring(0, 6) || "N/A"
-        }`
+        `[AuthCallback] Session access token available: ${!!session.accessToken}`
       );
 
       // Retry webhook registration with exponential backoff
@@ -821,7 +815,7 @@ export async function authCallback(req: Request, res: Response) {
     res.redirect(`/?${redirectParams.toString()}`);
   } catch (e: any) {
     logger.error(`Failed to complete auth callback: ${e.message}`);
-    res.status(500).send(e.message);
+    res.status(500).send("Failed to complete authentication");
   }
 }
 
@@ -916,7 +910,7 @@ export async function verifyRequest(
     const tokenLength = sessionAccessToken.length;
 
     logger.debug(
-      `[Auth] Session token info - prefix: ${tokenPrefix}, length: ${tokenLength}, isOnline: ${session.isOnline}`
+      `[Auth] Offline session token validated (length: ${tokenLength}, isOnline: ${session.isOnline})`
     );
 
     // Shopify offline tokens are 38 characters (shpat_ prefix + 32 random chars as of April 2020)
@@ -943,9 +937,7 @@ export async function verifyRequest(
       );
     }
 
-    logger.debug(
-      `[Auth] Session found for shop ${shop}, authentication successful. Token type: ${tokenPrefix}, length: ${tokenLength}`
-    );
+    logger.debug(`[Auth] Session found for shop ${shop}, authentication successful`);
 
     // Store shop and accessToken in res.locals for downstream use
     res.locals.shopify = {
@@ -955,9 +947,8 @@ export async function verifyRequest(
 
     next();
   } catch (e: any) {
-    logger.error(`[Auth] Failed to verify request: ${e.message}`);
-    logger.debug(`[Auth] Error stack: ${e.stack}`);
-    res.status(401).json({ message: "Unauthorized", error: e.message });
+    logger.warn(`[Auth] Session token verification failed`);
+    res.status(401).json({ message: "Unauthorized" });
   }
 }
 
@@ -978,9 +969,7 @@ async function decodeSessionTokenWithClockTolerance(token: string) {
     }
 
     return payload as any; // Cast to any to match Shopify's JwtPayload type structure roughly
-  } catch (error: any) {
-    throw new Error(
-      `Failed to parse session token '${token}': ${error.message}`
-    );
+  } catch {
+    throw sessionTokenVerificationError();
   }
 }

@@ -4,6 +4,7 @@ import { subscriptionService } from "./subscription.service";
 import { storage } from "../storage";
 import { shopifyService } from "./shopify.service";
 import nodemailer from "nodemailer";
+import { isAllowedSlackWebhookUrl } from "../utils/security";
 
 interface NotificationData {
   order: Order;
@@ -140,10 +141,15 @@ export class NotificationService {
     data: NotificationData
   ): Promise<void> {
     try {
+      if (!isAllowedSlackWebhookUrl(webhookUrl)) {
+        throw new Error("Rejected unsafe Slack webhook destination");
+      }
+
       const slackMessage = this.formatSlackMessage(shopDomain, data);
 
       const response = await fetch(webhookUrl, {
         method: "POST",
+        redirect: "error",
         headers: {
           "Content-Type": "application/json",
         },
