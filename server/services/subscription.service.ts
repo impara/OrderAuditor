@@ -5,19 +5,27 @@ import {
 } from "../utils/app-subscription";
 import { logger } from "../utils/logger";
 import type { Subscription } from "@shared/schema";
+import {
+  shopEntitlementService,
+  type ShopEntitlement,
+} from "./shop-entitlement.service";
 
 
 export interface QuotaCheckResult {
   allowed: boolean;
   reason?: string;
   subscription: Subscription;
+  entitlement: ShopEntitlement;
 }
 
 export class SubscriptionService {
   /**
    * Check if shop has quota remaining for order processing
    */
-  async checkQuota(shopDomain: string): Promise<QuotaCheckResult> {
+  async checkQuota(
+    shopDomain: string,
+    accessToken?: string
+  ): Promise<QuotaCheckResult> {
     // Get or initialize subscription
     let subscription = await storage.getSubscription(shopDomain);
     if (!subscription) {
@@ -65,12 +73,30 @@ export class SubscriptionService {
       }
     }
 
-    if (subscription.status === "frozen") {
+    const entitlement = await shopEntitlementService.resolve(
+      shopDomain,
+      accessToken,
+      subscription
+    );
+
+    if (
+      subscription.status === "frozen" &&
+      entitlement.source !== "partner_development"
+    ) {
       return {
         allowed: false,
         reason:
           "Duplicate Guard is paused while your Shopify subscription is frozen (for example, when the store is closed). It will resume automatically when Shopify reactivates the subscription.",
         subscription,
+        entitlement,
+      };
+    }
+
+    if (entitlement.hasPaidFeatures) {
+      return {
+        allowed: true,
+        subscription,
+        entitlement,
       };
     }
 
@@ -80,6 +106,7 @@ export class SubscriptionService {
       return {
         allowed: true,
         subscription,
+        entitlement,
       };
     }
 
@@ -89,12 +116,14 @@ export class SubscriptionService {
         allowed: false,
         reason: `Monthly duplicate flag limit (${subscription.orderLimit}) reached. Upgrade to Unlimited to keep flagging duplicate-looking orders this cycle.`,
         subscription,
+        entitlement,
       };
     }
 
     return {
       allowed: true,
       subscription,
+      entitlement,
     };
   }
 
@@ -114,6 +143,17 @@ export class SubscriptionService {
       subscription = await storage.initializeSubscription(shopDomain);
     }
     return subscription;
+  }
+
+  async getEntitlement(
+    shopDomain: string,
+    accessToken?: string
+  ): Promise<ShopEntitlement> {
+    return shopEntitlementService.resolve(
+      shopDomain,
+      accessToken,
+      await this.getSubscription(shopDomain)
+    );
   }
 
   /**

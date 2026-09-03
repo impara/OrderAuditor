@@ -2,6 +2,7 @@ import { logger } from "../utils/logger";
 import { subscriptionService } from "./subscription.service";
 import { fetchWithRetry, fetchBillingWithRetry } from "../utils/fetch-with-retry";
 import { withShopBillingLock } from "../utils/shop-billing-lock";
+import type { ShopEntitlement } from "./shop-entitlement.service";
 
 export interface ShopifyRecurringCharge {
   id: number;
@@ -35,6 +36,7 @@ export interface ShopifyBillingSnapshot {
 }
 
 export type UpgradeChargeResult =
+  | { kind: "entitled"; entitlement: ShopEntitlement }
   | { kind: "pending"; charge: ShopifyRecurringCharge }
   | { kind: "active"; charge: ShopifyRecurringCharge }
   | { kind: "created"; charge: ShopifyRecurringCharge }
@@ -517,6 +519,17 @@ export class ShopifyBillingService {
     returnUrl: string
   ): Promise<UpgradeChargeResult> {
     return withShopBillingLock(shopDomain, async () => {
+      const entitlement = await subscriptionService.getEntitlement(
+        shopDomain,
+        accessToken
+      );
+      if (entitlement.source === "partner_development") {
+        logger.info(
+          `[ShopifyBilling] Partner development shop ${shopDomain} already has paid-feature access; skipping charge creation`
+        );
+        return { kind: "entitled", entitlement };
+      }
+
       const existing = await this.handleExistingCharges(
         shopDomain,
         accessToken,

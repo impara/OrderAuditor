@@ -20,12 +20,16 @@ export class NotificationService {
   async sendNotifications(
     shopDomain: string,
     settings: DetectionSettings,
-    data: NotificationData
+    data: NotificationData,
+    accessToken?: string
   ): Promise<boolean> {
-    // Check if subscription allows notifications (Paid tier only)
+    // Check whether this shop currently has paid-feature access.
     try {
-      const subscription = await subscriptionService.getSubscription(shopDomain);
-      if (subscription?.tier !== "paid") {
+      const entitlement = await subscriptionService.getEntitlement(
+        shopDomain,
+        accessToken
+      );
+      if (!entitlement.hasPaidFeatures) {
         logger.debug("[Notification] Free tier subscription, skipping notifications (Premium feature)");
         return false;
       }

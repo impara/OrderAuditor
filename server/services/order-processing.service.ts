@@ -68,7 +68,10 @@ export async function processOrder(
   }
 
   if (options.mode === "live") {
-    const quota = await subscriptionService.checkQuota(order.shopDomain);
+    const quota = await subscriptionService.checkQuota(
+      order.shopDomain,
+      accessToken
+    );
     if (!quota.allowed) {
       if (
         quota.subscription.orderLimit !== -1 &&
@@ -154,12 +157,17 @@ export async function processOrder(
     try {
       const settings = await storage.getSettings(order.shopDomain);
       if (settings) {
-        await notificationService.sendNotifications(order.shopDomain, settings, {
-          order: storedOrder,
-          duplicateOf: match.order,
-          confidence: match.confidence,
-          matchReason: match.matchReason,
-        });
+        await notificationService.sendNotifications(
+          order.shopDomain,
+          settings,
+          {
+            order: storedOrder,
+            duplicateOf: match.order,
+            confidence: match.confidence,
+            matchReason: match.matchReason,
+          },
+          accessToken
+        );
       }
     } catch (error) {
       logger.error("[OrderProcessing] Failed to send duplicate notification:", error);

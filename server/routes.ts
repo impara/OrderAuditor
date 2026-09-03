@@ -44,6 +44,7 @@ import { queueService } from "./services/queue.service";
 import { pool } from "./db";
 import { shouldRemoveShopifyTag } from "./utils/order-dismissal";
 import { createProductEventHandler } from "./routes/product-events";
+import { shopEntitlementService } from "./services/shop-entitlement.service";
 
 
 
@@ -709,6 +710,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/settings", async (req: Request, res: Response) => {
     try {
       const { shop } = res.locals.shopify;
+      const { accessToken } = res.locals.shopify;
       const validatedData = updateDetectionSettingsSchema.parse(req.body);
 
       if (
@@ -722,8 +724,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Check subscription if user is trying to enable notifications
       if (validatedData.enableNotifications) {
-        const subscription = await subscriptionService.getSubscription(shop);
-        if (subscription.tier !== "paid") {
+        const entitlement = await subscriptionService.getEntitlement(
+          shop,
+          accessToken
+        );
+        if (!entitlement.hasPaidFeatures) {
           logger.warn(
             `[Settings] Shop ${shop} (free tier) attempted to enable notifications. Forcing disabled.`
           );
@@ -821,12 +826,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ---------------------------------------------------------------------------
   app.get("/api/onboarding/status", async (_req: Request, res: Response) => {
     try {
-      const { shop } = res.locals.shopify;
+      const { shop, accessToken } = res.locals.shopify;
 
       // 1. Subscription / quota status
       const subscription = await subscriptionService.getSubscription(shop);
+      const entitlement = await subscriptionService.getEntitlement(
+        shop,
+        accessToken
+      );
       const quotaUsed = subscription.monthlyOrderCount;
-      const quotaLimit = subscription.orderLimit; // -1 = unlimited
+      const quotaLimit = entitlement.hasPaidFeatures
+        ? -1
+        : subscription.orderLimit; // -1 = unlimited
       const quotaPercent =
         quotaLimit === -1 ? 0 : Math.round((quotaUsed / quotaLimit) * 100);
 
@@ -911,6 +922,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         subscription: {
           tier: subscription.tier,
           status: subscription.status,
+          entitlementSource: entitlement.source,
+          hasPaidFeatures: entitlement.hasPaidFeatures,
           quotaUsed,
           quotaLimit,
           quotaPercent,
@@ -977,6 +990,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const appUninstalledWebhook = webhooks.find(
         (wh) => wh.topic === "app/uninstalled"
       );
+      const shopUpdateWebhook = webhooks.find(
+        (wh) => wh.topic === "shop/update"
+      );
       const customersDataRequestWebhook = webhooks.find(
         (wh) => wh.topic === "customers/data_request"
       );
@@ -988,7 +1004,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
 
       const allRequiredWebhooks =
-        ordersCreateWebhook && ordersUpdatedWebhook && appUninstalledWebhook;
+        ordersCreateWebhook &&
+        ordersUpdatedWebhook &&
+        appUninstalledWebhook &&
+        shopUpdateWebhook;
 
       res.json({
         registered: !!allRequiredWebhooks,
@@ -996,6 +1015,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ordersCreate: ordersCreateWebhook || null,
           ordersUpdated: ordersUpdatedWebhook || null,
           appUninstalled: appUninstalledWebhook || null,
+          shopUpdate: shopUpdateWebhook || null,
           customersDataRequest: customersDataRequestWebhook || null,
           customersRedact: customersRedactWebhook || null,
           shopRedact: shopRedactWebhook || null,
@@ -1145,6 +1165,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           `${baseUrl}/api/webhooks/shopify/app_subscriptions/update`
         );
 
+      const shopUpdateResult = await shopifyService.registerWebhookWithRetry(
+        shop,
+        accessToken,
+        "shop/update",
+        `${baseUrl}/api/webhooks/shopify/shop/update`
+      );
+
       // Note: GDPR compliance webhooks (customers/data_request, customers/redact, shop/redact)
       // are now configured via shopify.app.toml and use the unified endpoint /api/webhooks/shopify
       // They should NOT be registered here to avoid conflicts with TOML configuration
@@ -1153,7 +1180,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ordersCreateResult.success &&
         ordersUpdatedResult.success &&
         appUninstalledResult.success &&
-        appSubscriptionsUpdateResult.success;
+        appSubscriptionsUpdateResult.success &&
+        shopUpdateResult.success;
 
       res.json({
         success: allSuccess,
@@ -1162,6 +1190,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ordersUpdated: ordersUpdatedResult,
           appUninstalled: appUninstalledResult,
           appSubscriptionsUpdate: appSubscriptionsUpdateResult,
+          shopUpdate: shopUpdateResult,
         },
         message: allSuccess
           ? "All webhooks registered successfully"
@@ -1414,6 +1443,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
       },
     });
   });
+
+  app.post(
+    "/api/webhooks/shopify/shop/update",
+    async (req: any, res: Response) => {
+      try {
+        const rawBody: Buffer = req.body;
+        const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
+        const shopHeader = req.get("X-Shopify-Shop-Domain");
+
+        if (!hmacHeader) {
+          return res.status(401).json({ error: "Missing HMAC header" });
+        }
+        if (!shopifyService.verifyWebhook(rawBody, hmacHeader)) {
+          return res.status(401).json({ error: "Invalid webhook signature" });
+        }
+
+        const shopDomain = shopify.utils.sanitizeShop(
+          shopHeader?.trim() || "",
+          false
+        );
+        if (!shopDomain) {
+          return res.status(400).json({ error: "Missing shop domain" });
+        }
+
+        const accessToken = await getOfflineAccessToken(shopDomain);
+        if (!accessToken) {
+          return res.status(503).json({ error: "Offline session unavailable" });
+        }
+
+        const subscription = await subscriptionService.getSubscription(shopDomain);
+        const entitlement = await shopEntitlementService.handleShopUpdate(
+          shopDomain,
+          accessToken,
+          subscription
+        );
+
+        res.json({ success: true, entitlementSource: entitlement.source });
+      } catch (error) {
+        logger.error("[Webhook] Error processing shop/update:", error);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    }
+  );
 
   app.post(
     "/api/webhooks/shopify/app_subscriptions/update",
@@ -2145,11 +2217,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Subscription endpoints
   app.get("/api/subscription", async (_req: Request, res: Response) => {
     try {
-      const { shop } = res.locals.shopify;
+      const { shop, accessToken } = res.locals.shopify;
       logger.info(`[Subscription] Fetching subscription for shop: ${shop}`);
       const subscription = await subscriptionService.getSubscription(shop);
+      const entitlement = await subscriptionService.getEntitlement(
+        shop,
+        accessToken
+      );
       logger.info(`[Subscription] Retrieved subscription state for shop`);
-      res.json(subscription);
+      res.json({
+        ...subscription,
+        entitlementSource: entitlement.source,
+        hasPaidFeatures: entitlement.hasPaidFeatures,
+        partnerDevelopment: entitlement.partnerDevelopment,
+        effectiveOrderLimit: entitlement.hasPaidFeatures
+          ? -1
+          : subscription.orderLimit,
+      });
     } catch (error) {
       logger.error("Error fetching subscription:", error);
       logger.error(
@@ -2176,6 +2260,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         accessToken,
         returnUrl
       );
+
+      if (upgradeResult.kind === "entitled") {
+        return res.json({
+          success: true,
+          alreadyEntitled: true,
+          entitlementSource: upgradeResult.entitlement.source,
+          message: "Partner development stores receive Unlimited access without a charge.",
+        });
+      }
 
       if (upgradeResult.kind === "pending") {
         logger.info(

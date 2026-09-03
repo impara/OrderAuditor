@@ -35,6 +35,10 @@ const {
   incrementOrderCount: vi.fn(),
 }));
 
+const { resolveEntitlement } = vi.hoisted(() => ({
+  resolveEntitlement: vi.fn(),
+}));
+
 vi.mock("../storage", () => ({
   storage: {
     getSubscription,
@@ -50,6 +54,12 @@ vi.mock("../storage", () => ({
 vi.mock("./notification.service", () => ({
   notificationService: {
     prefillMerchantNotificationEmail: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
+vi.mock("./shop-entitlement.service", () => ({
+  shopEntitlementService: {
+    resolve: resolveEntitlement,
   },
 }));
 
@@ -95,6 +105,18 @@ describe("SubscriptionService — free tier limit constant regression", () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
     vi.clearAllMocks();
+    resolveEntitlement.mockImplementation(
+      async (
+        _shop: string,
+        _token: string | undefined,
+        subscription: Subscription
+      ) => ({
+        source:
+          subscription.tier === "paid" ? "paid_subscription" : "free",
+        hasPaidFeatures: subscription.tier === "paid",
+        partnerDevelopment: false,
+      })
+    );
   });
 
   afterEach(() => vi.useRealTimers());
@@ -130,6 +152,30 @@ describe("SubscriptionService — free tier limit constant regression", () => {
     );
     const result = await subscriptionService.checkQuota("test.myshopify.com");
     expect(result.allowed).toBe(true);
+  });
+
+  it("allows Partner development access at the free-tier quota without persisting paid state", async () => {
+    const local = makeSub({
+      tier: "free",
+      monthlyOrderCount: FREE_TIER_ORDER_LIMIT,
+      orderLimit: FREE_TIER_ORDER_LIMIT,
+    });
+    getSubscription.mockResolvedValue(local);
+    resolveEntitlement.mockResolvedValue({
+      source: "partner_development",
+      hasPaidFeatures: true,
+      partnerDevelopment: true,
+    });
+
+    const result = await subscriptionService.checkQuota(
+      "test.myshopify.com",
+      "token"
+    );
+
+    expect(result.allowed).toBe(true);
+    expect(result.entitlement.source).toBe("partner_development");
+    expect(updateSubscription).not.toHaveBeenCalled();
+    expect(local).toMatchObject({ tier: "free", orderLimit: 50 });
   });
 
   it("initializes subscription when none exists and allows processing", async () => {

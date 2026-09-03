@@ -35,7 +35,7 @@ export default function Settings() {
   });
 
   const isLoading = isLoadingSettings || isLoadingSubscription;
-  const isPaid = subscription?.tier === "paid";
+  const isPaid = subscription?.hasPaidFeatures === true;
 
   const form = useForm<UpdateDetectionSettings>({
     resolver: zodResolver(updateDetectionSettingsSchema),

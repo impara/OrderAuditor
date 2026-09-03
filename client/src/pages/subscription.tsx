@@ -23,6 +23,10 @@ interface Subscription {
   currentBillingPeriodStart: string;
   currentBillingPeriodEnd: string | null;
   shopifyChargeId: string | null;
+  entitlementSource: "paid_subscription" | "partner_development" | "free";
+  hasPaidFeatures: boolean;
+  partnerDevelopment: boolean;
+  effectiveOrderLimit: number;
 }
 
 function SubscriptionPage() {
@@ -231,17 +235,28 @@ function SubscriptionPage() {
     );
   }
 
-  const isPaid = subscription.tier === "paid";
+  const isPartnerDevelopment =
+    subscription.entitlementSource === "partner_development";
+  const isPaid = subscription.tier === "paid" || isPartnerDevelopment;
   const isComplimentary = subscription.status === "complimentary";
   const isFrozen = subscription.status === "frozen";
-  const isUnlimited = subscription.orderLimit === -1;
+  const isUnlimited = subscription.effectiveOrderLimit === -1;
   const usagePercentage = isUnlimited
     ? 0
-    : Math.min(100, (subscription.monthlyOrderCount / subscription.orderLimit) * 100);
+    : Math.min(
+        100,
+        (subscription.monthlyOrderCount / subscription.effectiveOrderLimit) * 100
+      );
   const remainingDuplicateFlags = isUnlimited
     ? "Unlimited"
-    : Math.max(0, subscription.orderLimit - subscription.monthlyOrderCount);
-  const quotaStatus = getQuotaStatus(subscription);
+    : Math.max(
+        0,
+        subscription.effectiveOrderLimit - subscription.monthlyOrderCount
+      );
+  const quotaStatus = getQuotaStatus({
+    ...subscription,
+    orderLimit: subscription.effectiveOrderLimit,
+  });
 
   const periodEnd = subscription.currentBillingPeriodEnd
     ? new Date(subscription.currentBillingPeriodEnd)
@@ -295,7 +310,9 @@ function SubscriptionPage() {
                   variant={isPaid ? "default" : "secondary"}
                   className={isComplimentary ? "bg-emerald-600 hover:bg-emerald-600" : ""}
                 >
-                  {isComplimentary
+                  {isPartnerDevelopment
+                    ? "Development"
+                    : isComplimentary
                     ? "Complimentary"
                     : isFrozen
                       ? "Paused"
@@ -305,7 +322,9 @@ function SubscriptionPage() {
                 </Badge>
               </div>
               <CardDescription>
-                {isComplimentary
+                {isPartnerDevelopment
+                  ? "Unlimited access for Shopify Partner development stores"
+                  : isComplimentary
                   ? "Unlimited access granted by Duplicate Guard"
                   : isFrozen
                     ? "Paused while your Shopify store subscription is frozen"
@@ -319,7 +338,7 @@ function SubscriptionPage() {
                 <div className="flex items-center justify-between text-sm mb-1">
                   <span className="text-muted-foreground">Duplicate flags used</span>
                   <span className="font-medium">
-                    {subscription.monthlyOrderCount} / {isUnlimited ? "∞" : subscription.orderLimit}
+                    {subscription.monthlyOrderCount} / {isUnlimited ? "∞" : subscription.effectiveOrderLimit}
                   </span>
                 </div>
                 {!isUnlimited && (
@@ -441,7 +460,11 @@ function SubscriptionPage() {
                   </ul>
                   <div className="mt-4">
                     {isPaid ? (
-                      isComplimentary ? (
+                      isPartnerDevelopment ? (
+                        <div className="w-full text-center p-2 border border-emerald-500/50 bg-emerald-500/10 rounded text-sm text-emerald-700 dark:text-emerald-400">
+                          Included while this is a Partner development store
+                        </div>
+                      ) : isComplimentary ? (
                         <div className="w-full text-center p-2 border border-emerald-500/50 bg-emerald-500/10 rounded text-sm text-emerald-700 dark:text-emerald-400">
                           Complimentary until {periodEnd?.toLocaleDateString()}
                         </div>

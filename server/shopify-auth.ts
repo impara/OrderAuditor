@@ -53,6 +53,10 @@ shopify.webhooks.addHandlers({
     deliveryMethod: DeliveryMethod.Http,
     callbackUrl: "/api/webhooks/shopify/app/uninstalled",
   },
+  "shop/update": {
+    deliveryMethod: DeliveryMethod.Http,
+    callbackUrl: "/api/webhooks/shopify/shop/update",
+  },
   "app_subscriptions/update": {
     deliveryMethod: DeliveryMethod.Http,
     callbackUrl: "/api/webhooks/shopify/app_subscriptions/update",

@@ -13,10 +13,11 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 // ---------------------------------------------------------------------------
 // Hoist storage + subscriptionService mocks
 // ---------------------------------------------------------------------------
-const { cancelSubscription, updateTier, activatePaidSubscription } = vi.hoisted(() => ({
+const { cancelSubscription, updateTier, activatePaidSubscription, getEntitlement } = vi.hoisted(() => ({
   cancelSubscription: vi.fn(),
   updateTier: vi.fn(),
   activatePaidSubscription: vi.fn(),
+  getEntitlement: vi.fn(),
 }));
 
 vi.mock("./subscription.service", () => ({
@@ -24,6 +25,7 @@ vi.mock("./subscription.service", () => ({
     cancelSubscription,
     updateTier,
     activatePaidSubscription,
+    getEntitlement,
   },
 }));
 
@@ -64,6 +66,11 @@ describe("ShopifyBillingService — double cancellation regression", () => {
     vi.clearAllMocks();
     // Ensure billing bypass is off so we go through real code paths
     vi.stubEnv("SHOPIFY_BILLING_BYPASS", "false");
+    getEntitlement.mockResolvedValue({
+      source: "free",
+      hasPaidFeatures: false,
+      partnerDevelopment: false,
+    });
     service = new ShopifyBillingService();
   });
 
@@ -249,5 +256,37 @@ describe("ShopifyBillingService — double cancellation regression", () => {
 
     expect(result.kind).toBe("pending");
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it("does not list or create charges for a Partner development shop", async () => {
+    vi.stubEnv("SHOPIFY_BILLING_TEST_MODE", "true");
+    vi.stubEnv("SHOPIFY_BILLING_BYPASS", "true");
+    getEntitlement.mockResolvedValue({
+      source: "partner_development",
+      hasPaidFeatures: true,
+      partnerDevelopment: true,
+    });
+    const handleExisting = vi.spyOn(service, "handleExistingCharges");
+    const create = vi.spyOn(service, "createRecurringCharge");
+
+    const result = await service.getOrCreateUpgradeCharge(
+      "partner-dev.myshopify.com",
+      "token",
+      "https://example.com/subscription"
+    );
+
+    expect(result).toEqual({
+      kind: "entitled",
+      entitlement: {
+        source: "partner_development",
+        hasPaidFeatures: true,
+        partnerDevelopment: true,
+      },
+    });
+    expect(handleExisting).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(activatePaidSubscription).not.toHaveBeenCalled();
+    expect(updateTier).not.toHaveBeenCalled();
   });
 });
