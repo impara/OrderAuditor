@@ -181,8 +181,9 @@ blindly. Before the first immutable release:
    has the expected database limits, readiness probe, blue/green port layout,
    and secret references. Never include rendered secret values in evidence.
 4. With separate production-change approval, switch the operational entry
-   point from the legacy outer script to the reviewed repository-root script.
-   Keep the old entry point unchanged until that cutover is verified.
+   point from the legacy outer script to
+   `bash /home/serveradmin/orderauditor/deploy.sh`. Keep the old entry point
+   unchanged until that cutover is verified.
 
 If the image revision check, migration, or inactive-slot readiness check fails,
 deployment stops before traffic moves. A post-swap readiness failure recreates
