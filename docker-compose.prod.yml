@@ -23,7 +23,7 @@ services:
 
   # BLUE version (active)
   app_blue:
-    image: ghcr.io/impara/orderauditor:latest
+    image: ${ORDERAUDITOR_IMAGE:-ghcr.io/impara/orderauditor:latest}
     container_name: duplicate-guard-app-blue
     restart: unless-stopped
     environment:
@@ -75,7 +75,7 @@ services:
 
   # GREEN version (inactive)
   app_green:
-    image: ghcr.io/impara/orderauditor:latest
+    image: ${ORDERAUDITOR_IMAGE:-ghcr.io/impara/orderauditor:latest}
     container_name: duplicate-guard-app-green
     restart: unless-stopped
     environment:

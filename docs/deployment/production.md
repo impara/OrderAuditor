@@ -162,15 +162,32 @@ docker-compose -f docker-compose.prod.yml logs -f postgres
 
 ### Update Application
 
-```bash
-# Pull latest changes
-git pull
+Production releases use the repository-root `deploy.sh`. It requires a clean
+`main` checkout, fast-forwards it from `origin/main`, and selects the immutable
+`ghcr.io/impara/orderauditor:sha-<full-commit>` image built by GitHub Actions.
+The script verifies the image's OCI source revision before it runs migrations
+or changes traffic. Do not deploy `latest` directly.
 
-# Rebuild and restart
-docker-compose -f docker-compose.prod.yml up -d --build
+The production VM has historically kept `/home/serveradmin/deploy.sh` outside
+the checkout, and its checked-in Compose file can lag intentional VM-local
+pool and readiness settings. A release worker must not replace those files
+blindly. Before the first immutable release:
 
-# Database schema should be pushed by the deploy script before the port swap
-```
+1. Compare the VM-local deploy script and Compose file with the reviewed
+   repository versions without reading or copying `.env`.
+2. Port each intentional VM-local pool/readiness difference into a reviewed
+   repository commit, or explicitly document why it should be retired.
+3. Confirm the production checkout is clean and that rendered Compose still
+   has the expected database limits, readiness probe, blue/green port layout,
+   and secret references. Never include rendered secret values in evidence.
+4. With separate production-change approval, switch the operational entry
+   point from the legacy outer script to the reviewed repository-root script.
+   Keep the old entry point unchanged until that cutover is verified.
+
+If the image revision check, migration, or inactive-slot readiness check fails,
+deployment stops before traffic moves. A post-swap readiness failure recreates
+the prior active slot from its captured image ID and waits for it to become
+healthy before reporting rollback success.
 
 ### Backup Database
 
