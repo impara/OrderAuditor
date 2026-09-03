@@ -7,10 +7,10 @@
   "github_source_revision": "{{repo_commit_full_sha}}",
   "image_id": "{{sha256_image_id}}",
   "image_tag": "ghcr.io/impara/orderauditor:sha-{{repo_commit_full_sha}}",
-  "effective_config_checked": true,
+  "effective_config_checked": false,
   "store_domain": "order-auditor-test-2.myshopify.com",
   "store_slug": "order-auditor-test-2",
-  "partner_development": true,
+  "partner_development": null,
   "admin_dev_badge": null,
   "fixture": {
     "prefix": "DG-E2E-{{run_id}}",
@@ -31,7 +31,7 @@
     {
       "name": "partner development entitlement is visible without a paid row",
       "mutating": false,
-      "status": "passed",
+      "status": "pending",
       "receipt_refs": [
         "authentication",
         "store-identity",
@@ -44,27 +44,33 @@
     {
       "name": "create isolated control seed and duplicate fixtures",
       "mutating": true,
-      "status": "passed",
-      "approval": "Owner approved this exact Duplicate Guard order-fixture run: {{approval_reference}}",
+      "status": "pending",
+      "approval": {
+        "statement": "{{owner_approval_statement}}",
+        "kanban_task_id": "{{approval_task_id}}"
+      },
       "receipt_refs": ["fixture-orders"]
     },
     {
       "name": "duplicate fixture is flagged in Shopify and review UI",
       "mutating": false,
-      "status": "passed",
+      "status": "pending",
       "receipt_refs": ["duplicate-tag", "review-ui"]
     },
     {
       "name": "control and pre-existing unrelated orders remain untouched",
       "mutating": false,
-      "status": "passed",
+      "status": "pending",
       "receipt_refs": ["unrelated-orders"]
     },
     {
       "name": "upgrade attempt creates no recurring charge or fake paid subscription",
       "mutating": true,
-      "status": "passed",
-      "approval": "Owner approved this exact Partner-development billing assertion: {{approval_reference}}",
+      "status": "pending",
+      "approval": {
+        "statement": "{{owner_approval_statement}}",
+        "kanban_task_id": "{{approval_task_id}}"
+      },
       "receipt_refs": ["billing-isolation"]
     }
   ],
@@ -72,84 +78,84 @@
     {
       "id": "authentication",
       "kind": "authentication",
-      "status": "passed",
+      "status": "pending",
       "observed_at": "{{observed_at_utc}}",
       "summary": "Authenticated embedded Duplicate Guard launch completed without a login redirect; no credential material recorded."
     },
     {
       "id": "store-identity",
       "kind": "store_identity",
-      "status": "passed",
+      "status": "pending",
       "observed_at": "{{observed_at_utc}}",
       "summary": "Observed exact owned store domain order-auditor-test-2.myshopify.com and Admin slug order-auditor-test-2."
     },
     {
       "id": "plan-result",
       "kind": "plan_result",
-      "status": "passed",
+      "status": "pending",
       "observed_at": "{{observed_at_utc}}",
       "summary": "Authenticated Admin GraphQL shop.plan.partnerDevelopment returned true."
     },
     {
       "id": "image-revision",
       "kind": "image_revision",
-      "status": "passed",
+      "status": "pending",
       "observed_at": "{{observed_at_utc}}",
       "summary": "Running immutable image tag and OCI source revision matched repo_commit exactly."
     },
     {
       "id": "effective-config",
       "kind": "effective_config",
-      "status": "passed",
+      "status": "pending",
       "observed_at": "{{observed_at_utc}}",
       "summary": "Observed production billing test mode false and billing bypass false without recording secret values."
     },
     {
       "id": "entitlement-state",
       "kind": "app_assertion",
-      "status": "passed",
+      "status": "pending",
       "observed_at": "{{observed_at_utc}}",
       "summary": "Subscription API reported partner_development with paid features while the persisted local tier remained free and charge ID remained null."
     },
     {
       "id": "fixture-orders",
       "kind": "mutation",
-      "status": "passed",
+      "status": "pending",
       "observed_at": "{{observed_at_utc}}",
       "summary": "Created exactly three pending orders: one control with distinct identity and one seed/duplicate pair with shared identity; all carry run-specific tags and receipts record only non-secret order IDs."
     },
     {
       "id": "duplicate-tag",
       "kind": "app_assertion",
-      "status": "passed",
+      "status": "pending",
       "observed_at": "{{observed_at_utc}}",
       "summary": "The run-specific duplicate order alone received Merge_Review_Candidate after orders/create processing."
     },
     {
       "id": "review-ui",
       "kind": "ui_assertion",
-      "status": "passed",
+      "status": "pending",
       "observed_at": "{{observed_at_utc}}",
       "summary": "Duplicate Guard review UI showed the run-specific duplicate linked to its seed with a duplicate reason and confidence."
     },
     {
       "id": "unrelated-orders",
       "kind": "isolation_assertion",
-      "status": "passed",
+      "status": "pending",
       "observed_at": "{{observed_at_utc}}",
       "summary": "The control fixture and baseline pre-existing order IDs retained their original tags and review state."
     },
     {
       "id": "billing-isolation",
       "kind": "billing_assertion",
-      "status": "passed",
+      "status": "pending",
       "observed_at": "{{observed_at_utc}}",
       "summary": "Upgrade returned partner_development access; recurring-charge inventory and persisted local subscription state were unchanged."
     }
   ],
   "cleanup": {
     "required": true,
-    "status": "completed",
+    "status": "pending",
     "actions": [
       "Cancel each run-specific pending order when Shopify permits cancellation.",
       "Archive all run-specific control seed and duplicate orders; retain their non-secret IDs in the cleanup receipt.",
@@ -174,5 +180,5 @@
   ],
   "started_at": "{{started_at_utc}}",
   "finished_at": "{{finished_at_utc}}",
-  "verdict": "passed"
+  "verdict": "pending"
 }

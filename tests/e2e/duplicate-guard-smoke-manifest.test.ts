@@ -47,8 +47,9 @@ describe("Duplicate Guard Shopify E2E smoke manifest", () => {
         "ghcr.io/impara/orderauditor:sha-{{repo_commit_full_sha}}",
       store_domain: "order-auditor-test-2.myshopify.com",
       store_slug: "order-auditor-test-2",
-      partner_development: true,
-      effective_config_checked: true,
+      partner_development: null,
+      effective_config_checked: false,
+      verdict: "pending",
     });
   });
 
@@ -79,10 +80,17 @@ describe("Duplicate Guard Shopify E2E smoke manifest", () => {
     expect(scenarioNames).toContain(
       "upgrade attempt creates no recurring charge or fake paid subscription"
     );
-    expect(manifest.cleanup).toMatchObject({
-      required: true,
-      status: "completed",
-    });
+    expect(manifest.scenarios.every((scenario: { status: string }) =>
+      scenario.status === "pending"
+    )).toBe(true);
+    const mutatingScenarios = manifest.scenarios.filter(
+      (scenario: { mutating: boolean }) => scenario.mutating
+    );
+    expect(mutatingScenarios.every((scenario: any) =>
+      scenario.approval.statement === "{{owner_approval_statement}}" &&
+      scenario.approval.kanban_task_id === "{{approval_task_id}}"
+    )).toBe(true);
+    expect(manifest.cleanup).toMatchObject({ required: true, status: "pending" });
     expect(manifest.cleanup.actions.join(" ")).toMatch(/Cancel/);
     expect(manifest.cleanup.actions.join(" ")).toMatch(/Archive/);
   });
