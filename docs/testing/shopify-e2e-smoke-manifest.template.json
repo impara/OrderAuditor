@@ -6,7 +6,7 @@
   "repo_commit": "{{repo_commit_full_sha}}",
   "github_source_revision": "{{repo_commit_full_sha}}",
   "image_id": "{{sha256_image_id}}",
-  "image_tag": "ghcr.io/impara/order-auditor:sha-{{repo_commit_full_sha}}",
+  "image_tag": "ghcr.io/impara/orderauditor:sha-{{repo_commit_full_sha}}",
   "effective_config_checked": true,
   "store_domain": "order-auditor-test-2.myshopify.com",
   "store_slug": "order-auditor-test-2",

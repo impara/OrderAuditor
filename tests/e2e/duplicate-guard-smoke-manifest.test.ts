@@ -43,6 +43,8 @@ describe("Duplicate Guard Shopify E2E smoke manifest", () => {
       schema_version: "1.0",
       app: "duplicate-guard",
       app_id: "298472144897",
+      image_tag:
+        "ghcr.io/impara/orderauditor:sha-{{repo_commit_full_sha}}",
       store_domain: "order-auditor-test-2.myshopify.com",
       store_slug: "order-auditor-test-2",
       partner_development: true,
