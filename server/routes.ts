@@ -53,6 +53,7 @@ import {
   authCallback,
   verifyRequest,
   shopify,
+  getOfflineAccessToken,
   forceRefreshOfflineToken,
   storeSessionWithRetry,
 } from "./shopify-auth";
