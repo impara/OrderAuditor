@@ -67,8 +67,9 @@ const limiter = rateLimit({
 // Apply rate limiting to API routes only
 app.use('/api', limiter);
 
-// Use express.raw for Shopify webhooks to preserve byte-for-byte body for HMAC verification
-app.use('/api/webhooks/shopify', express.raw({ type: 'application/json' }));
+// Preserve raw bytes for HMAC verification. Large order payloads exceed the
+// parser's 100 KiB default; keep a bounded 2 MiB limit on Shopify webhooks only.
+app.use('/api/webhooks/shopify', express.raw({ type: 'application/json', limit: '2mb' }));
 
 // Use express.json for all other routes
 app.use(express.json());
